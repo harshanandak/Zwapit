@@ -1,0 +1,11 @@
+---
+import AppShell from "../../../components/AppShell.astro";
+
+export function getStaticPaths() {
+  return [{ params: { listingId: "listing_bms_event_1" } }];
+}
+---
+
+<AppShell routeId="/app/checkout/:listingId" title="Buy with Protection" activeTab="home">
+  <p class="text-sm text-slate-700">Checkout preview placeholder.</p>
+</AppShell>

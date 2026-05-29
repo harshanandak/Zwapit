@@ -1,0 +1,11 @@
+---
+import AppShell from "../../../components/AppShell.astro";
+
+export function getStaticPaths() {
+  return [{ params: { orderId: "order_demo_1" } }];
+}
+---
+
+<AppShell routeId="/app/orders/:orderId" title="Transfer Timeline" activeTab="tickets">
+  <p class="text-sm text-slate-700">Order timeline placeholder.</p>
+</AppShell>

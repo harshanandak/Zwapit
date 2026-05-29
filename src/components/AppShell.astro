@@ -1,0 +1,25 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import BottomNav from "./BottomNav.astro";
+
+interface Props {
+  activeTab?: "home" | "sell" | "tickets" | "me";
+  routeId: string;
+  title: string;
+}
+
+const { activeTab, routeId, title } = Astro.props;
+---
+
+<AppLayout title={`${title} | Zwapit`}>
+  <main data-route-id={routeId} class="mx-auto min-h-dvh max-w-md bg-white px-5 pb-28 pt-6 text-slate-950">
+    <header class="mb-6">
+      <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Zwapit</p>
+      <h1 class="mt-2 text-2xl font-semibold tracking-normal">{title}</h1>
+    </header>
+    <section class="rounded-md border border-slate-200 bg-slate-50 p-4">
+      <slot />
+    </section>
+  </main>
+  <BottomNav activeTab={activeTab} />
+</AppLayout>
