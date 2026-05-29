@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build",
-    "check": "astro check"
+    "check": "astro check",
+    "check:routes": "bun scripts/route-coverage.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^4.4.0",
