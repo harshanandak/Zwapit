@@ -1,0 +1,80 @@
+---
+description: "Progressive documentation standards"
+---
+
+# Documentation Standards
+
+## Progressive Documentation
+
+Update documentation at relevant stages (not deferred to end):
+
+### During /plan (Stage 1)
+- Document findings in `docs/plans/<feature-slug>-design.md`
+- Include decision rationale
+- Document alternatives considered
+- Security considerations (OWASP analysis)
+
+### During /plan (Stage 3)
+- Create implementation plan in `docs/plans/<feature-slug>.md`
+- Document test scenarios
+- Identify affected files
+
+### During /dev (Stage 4)
+- Add inline code comments for complex logic
+- Update JSDoc/TSDoc for public APIs
+- Keep comments synchronized with code changes
+
+### During /ship (Stage 6)
+- Update README if user-facing changes
+- Update CHANGELOG with conventional commit summary
+- Document breaking changes
+- Add migration guide if needed
+
+### During /verify (Stage 7)
+- Cross-check all documentation updated
+- Validate code examples still work
+- Check for broken internal links
+- Ensure terminology consistency
+
+## Documentation Types
+
+### Code Comments
+- **What to comment**: Why, not what
+- Document non-obvious decisions
+- Explain complex algorithms
+- Note security considerations
+- Reference tickets/issues for context
+
+### API Documentation
+- Use JSDoc/TSDoc for public APIs
+- Include parameter types and return types
+- Provide usage examples
+- Document error conditions
+- List breaking changes in version updates
+
+### README Updates
+- Keep Quick Start section current
+- Update feature list
+- Maintain installation instructions
+- Document configuration options
+- Include troubleshooting section
+
+## Documentation Quality
+
+### Consistency
+- Use consistent terminology across docs
+- Follow project style guide
+- Maintain consistent formatting
+- Use same voice and tone
+
+### Clarity
+- Write for your audience (developers, users, etc.)
+- Use examples liberally
+- Avoid jargon without explanation
+- Keep sentences short and clear
+
+### Maintainability
+- Link to code where appropriate
+- Use relative links for internal docs
+- Keep docs close to the code they describe
+- Remove outdated documentation promptly

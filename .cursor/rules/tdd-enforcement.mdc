@@ -1,0 +1,55 @@
+---
+description: "TDD patterns and enforcement"
+globs: ["**/*.ts", "**/*.js", "**/*.test.ts", "**/*.test.js"]
+---
+
+# TDD Enforcement
+
+## RED-GREEN-REFACTOR Cycle
+
+### RED Phase (Write Failing Test)
+1. **Write test FIRST** - Before any implementation
+2. Run test to confirm it fails for the right reason
+3. Commit: `git commit -m "test: add [feature] tests (RED)"`
+
+### GREEN Phase (Make Test Pass)
+1. **Write minimal code** to make the test pass
+2. Keep implementation simple and focused
+3. Don't add features not covered by tests
+4. Commit: `git commit -m "feat: implement [feature] (GREEN)"`
+
+### REFACTOR Phase (Clean Up)
+1. Improve code while keeping tests green
+2. Extract helpers, remove duplication
+3. Optimize performance if needed
+4. Commit: `git commit -m "refactor: [description]"`
+
+## Test Structure
+
+### Naming Convention
+```javascript
+test('should [expected behavior] when [condition]', async () => {
+  // Arrange: Set up test data
+  // Act: Execute code under test
+  // Assert: Verify outcome
+});
+```
+
+### Best Practices
+- One assertion per test (or closely related assertions)
+- Test edge cases and error scenarios
+- Mock external dependencies (APIs, databases, file system)
+- Use fixtures for complex test data
+- Keep tests fast and independent
+
+## Coverage Requirements
+- Minimum 80% code coverage
+- Focus on testing behavior, not implementation
+- Test public interfaces, not private methods
+- Include integration tests for critical paths
+
+## Security Testing
+- Test input validation and sanitization
+- Verify authentication and authorization
+- Test error messages don't leak sensitive data
+- Include security-specific test cases for OWASP Top 10

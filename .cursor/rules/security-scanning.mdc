@@ -1,0 +1,79 @@
+---
+description: "OWASP Top 10 security checks"
+---
+
+# Security Scanning Guidelines
+
+## OWASP Top 10 (2021)
+
+For every new feature, analyze these security risks:
+
+### A01: Broken Access Control
+- Verify authorization checks on all protected resources
+- Test that users can't access data they shouldn't
+- Implement principle of least privilege
+
+### A02: Cryptographic Failures
+- Never store passwords in plaintext
+- Use strong encryption algorithms (AES-256, RSA-2048+)
+- Protect data in transit (HTTPS, TLS 1.2+)
+- Secure key management
+
+### A03: Injection
+- **SQL Injection**: Use parameterized queries
+- **XSS**: Sanitize output, use Content Security Policy
+- **Command Injection**: Validate and sanitize all inputs
+- Never concatenate user input into commands or queries
+
+### A04: Insecure Design
+- Security requirements defined upfront
+- Threat modeling for new features
+- Defense in depth (multiple security layers)
+- Secure defaults
+
+### A05: Security Misconfiguration
+- Remove default credentials
+- Disable unnecessary features and services
+- Keep dependencies up to date
+- Implement security headers
+
+### A06: Vulnerable and Outdated Components
+- Regular dependency audits (`npm audit`)
+- Update dependencies promptly
+- Use Software Composition Analysis (SCA) tools
+- Monitor security advisories
+
+### A07: Identification and Authentication Failures
+- Implement multi-factor authentication where appropriate
+- Secure password storage (bcrypt, Argon2)
+- Protect against brute force attacks (rate limiting)
+- Secure session management
+
+### A08: Software and Data Integrity Failures
+- Verify digital signatures
+- Use integrity checks for critical data
+- Implement code signing
+- Secure CI/CD pipelines
+
+### A09: Security Logging and Monitoring Failures
+- Log all security-relevant events
+- Protect logs from tampering
+- Implement alerting for suspicious activity
+- Regular log review
+
+### A10: Server-Side Request Forgery (SSRF)
+- Validate and sanitize all URLs
+- Use allowlists for external requests
+- Disable unnecessary protocols
+- Network segmentation
+
+## Security Testing Checklist
+
+For each feature:
+- [ ] Input validation implemented and tested
+- [ ] Output sanitization verified
+- [ ] Authentication and authorization tested
+- [ ] Error messages don't leak sensitive data
+- [ ] Dependencies scanned for vulnerabilities
+- [ ] Security test cases added to test suite
+- [ ] OWASP Top 10 risks analyzed

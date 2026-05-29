@@ -1,0 +1,93 @@
+---
+description: "When working with Forge workflow stages"
+alwaysApply: true
+---
+
+# Forge 7-Stage TDD Workflow
+
+Always follow these stages in order:
+
+## Utility: /status
+Check current context and active work
+- Review git status and recent commits
+- Check Beads issues (if installed) for active work
+- Identify current workflow stage
+
+## Stage 1: /plan
+Create implementation plan
+- Research with parallel-ai
+- Document findings in `docs/plans/<feature-slug>-design.md`
+- **Security**: OWASP Top 10 analysis
+- Generate plan, create Beads issue, break into TDD cycles
+
+## Stage 2: /dev
+**TDD development (RED-GREEN-REFACTOR)**
+- **RED**: Write failing test FIRST
+- **GREEN**: Implement minimal code to pass
+- **REFACTOR**: Clean up and optimize
+- Commit after each cycle
+- Push regularly to remote
+
+## Stage 3: /validate
+Validation (type/lint/tests/security)
+- Type checking
+- Linting (ESLint - no errors)
+- Security scanning (npm audit, OWASP)
+- Test suite (all tests must pass)
+- Code coverage (80%+ required)
+
+## Stage 4: /ship
+Create PR with documentation
+- Generate PR body with context
+- Reference Beads issues
+- Include test coverage metrics
+- Link to research and plan documents
+
+## Stage 5: /review
+Address ALL PR feedback
+- GitHub Actions failures
+- Code review comments
+- AI review tools (Greptile, CodeRabbit)
+- Security scan results
+- **IMPORTANT**: Resolve all comment threads
+
+## Stage 6: /premerge
+Update docs, merge PR, cleanup
+- Update documentation
+- Merge pull request (squash commits only)
+- Delete feature branch
+- Archive completed work
+- Close Beads issues
+
+## Stage 7: /verify
+Final documentation verification
+- Verify all docs updated correctly
+- Check for broken links
+- Validate code examples
+- Ensure consistency across documentation
+
+## TDD Requirements
+
+**MANDATORY - No implementation without failing test**:
+- Write test FIRST (RED phase)
+- Implement minimal code to pass (GREEN phase)
+- Refactor and commit (REFACTOR phase)
+- No code changes without corresponding tests
+
+## Tech Stack
+
+- **Language**: JavaScript
+- **Package Manager**: npm
+- **Testing**: TDD-first approach (tests before implementation)
+- **Security**: OWASP Top 10 compliance
+- **Version Control**: Git with conventional commits
+
+## Cursor Native Modes
+
+Leverage Cursor's built-in modes:
+- **Agent Mode** (default): Full tools for implementation
+- **Ask Mode**: Read-only exploration and learning
+- **Plan Mode** (Shift+Tab): Create plans before coding
+- **Debug Mode**: Specialized bug hunting with instrumentation
+
+Use Plan Mode for complex features and architectural decisions.
