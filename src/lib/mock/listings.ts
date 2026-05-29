@@ -1,34 +1,8 @@
-import type { MockListing, SourceRule } from "../types";
+import { bookmyshowEventRule } from "../rules/sourceRules";
+import type { MockListing } from "../types";
 import { calculateCheckoutTotal } from "./pricing";
 
-export const mockSourceRule: SourceRule = {
-  id: "source_rule_bookmyshow_event_v1",
-  version: 1,
-  source: "bookmyshow",
-  category: "event_ticket",
-  sourceCategoryKey: "bookmyshow_event",
-  decision: "AUTO_APPROVE",
-  internalStatus: "ALLOW",
-  transferMode: "OFFICIAL_TRANSFER",
-  transferability: "transferable",
-  protectionLevel: "protected_payment",
-  requiredFields: ["title", "eventOrTripStartAt", "venueOrRoute", "quantity", "faceValue", "listingPrice"],
-  eligibilityFields: ["sellerPromiseAccepted", "transferDeadlineAt"],
-  priceRule: {
-    kind: "face_value_cap",
-    maxMultiplier: 1,
-  },
-  payoutPolicy: {
-    releaseAfter: "buyer_confirmation_and_issue_window",
-    mockOnly: true,
-  },
-  blockedBehavior: "cannot_list",
-  manualReviewReasonCodes: [],
-  effectiveFrom: "2026-05-29T00:00:00+05:30",
-  lastVerifiedAt: "2026-05-29T00:00:00+05:30",
-  verificationSourceUrlOrNote: "Mock BookMyShow event rule for first visible slice.",
-  createdBy: "system",
-};
+export const mockSourceRule = bookmyshowEventRule;
 
 const checkoutTotal = calculateCheckoutTotal(2400);
 
