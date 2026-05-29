@@ -1,273 +1,470 @@
-# Project Workflow Instructions
+# Zwapit Agent Rules
+
+## Scope Discipline
+
+- Do only the task explicitly requested in the current message.
+- Do not continue pending plan items unless the user asks for that exact item.
+- If asked to check something, check it and stop.
+- If asked to implement one change, implement that change, verify it, and stop.
+- Planning files do not authorize implementation by themselves.
+
+## Verification Rule
+
+- Do not state code facts without reading the actual file first.
+- Do not state tool, product, legal, payment, or platform facts without checking a current source first.
+- Cite exact local file paths and line numbers when making code or repo claims.
+- If something is not verified, say that it is not verified.
+
+## Command Style
+
+- Do not use `cd <dir> && <command>`.
+- Use `git -C <dir>` for git commands.
+- Prefer native path flags or explicit working-directory options for other tools.
+
+## Product Context
+
+Zwapit is a mobile-first marketplace for transferable tickets, passes, watchers,
+bookings, and selected customer-managed handoffs.
+
+The v1 proof is:
+- Can a seller list a transferable item easily?
+- Can a buyer understand protection and buy safely?
+- Can the platform protect payment until transfer/completion without taking custody of the item?
+
+## Current UX Baseline
+
+- Bottom tabs: Home, Sell, My Tickets, Me.
+- Login is delayed until a buy or sell action.
+- Selling is upload-first and form-later.
+- Buying flow: listing detail -> protection -> phone OTP -> pay.
+- Buyer purchases are shown as My Tickets.
+- Seller-side received purchases are shown as Orders inside Sell.
+- Buyer and seller tracking are timeline-based.
+- Disputes use structured reasons and evidence, not free chat first.
+- Pricing must show full price before payment.
+- Trust details must show transfer mode and payout rule upfront.
+
+Older Buy/Sell split tab drafts are not active unless the user explicitly revives them.
+
+## Architecture Decisions
+
+- Use Astro + React for the frontend.
+- Use Tailwind for styling.
+- Use Capacitor as the app wrapper.
+- Use Convex as the v1 backend.
+- Add auth after the mock local flow.
+- Add Razorpay Route or another RBI-authorized payment aggregator/split-settlement provider after the core order flow works.
+- Do not add React Native in v1.
+- Do not add a separate Node backend in v1.
+- Do not add Neon/Postgres in v1 unless explicitly requested.
+- Do not add Cloudflare deployment until the core experience is visible.
+
+## Build Order
+
+1. Product contract and agent instructions.
+2. Mobile UI prototype.
+3. Astro + React + Capacitor shell.
+4. Convex backend.
+5. Auth.
+6. Upload-first seller flow.
+7. Source rule engine.
+8. Listing marketplace.
+9. Buyer checkout.
+10. Order timeline.
+11. Transfer workflow.
+12. Dispute/refund workflow.
+13. Internal settlement hold/release workflow.
+14. Admin dashboard.
+15. Demand discovery.
+16. Category expansion.
+
+Do not skip ahead to payments, admin, or category expansion before the visible mock flow and core state model exist.
+
+## Auth And Identity Rules
+
+- First slice may use `mockCurrentUserId = "user_demo_1"`.
+- Sequence: mock user -> Convex data flow -> phone auth -> seller payout setup -> payments.
+- Use Clerk first for v1 auth speed, behind an auth adapter/wrapper so it can be replaced later.
+- Phone verification is required later for buy/sell actions; full KYC is not part of the first slice.
+- Use an internal app user id everywhere in app data.
+- Store provider identity separately in `auth_identities`.
+- Do not use provider ids such as Clerk ids as primary ids on orders, listings, or payments.
+
+## Backend Rules
+
+- Use Convex for workflow state, source rules, and order state.
+- Use internal functions for sensitive operations.
+- Do not expose payment, refund, payout, or admin mutations directly to clients.
+- All state transitions must be explicit.
+- Add audit logs for payment, transfer, refund, issue, and payout actions.
+- Never create an internal wallet.
+- The payment provider is the money source of truth.
+- Do not hold gross buyer money in a platform-owned account.
+
+## Custody Rules
+
+- The platform should not receive tickets or passes first.
+- Prefer seller-to-buyer transfer, official issuer transfer, official reissue, or customer-managed handoff.
+- If a category requires the platform to take custody, it is not v1 unless explicitly approved.
+
+## Rule Engine Requirements
+
+The rule engine is system-first. It should automatically decide as many listings
+and orders as possible.
+
+Rule decisions:
+- AUTO_APPROVE
+- AUTO_BLOCK
+- AUTO_WAITLIST
+- NEEDS_MANUAL_REVIEW
+
+Manual review is exception-only. Use it when the rules cannot confidently
+approve, block, or waitlist.
+
+Internal source rule statuses:
+- ALLOW
+- AMBER
+- DEMAND_ONLY
+- BLOCKED
+
+Transfer modes:
+- OFFICIAL_REISSUE
+- CUSTOMER_MANAGED_HANDOFF
+- CODE_REVEAL
+- IDENTITY_BOUND
+
+Rules must include:
+- category: BookMyShow movie, BookMyShow event, District movie, District event, bus travel, watchers, or future category
+- source: BookMyShow, District/Zomato, bus operator/platform, other platform, or manual upload
+- source/category classification
+- transferability status
+- buyer protection level
+- manual review flag
+- required eligibility fields
+- price cap or price review rule
+- payout policy
+- blocked category behavior
+
+## State Rules
+
+Listing states:
+- draft
+- under_review
+- live
+- sold
+- paused
+- expired
+- blocked
+- waitlist_only
+
+Order states:
+- checkout_pending
+- payment_captured
+- transfer_pending
+- fulfilment_in_progress
+- transfer_submitted
+- buyer_confirmed
+- dispute_window_open
+- issue_reported
+- buyer_rejected
+- refund_processing
+- refunded
+- payout_eligible
+- payout_waiting
+- payout_released
+- payout_sent
+- seller_payout_blocked
+- completed
+- transfer_timeout
+
+First vertical-slice order flow:
+- live listing
+- mock buyer purchase
+- transfer_pending
+- transfer_submitted
+- buyer_confirmed
+- dispute_window_open
+- completed
+
+## Payment And Payout Rules
+
+- Do not add real payment provider logic in the first visible slice.
+- Later payment flow must include provider order creation, checkout, callback verification, webhook verification, idempotency/dedupe, order paid transition, settlement hold, release job, and refund path.
+- Mock checkout fee is confirmed as INR 10 + GST.
+- Checkout must show item price, platform fee, total payable, refund conditions, transfer deadline, and protection deadline.
+- Seller payout setup must be complete before a listing can become purchasable.
+- Payout timing depends on category completion plus dispute window, not only on payment success.
+
+## Transfer Deadline Rules
+
+- Transfer deadlines should be dynamic, such as `min(24 hours from payment, event_start_time - safety_buffer)` where event timing exists.
+- Missed transfer deadlines should move the order toward timeout/refund handling.
+- Timeline screens must show what happened, what is due next, and what happens if the deadline is missed.
+
+## User-Facing Language
+
+Use friendly language:
+- Official Transfer
+- Protected Handoff
+- Verify & Redeem
+- Waitlist Only
+- Cannot List
+- Protected payment
+- Payout
+- Report issue
+- Upload to Sell
+- Buy with Protection
+- Transfer needed
+- Payout waiting
+
+Avoid user-facing terms:
+- escrow
+- settlement
+- dispute
+- merchant
+- fulfilment
+- entitlement
+- KYC
+- linked account
+- AMBER
+- settlement hold
+
+## Do Not Build Yet
+
+Unless the user explicitly asks, do not build:
+- chat
+- advanced search
+- wallet
+- complex seller analytics
+- operator dashboard
+- offline courier workflow
+- high-value watcher marketplace
+- full Neon financial ledger
+- organiser API marketplace
+- real OCR
+- AI ticket parser
+- real KYC
+- full legal policy pages
+
+## Agent Ownership
+
+Codex owns:
+- backend correctness
+- state machines
+- Razorpay/payment integration when explicitly requested
+- webhook safety
+- security review
+- schema validation
+- edge cases
+- tests
+- refactoring
+- code review
+
+Claude owns:
+- mobile-first UI
+- friendly wording
+- screen flow
+- component structure
+- form simplification
+- UX refinement
+- frontend connection to Convex after the schema exists
+
+Shared files require explicit user approval before parallel edits:
+- package.json
+- routing config
+- shared types
+- schema-related frontend types
+- global constants
+
+Do not run two agents against the same file ownership area at the same time.
+
+## Forge Workflow Instructions
+
+These instructions incorporate the Forge-generated `AGENTS.md` workflow content.
+They are subordinate to the Zwapit rules above. If there is any conflict, follow
+Zwapit's Scope Discipline, Build Order, Agent Ownership, and Do Not Build Yet
+rules first.
+
+Use Forge workflow stages only when the user explicitly asks for Forge workflow
+work, uses a Forge command/stage name, or asks to plan, dev, validate, ship,
+review, premerge, or verify work through Forge.
 
 ## 7-Stage TDD-First Workflow
 
-This project enforces a **strict TDD-first development workflow** with 7 stages:
+This project supports a TDD-first Forge workflow with 7 stages:
 
-| Stage | Command     | Purpose                                                   | Required For |
-|-------|-------------|-----------------------------------------------------------|--------------|
-| 1     | `/plan`     | Design intent → research → branch + worktree + task list | Critical, Standard, Refactor |
-| 2     | `/dev`      | Subagent-driven TDD per task (spec + quality review)     | All types    |
-| 3     | `/validate`    | Validate + 4-phase debug mode on failure                    | All types    |
-| 4     | `/ship`     | Create PR with documentation                             | All types    |
-| 5     | `/review`   | Address ALL PR feedback                                  | Critical, Standard |
-| 6     | `/premerge` | Complete docs on feature branch, hand off PR             | All types    |
-| 7     | `/verify`   | Post-merge health check (CI, deployments)                | All types    |
+| Stage | Command | Purpose | Required For |
+| --- | --- | --- | --- |
+| 1 | `/plan` | Design intent -> research -> branch + worktree + task list | Critical, Standard, Refactor |
+| 2 | `/dev` | Subagent-driven TDD per task, with spec and quality review | All types |
+| 3 | `/validate` | Validate and debug failures | All types |
+| 4 | `/ship` | Create PR with documentation | All types |
+| 5 | `/review` | Address PR feedback | Critical, Standard |
+| 6 | `/premerge` | Complete docs on feature branch and hand off PR | All types |
+| 7 | `/verify` | Post-merge health check for CI and deployments | All types |
 
-**Utility**: `/status` — Context check before starting work (not a numbered stage)
+Utility: `/status` checks current context before starting work.
 
-## Automatic Change Classification
+## Forge Change Classification
 
-When the user requests work, **you MUST automatically classify** the change type:
+When Forge workflow is requested, classify the change type:
 
-### Critical (Full 7-stage workflow)
-**Triggers:** Security, authentication, payments, breaking changes, new architecture, data migrations
-**Example:** "Add OAuth login", "Migrate database schema", "Implement payment gateway"
-**Workflow:** plan → dev → validate → ship → review → premerge → verify
+### Critical
 
-### Standard (6-stage workflow)
-**Triggers:** Normal features, enhancements, new components
-**Example:** "Add user profile page", "Create notification system"
-**Workflow:** plan → dev → validate → ship → review → premerge
+Triggers: security, authentication, payments, breaking changes, new architecture,
+or data migrations.
 
-### Simple (3-stage workflow, skip plan)
-**Triggers:** Bug fixes, UI tweaks, small changes, minor refactors
-**Example:** "Fix button color", "Update validation message", "Adjust padding"
-**Workflow:** dev → validate → ship
+Workflow: plan -> dev -> validate -> ship -> review -> premerge -> verify.
 
-### Hotfix (Emergency 3-stage workflow)
-**Triggers:** Production emergencies, critical bugs affecting users
-**Example:** "Production payment processing down", "Security vulnerability fix"
-**Workflow:** dev → validate → ship (immediate merge allowed)
+### Standard
 
-### Docs (Documentation-only workflow)
-**Triggers:** Documentation updates, README changes, comment improvements
-**Example:** "Update README", "Add API documentation"
-**Workflow:** verify → ship
+Triggers: normal features, enhancements, and new components.
 
-### Refactor (5-stage workflow for safe cleanup)
-**Triggers:** Code cleanup, performance optimization, technical debt reduction
-**Example:** "Refactor auth service", "Extract utility functions"
-**Workflow:** plan → dev → validate → ship → premerge
+Workflow: plan -> dev -> validate -> ship -> review -> premerge.
 
-## Enforcement Philosophy
+### Simple
 
-**Conversational, not blocking** - Offer solutions when prerequisites are missing:
+Triggers: bug fixes, UI tweaks, small changes, and minor refactors.
 
-❌ **Don't:** "ERROR: Research required for critical features"
-✅ **Do:** "Before implementation, I should research OAuth best practices. I can:
-   1. Auto-research now with parallel-deep-research (~5 min)
-   2. Use your research if you have it
-   3. Skip (not recommended for security features)
+Workflow: dev -> validate -> ship.
 
-   What would you prefer?"
+### Hotfix
 
-**Create accountability for skips:**
+Triggers: production emergencies or critical bugs affecting users.
 
-"Skipping tests creates technical debt. I'll:
- ✓ Allow this commit
- ✓ Create follow-up Beads issue for tests
- ✓ Document in commit message as [tech-debt]
+Workflow: dev -> validate -> ship, with immediate merge allowed when approved.
 
- Proceed?"
+### Docs
 
-**Dynamic commands — no hardcoded examples:**
+Triggers: documentation updates, README changes, and comment improvements.
 
-Command files (`.claude/commands/*.md` and agent equivalents) must never hardcode example output when a script generates that output dynamically. Reference the script and describe what it does — don't duplicate its output with fake data that becomes stale.
+Workflow: verify -> ship.
 
-## TDD Development (Stage 2: /dev)
+### Refactor
 
-**Subagent-driven per-task implementation loop:**
+Triggers: code cleanup, performance optimization, and technical debt reduction.
 
-1. **Read task list** → Pre-made task list from `/plan` Phase 3 at `docs/plans/YYYY-MM-DD-<slug>-tasks.md`
-2. **Dispatch implementer subagent per task** → Fresh context, complete task text, relevant design doc sections
-3. **TDD inside implementer** → RED-GREEN-REFACTOR enforced by HARD-GATE:
-   - RED: Write failing test first (must run test and show failing output)
-   - GREEN: Implement minimal code to pass (must show passing output)
-   - REFACTOR: Clean up while keeping tests green
-4. **Spec compliance review** → Spec reviewer checks every task before quality review
-5. **Code quality review** → Quality reviewer checks after spec compliance ✅
-6. **Decision gate** → 7-dimension impact scoring when spec gap found; score routes to PROCEED/SPEC-REVIEWER/BLOCKED
+Workflow: plan -> dev -> validate -> ship -> premerge.
 
-**Example execution:**
-```
-/dev starts:
-  ✓ Read task list: docs/plans/2026-02-26-stripe-billing-tasks.md (8 tasks)
-  ✓ Created decisions log: docs/plans/2026-02-26-stripe-billing-decisions.md
+## Forge Enforcement Philosophy
 
-Task 1: Types and interfaces
-  ✓ Implementer: test written → failing → implementation → passing → committed
-  ✓ Spec review: ✅
-  ✓ Quality review: ✅
-  Decision gates: 0
+Prefer conversational guidance over hard blocking. When prerequisites are
+missing, explain the options and ask before expanding scope.
 
-Task 2: Validation logic
-  ✓ Implementer: test written → failing → implementation → passing
-  ⚠️  Decision gate fired (score: 2/14 — PROCEED)
-     Gap: Error message format not specified in design doc
-     Choice: Use { code, message } object (conservative, documented)
-  ✓ Spec review: ✅
-  ✓ Quality review: ✅
-```
+Create accountability for skipped work:
+- Allow an explicitly approved skip.
+- Create a follow-up Beads issue when appropriate.
+- Document technical debt in the commit or PR when appropriate.
 
-## State Management (Single Source of Truth)
+Dynamic command files must not hardcode example output when scripts generate
+that output dynamically. Reference the script and describe what it does instead.
 
-> GitHub issue lifecycle may sync to Beads via CI -- see [docs/BEADS_GITHUB_SYNC.md](docs/BEADS_GITHUB_SYNC.md).
+## Forge TDD Development
 
-**All workflow state stored in Beads metadata** (survives compaction):
+Stage 2, `/dev`, uses a task-by-task TDD loop:
 
-```json
-{
-  "id": "bd-x7y2",
-  "type": "critical",
-  "currentStage": "dev",
-  "completedStages": ["plan"],
-  "skippedStages": [],
-  "workflowDecisions": {
-    "classification": "critical",
-    "reason": "Payment processing, PCI compliance required",
-    "userOverride": false
-  },
-  "parallelTracks": [
-    {
-      "name": "API endpoints",
-      "agent": "backend-architect",
-      "status": "in_progress",
-      "tddPhase": "GREEN"
-    }
-  ]
-}
-```
+1. Read the task list produced by `/plan`, usually at `docs/plans/YYYY-MM-DD-<slug>-tasks.md`.
+2. Implement each task with a clear RED-GREEN-REFACTOR cycle.
+3. RED: write or update a failing test first and capture the failing output.
+4. GREEN: implement the smallest change that makes the test pass.
+5. REFACTOR: clean up while keeping tests green.
+6. Run spec compliance review before code quality review.
+7. Use a decision gate when the implementation exposes a spec gap.
 
-## Git Hooks (Automatic Enforcement)
+## Forge State Management
 
-**Pre-commit hook enforces TDD:**
-- Blocks commits if source code modified without test files
-- Offers guided recovery (add tests now, skip with tech debt tracking, emergency override)
-- No AI decision required - automatic validation
+Forge workflow state should live in Beads metadata so work can survive context
+compaction and agent handoffs.
 
-**Pre-push hook validates tests:**
-- All tests must pass before push
-- Can skip for hotfixes with documentation
+Important fields include:
+- issue id
+- workflow type
+- current stage
+- completed stages
+- skipped stages
+- classification reason
+- parallel tracks, when used
+- stage transition summaries
+- decisions
+- artifacts
+- next-step context
 
-## Documentation Index (Context Pointers)
+## Forge Git Hooks
 
-**Detailed command instructions** are located in:
-- [.claude/commands/status.md](.claude/commands/status.md) - How to check current context (utility)
-- [.claude/commands/plan.md](.claude/commands/plan.md) - How to plan features (3 phases: design intent + research + branch/worktree/tasks)
-- [.claude/commands/dev.md](.claude/commands/dev.md) - How to implement with subagent-driven TDD and decision gate
-- [.claude/commands/validate.md](.claude/commands/validate.md) - How to run validation (with HARD-GATE exit)
-- [.claude/commands/ship.md](.claude/commands/ship.md) - How to create PRs
-- [.claude/commands/review.md](.claude/commands/review.md) - How to address PR feedback (with HARD-GATE exit)
-- [.claude/commands/premerge.md](.claude/commands/premerge.md) - How to complete docs and hand off PR for merge
-- [.claude/commands/verify.md](.claude/commands/verify.md) - How to verify post-merge health
+Forge installs hook assets for workflow guardrails:
+- Pre-commit checks should encourage TDD when source files change.
+- Pre-push checks should validate tests before publishing.
+- Hooks may be bypassed only when the user explicitly approves or an emergency
+  workflow requires it.
 
-**Planning documents** (created by `/plan`, consumed by `/dev`):
-- `docs/plans/YYYY-MM-DD-<slug>-design.md` - Design intent + technical research
-- `docs/plans/YYYY-MM-DD-<slug>-tasks.md` - Task list with TDD steps
-- `docs/plans/YYYY-MM-DD-<slug>-decisions.md` - Decisions log from /dev
+In this repo, hooks must not override Zwapit's Scope Discipline or Agent
+Ownership rules.
 
-**Comprehensive workflow guide:**
-- This file (AGENTS.md) is the single source of truth for the complete workflow
-- [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) - Tool setup and configuration
-- [docs/VALIDATION.md](docs/VALIDATION.md) - Enforcement and validation details
+## Forge Documentation Index
 
-**Load these files when you need detailed instructions for a specific stage.**
+Detailed Forge command instructions live in generated workflow files:
+- `.claude/commands/status.md`
+- `.claude/commands/plan.md`
+- `.claude/commands/dev.md`
+- `.claude/commands/validate.md`
+- `.claude/commands/ship.md`
+- `.claude/commands/review.md`
+- `.claude/commands/premerge.md`
+- `.claude/commands/verify.md`
 
-## Descriptive Context Convention
+Planning documents created by `/plan` should use:
+- `docs/plans/YYYY-MM-DD-<slug>-design.md`
+- `docs/plans/YYYY-MM-DD-<slug>-tasks.md`
+- `docs/plans/YYYY-MM-DD-<slug>-decisions.md`
 
-Every stage transition should carry structured context so the next stage (or a new session) can resume without re-reading the full design doc. This convention is **advisory** — warnings are informational, not blocking.
+Forge setup and validation docs:
+- `docs/forge/TOOLCHAIN.md`
+- `docs/forge/VALIDATION.md`
 
-### Required Fields at Each Stage Exit
+## Forge Context Convention
 
-| Stage Exit | Summary | Decisions | Artifacts | Next |
-|------------|---------|-----------|-----------|------|
-| /plan      | Design approach chosen | Key trade-offs resolved | Design doc, task list paths | First dev task focus |
-| /dev       | Tasks completed, gate count | Spec gaps encountered | Changed files, test files | Validation priorities |
-| /validate  | All checks pass/fail summary | Failures diagnosed | Scripts/commands run | Ship readiness |
-| /ship      | PR created, checks pending | Template sections filled | PR URL, branch name | Review focus areas |
-| /review    | All feedback addressed | Comment resolutions | Fixed files, commit SHAs | Doc update needs |
-| /premerge  | Docs updated, CI green | N/A | Updated doc files | Merge instructions |
+Each Forge stage transition should carry enough structured context for the next
+stage to resume without re-reading the full design doc.
 
-### Validation Command
+Use these fields when available:
+- Summary: what was accomplished.
+- Decisions: choices that affect downstream work.
+- Artifacts: files, commands, or URLs produced.
+- Next: what the next stage should focus on.
 
-Run at each stage exit to check for missing context:
+The convention is advisory unless the user explicitly asks to enforce it.
 
-```bash
-bash scripts/beads-context.sh validate <beads-issue-id>
-```
-
-This checks: (1) issue has a description, (2) at least one stage transition exists, (3) most recent transition has a summary, (4) design metadata is set if past the plan stage. Exits 0 when context checks run (even if warnings are found); exits 1 only if the issue cannot be retrieved.
-
-### Field Definitions
-
-- **Summary**: 1-2 sentence recap of what was accomplished in this stage. Example: `--summary "All 5 tasks done, 1 decision gate fired"`
-- **Decisions**: Key choices made during this stage that affect downstream work. Example: `--decisions "Used streaming parser over DOM for memory efficiency"`
-- **Artifacts**: File paths or URLs produced by this stage. Example: `--artifacts "lib/parser.js test/parser.test.js docs/plans/2026-03-26-parser-design.md"`
-- **Next**: Guidance for the next stage on what to focus on. Example: `--next "Run lint first — streaming approach may trigger no-await rule"`
-
-### Usage in Stage Transitions
-
-```bash
-# Basic (backward compatible)
-bash scripts/beads-context.sh stage-transition <id> dev validate
-
-# With context fields (recommended)
-bash scripts/beads-context.sh stage-transition <id> dev validate \
-  --summary "All 5 tasks done, 0 gates fired" \
-  --decisions "Used approach A per design doc" \
-  --artifacts "lib/foo.js test/foo.test.js" \
-  --next "Run type check and lint"
-```
-
-### Enforcement Level
-
-This convention is **advisory only**. The `validate` subcommand prints warnings but always exits 0. It does not block any stage transition. The goal is to build good habits, not to create friction.
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+This project uses `bd` through Forge for issue tracking. Run `bd prime` for full
+workflow context and command details.
 
-### Quick Reference
+Quick reference:
 
 ```bash
-forge ready           # Find available work
-forge show <id>       # View issue details
-forge claim <id>      # Claim work
-forge close <id>      # Complete work
+forge ready
+forge show <id>
+forge claim <id>
+forge close <id>
 ```
 
-### Rules
+Rules:
+- Use `forge` as the routine command surface for Beads-backed issue tracking and
+  sync workflows.
+- Use `bd` directly only for operations Forge does not wrap yet, such as
+  `bd init`, `bd comments`, `bd dep`, and `bd dolt *`.
+- GitHub issues may be used for external or public tracking.
+- Do not use markdown TODO lists as the source of truth for issue state.
 
-- Use `forge` as the routine command surface for bd-backed issue tracking and sync workflows — do NOT use TodoWrite, TaskCreate, or markdown TODO lists. Exception: `/plan` Phase 3 generates task lists at `docs/plans/YYYY-MM-DD-<slug>-tasks.md` — these are approved artifacts consumed by `/dev`, but Beads (`bd`) remains the source of truth for issue state and IDs. Use `bd` directly only for operations Forge does not wrap yet, such as `bd init`, `bd comments`, `bd dep`, and `bd dolt *`. GitHub issues may be used for external/public tracking; CI may sync GitHub issue lifecycle to Beads (see `docs/BEADS_GITHUB_SYNC.md`).
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+## Forge Session Completion
 
-## Session Completion
+When the user explicitly asks to complete, ship, or publish Forge workflow work,
+finish with:
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-    git pull --rebase
-    forge sync     # wraps the supported Beads sync flow when Beads is configured
-    git push
-    git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-- After fixing review feedback, always push the changes and resolve the related GitHub review threads via the GraphQL API before considering the work complete
-<!-- END BEADS INTEGRATION -->
+1. File issues for remaining work when needed.
+2. Run relevant quality gates.
+3. Update issue status.
+4. Sync Beads when configured.
+5. Push only when the user requested shipping, publishing, or pushing.
+6. Verify the final Git and workflow state.
+7. Provide a concise handoff.
