@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "zwapit",
+  "project_id": "27e61e9e-4f10-47ce-aa41-1c5cd619728d"
+}
