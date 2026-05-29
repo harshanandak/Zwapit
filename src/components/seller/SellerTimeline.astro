@@ -1,0 +1,88 @@
+---
+import type { OrderState } from "../../lib/types";
+import { formatDateTime } from "./format";
+
+interface Props {
+  currentState: OrderState;
+  transferDeadlineAt: string;
+}
+
+const { currentState, transferDeadlineAt } = Astro.props;
+
+const stages = [
+  { label: "Transfer needed", note: "Transfer the ticket to the buyer before the deadline." },
+  { label: "Waiting for buyer", note: "Buyer is confirming they received the ticket." },
+  {
+    label: "Payout waiting",
+    note: "Payout releases after the buyer confirms and the protection window closes.",
+  },
+  { label: "Completed", note: "Payout sent. All done." },
+] as const;
+
+function stageIndex(state: OrderState): number {
+  switch (state) {
+    case "payment_captured":
+    case "transfer_pending":
+    case "fulfilment_in_progress":
+    case "transfer_timeout":
+      return 0;
+    case "transfer_submitted":
+      return 1;
+    case "buyer_confirmed":
+    case "dispute_window_open":
+    case "payout_eligible":
+    case "payout_waiting":
+      return 2;
+    case "completed":
+    case "payout_released":
+    case "payout_sent":
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+const current = stageIndex(currentState);
+---
+
+<ol class="space-y-4">
+  {
+    stages.map((stage, index) => {
+      const done = index < current;
+      const isCurrent = index === current;
+      return (
+        <li class="flex gap-3">
+          <div class="flex flex-col items-center">
+            <span
+              class:list={[
+                "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
+                done && "bg-emerald-600 text-white",
+                isCurrent && "bg-slate-900 text-white",
+                !done && !isCurrent && "border border-slate-300 bg-white text-slate-400",
+              ]}
+            >
+              {done ? "✓" : index + 1}
+            </span>
+            {index < stages.length - 1 && <span class="mt-1 w-px flex-1 bg-slate-200" />}
+          </div>
+          <div class="pb-1">
+            <p
+              class:list={[
+                "text-sm font-semibold",
+                isCurrent ? "text-slate-900" : done ? "text-emerald-700" : "text-slate-400",
+              ]}
+            >
+              {stage.label}
+            </p>
+            {isCurrent && <p class="mt-0.5 text-xs text-slate-600">{stage.note}</p>}
+          </div>
+        </li>
+      );
+    })
+  }
+</ol>
+
+<div class="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+  <p><span class="font-medium text-slate-800">Transfer by</span> {formatDateTime(transferDeadlineAt)}</p>
+  <p class="mt-1 text-slate-500">If you miss the transfer deadline, the buyer is refunded in full.</p>
+</div>

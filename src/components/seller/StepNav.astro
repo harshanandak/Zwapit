@@ -1,0 +1,45 @@
+---
+// Upload-first step indicator for the seller flow (Task 5).
+interface Props {
+  current: "upload" | "confirm" | "price" | "promise";
+}
+
+const { current } = Astro.props;
+
+const steps = [
+  { key: "upload", label: "Upload" },
+  { key: "confirm", label: "Confirm" },
+  { key: "price", label: "Price" },
+  { key: "promise", label: "Promise" },
+] as const;
+
+const currentIndex = steps.findIndex((step) => step.key === current);
+---
+
+<ol class="mb-5 flex items-center gap-2 text-xs">
+  {
+    steps.map((step, index) => (
+      <li class="flex flex-1 items-center gap-2">
+        <span
+          class:list={[
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-semibold",
+            index < currentIndex && "bg-emerald-600 text-white",
+            index === currentIndex && "bg-slate-900 text-white",
+            index > currentIndex && "border border-slate-300 bg-white text-slate-400",
+          ]}
+        >
+          {index < currentIndex ? "✓" : index + 1}
+        </span>
+        <span
+          class:list={[
+            "truncate",
+            index === currentIndex ? "font-semibold text-slate-900" : "text-slate-500",
+          ]}
+        >
+          {step.label}
+        </span>
+        {index < steps.length - 1 && <span class="h-px flex-1 bg-slate-200" />}
+      </li>
+    ))
+  }
+</ol>

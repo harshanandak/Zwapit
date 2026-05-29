@@ -1,7 +1,40 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
+import StepNav from "../../../components/seller/StepNav.astro";
 ---
 
 <AppShell routeId="/app/sell/upload" title="Upload to Sell" activeTab="sell">
-  <p class="text-sm text-slate-700">Upload placeholder.</p>
+  <StepNav current="upload" />
+
+  <div class="space-y-5">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">Upload your ticket</h2>
+      <p class="mt-1 text-sm text-slate-600">
+        Add your ticket or pass and we'll detect the details for you — no long forms.
+      </p>
+    </div>
+
+    <label
+      class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white p-8 text-center"
+    >
+      <span class="text-2xl" aria-hidden="true">⬆️</span>
+      <span class="text-sm font-semibold text-slate-900">Add your ticket or pass</span>
+      <span class="text-xs text-slate-500">PDF, screenshot, or pass file</span>
+      <input type="file" name="ticket" class="sr-only" />
+    </label>
+
+    <p class="text-xs text-slate-500">
+      We read the event, date, and seat details so you don't have to type them.
+    </p>
+
+    <a
+      href="/app/sell/confirm"
+      class="block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white"
+    >
+      Continue
+    </a>
+    <p class="text-center text-xs text-slate-400">
+      Mock upload for this slice — real file reading is added later.
+    </p>
+  </div>
 </AppShell>
