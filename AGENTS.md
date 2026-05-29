@@ -128,6 +128,7 @@ Internal source rule statuses:
 - BLOCKED
 
 Transfer modes:
+- OFFICIAL_TRANSFER
 - OFFICIAL_REISSUE
 - CUSTOMER_MANAGED_HANDOFF
 - CODE_REVEAL
@@ -363,7 +364,7 @@ that output dynamically. Reference the script and describe what it does instead.
 
 Stage 2, `/dev`, uses a task-by-task TDD loop:
 
-1. Read the task list produced by `/plan`, usually at `docs/plans/YYYY-MM-DD-<slug>-tasks.md`.
+1. Read the task list produced by `/plan`, usually at `docs/work/YYYY-MM-DD-<slug>/tasks.md`.
 2. Implement each task with a clear RED-GREEN-REFACTOR cycle.
 3. RED: write or update a failing test first and capture the failing output.
 4. GREEN: implement the smallest change that makes the test pass.
@@ -412,10 +413,16 @@ Detailed Forge command instructions live in generated workflow files:
 - `.claude/commands/premerge.md`
 - `.claude/commands/verify.md`
 
-Planning documents created by `/plan` should use:
-- `docs/plans/YYYY-MM-DD-<slug>-design.md`
-- `docs/plans/YYYY-MM-DD-<slug>-tasks.md`
-- `docs/plans/YYYY-MM-DD-<slug>-decisions.md`
+Planning documents created by `/plan` should use one folder per work item:
+- `docs/work/YYYY-MM-DD-<slug>/research.md`
+- `docs/work/YYYY-MM-DD-<slug>/design.md`
+- `docs/work/YYYY-MM-DD-<slug>/tasks.md`
+- `docs/work/YYYY-MM-DD-<slug>/decisions.md`
+- `docs/work/YYYY-MM-DD-<slug>/evaluator-report.md`
+- `docs/work/YYYY-MM-DD-<slug>/evidence.md`
+
+Legacy `docs/plans/` and `docs/research/` paths are read-only fallback references
+for older work. New work must not create scattered plan/research files there.
 
 Forge setup and validation docs:
 - `docs/forge/TOOLCHAIN.md`

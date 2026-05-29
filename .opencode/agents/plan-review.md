@@ -27,9 +27,9 @@ Focus on:
 
 ### Stage 1: /plan
 - Research with web search for best practices
-- Document findings in `docs/plans/<feature-slug>-design.md`
+- Document findings in `docs/work/YYYY-MM-DD-<feature-slug>/design.md`
 - Include security analysis (OWASP Top 10)
-- Create detailed plan in `docs/plans/<feature-slug>.md`
+- Create detailed plan in `docs/work/YYYY-MM-DD-<feature-slug>/tasks.md`
 - Break down into TDD cycles (RED-GREEN-REFACTOR)
 - Identify files to create/modify
 

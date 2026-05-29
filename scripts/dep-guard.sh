@@ -17,6 +17,106 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODE_CMD="${NODE_CMD:-node}"
 source "$SCRIPT_DIR/lib/sanitize.sh"
 
+# Resolve bd.exe for Git Bash / WSL on Windows. PowerShell can often find
+# bd.exe while Bash cannot, so normalize Windows paths before all bd calls.
+convert_windows_path() {
+  local raw="${1%$'\r'}"
+
+  if [[ -z "$raw" ]]; then
+    return 1
+  fi
+
+  if [[ ! "$raw" =~ ^[A-Za-z]:\\ ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+
+  if command -v wslpath >/dev/null 2>&1; then
+    wslpath -u "$raw" 2>/dev/null && return 0
+  fi
+
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$raw" 2>/dev/null && return 0
+  fi
+
+  local drive rest
+  drive="$(printf '%s' "$raw" | cut -c1 | tr '[:upper:]' '[:lower:]')"
+  rest="${raw:2}"
+  rest="${rest//\\//}"
+  printf '/mnt/%s%s' "$drive" "$rest"
+}
+
+is_runnable_bd_candidate() {
+  local candidate="${1:-}"
+
+  if [[ -z "$candidate" || ! -f "$candidate" ]]; then
+    return 1
+  fi
+
+  [[ -x "$candidate" || "$candidate" == *.exe ]]
+}
+
+resolve_bd_cmd() {
+  local candidate converted
+
+  if [[ -n "${BD_CMD:-}" ]]; then
+    if [[ "$BD_CMD" == *"/"* || "$BD_CMD" == *"\\"* ]]; then
+      converted="$(convert_windows_path "$BD_CMD")"
+      if is_runnable_bd_candidate "$converted"; then
+        printf '%s' "$converted"
+        return 0
+      fi
+    fi
+
+    printf '%s' "$BD_CMD"
+    return 0
+  fi
+
+  if command -v bd >/dev/null 2>&1; then
+    printf '%s' "bd"
+    return 0
+  fi
+
+  if command -v bd.exe >/dev/null 2>&1; then
+    printf '%s' "bd.exe"
+    return 0
+  fi
+
+  for candidate in \
+    "$HOME/.local/bin/bd" \
+    "$HOME/.local/bin/bd.exe" \
+    "$HOME/.bun/bin/bd" \
+    "$HOME/.bun/bin/bd.exe"
+  do
+    if is_runnable_bd_candidate "$candidate"; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v where.exe >/dev/null 2>&1; then
+    while IFS= read -r candidate; do
+      candidate="${candidate%$'\r'}"
+      [[ -z "$candidate" ]] && continue
+
+      converted="$(convert_windows_path "$candidate")"
+      if is_runnable_bd_candidate "$converted"; then
+        printf '%s' "$converted"
+        return 0
+      fi
+
+      if is_runnable_bd_candidate "$candidate"; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    done < <(where.exe bd 2>/dev/null || true)
+  fi
+
+  return 1
+}
+
+BD_CMD="$(resolve_bd_cmd || true)"
+
 # ---- Helpers ----------------------------------------------------------------
 
 usage() {
@@ -212,6 +312,15 @@ extract_task_file_from_design() {
   printf '%s' "$task_file"
 }
 
+json_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/}"
+  printf '"%s"' "$value"
+}
+
 run_phase3_analyzer() {
   local current_json="$1"
   local open_json="$2"
@@ -224,8 +333,8 @@ run_phase3_analyzer() {
     "$current_json" \
     "${open_json:-[]}" \
     "${in_progress_json:-[]}" \
-    "$(printf '%s' "$task_file" | jq -R '.')" \
-    "$(printf '%s' "$repository_root" | jq -R '.')" \
+    "$(json_string "$task_file")" \
+    "$(json_string "$repository_root")" \
     | "$NODE_CMD" "$analyzer_script" --stdin
 }
 

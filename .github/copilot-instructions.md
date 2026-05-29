@@ -29,7 +29,7 @@ Check current context and active work
 ### Stage 1: /plan
 Create implementation plan
 - Research with web search
-- Document findings in `docs/plans/<feature-slug>-design.md`
+- Document findings in `docs/work/YYYY-MM-DD-<feature-slug>/design.md`
 - **Security**: Identify OWASP Top 10 considerations
 - Generate plan, create Beads issue, break into TDD cycles
 
