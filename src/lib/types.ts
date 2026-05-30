@@ -41,6 +41,13 @@ export type OrderState =
 
 export type TransferTaskState = "transfer_pending" | "transfer_submitted" | "buyer_confirmed" | "transfer_timeout";
 export type IssueState = "draft" | "reported" | "accepted" | "rejected";
+export type IssueReasonCode =
+  | "ticket_not_transferred"
+  | "wrong_ticket"
+  | "qr_or_code_already_used"
+  | "details_do_not_match"
+  | "eligibility_problem"
+  | "cannot_access_ticket";
 export type ActorRole = "buyer" | "seller" | "system";
 export type ProtectionLevel = "protected_payment" | "waitlist_only" | "cannot_list";
 export type TransferabilityStatus = "transferable" | "not_transferable" | "unknown";
@@ -159,7 +166,7 @@ export interface MockTransferTask {
 export interface MockIssue {
   id: string;
   orderId: string;
-  reasonCode: "ticket_not_transferred" | "ticket_invalid" | "wrong_ticket";
+  reasonCode: IssueReasonCode;
   state: IssueState;
   requiredEvidence: string[];
   evidenceItems: string[];
