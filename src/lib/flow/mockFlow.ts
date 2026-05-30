@@ -154,7 +154,7 @@ export function connectTimelineActions(
       const result = sellerMarkTransferred(order, transferTask, {
         actorId: order.sellerId,
         evidenceSummary: SELLER_EVIDENCE,
-        submittedAt: options.submittedAt ?? new Date().toISOString(),
+        submittedAt: options.submittedAt ?? NOW_BEFORE_DEADLINE,
       });
       return {
         order: result.order,

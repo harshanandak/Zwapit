@@ -76,7 +76,7 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
     const button = container!.querySelector<HTMLButtonElement>("button[data-advance]");
     button?.addEventListener("click", () => {
       try {
-        const result = connectTimelineActions(state.order, state.transferTask);
+        const result = connectTimelineActions(state.order, state.transferTask, { submittedAt: new Date().toISOString() });
         state.order = result.order;
         state.transferTask = result.transferTask;
         saveDemoState(state);
