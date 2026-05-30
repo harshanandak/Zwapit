@@ -20,10 +20,14 @@ export function validateTransferSubmission(
   input: TransferSubmissionValidationInput,
 ): ValidationResult<TransferSubmissionBlocker> {
   const blockers: TransferSubmissionBlocker[] = [];
+  const nowMs = Date.parse(input.now);
+  const deadlineMs = Date.parse(input.transferTask.deadlineAt);
 
   if (input.order.state !== "transfer_pending") blockers.push("ORDER_NOT_TRANSFER_PENDING");
   if (input.transferTask.state !== "transfer_pending") blockers.push("TRANSFER_TASK_NOT_PENDING");
-  if (Date.parse(input.now) > Date.parse(input.transferTask.deadlineAt)) blockers.push("TRANSFER_DEADLINE_EXPIRED");
+  if (Number.isNaN(nowMs) || Number.isNaN(deadlineMs) || nowMs > deadlineMs) {
+    blockers.push("TRANSFER_DEADLINE_EXPIRED");
+  }
   if (input.actorId !== input.order.sellerId) blockers.push("INVALID_ACTOR");
   if (!input.evidenceSummary.trim()) blockers.push("MISSING_TRANSFER_EVIDENCE");
 

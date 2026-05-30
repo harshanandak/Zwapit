@@ -54,4 +54,32 @@ describe("transfer submission validation blockers", () => {
     expect(result.ok).toBe(false);
     expect(result.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
   });
+
+  test("blocks transfer submission when timestamps are invalid", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+
+    const invalidNow = validateTransferSubmission({
+      order: paid.order,
+      transferTask: fixture.transferTask,
+      actorId: fixture.order.sellerId,
+      evidenceSummary: "Official transfer submitted",
+      now: "not-a-date",
+    });
+    const invalidDeadline = validateTransferSubmission({
+      order: paid.order,
+      transferTask: {
+        ...fixture.transferTask,
+        deadlineAt: "not-a-date",
+      },
+      actorId: fixture.order.sellerId,
+      evidenceSummary: "Official transfer submitted",
+      now: "2026-12-20T17:00:00+05:30",
+    });
+
+    expect(invalidNow.ok).toBe(false);
+    expect(invalidNow.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+    expect(invalidDeadline.ok).toBe(false);
+    expect(invalidDeadline.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+  });
 });
