@@ -23,9 +23,9 @@ const currentIndex = steps.findIndex((step) => step.key === current);
         <span
           class:list={[
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-semibold",
-            index < currentIndex && "bg-emerald-600 text-white",
-            index === currentIndex && "bg-slate-900 text-white",
-            index > currentIndex && "border border-slate-300 bg-white text-slate-400",
+            index < currentIndex && "bg-accent text-accent-foreground",
+            index === currentIndex && "bg-primary text-primary-foreground",
+            index > currentIndex && "border border-border bg-card text-muted-foreground",
           ]}
         >
           {index < currentIndex ? "✓" : index + 1}
@@ -33,12 +33,12 @@ const currentIndex = steps.findIndex((step) => step.key === current);
         <span
           class:list={[
             "truncate",
-            index === currentIndex ? "font-semibold text-slate-900" : "text-slate-500",
+            index === currentIndex ? "font-semibold text-foreground" : "text-muted-foreground",
           ]}
         >
           {step.label}
         </span>
-        {index < steps.length - 1 && <span class="h-px flex-1 bg-slate-200" />}
+        {index < steps.length - 1 && <span class="h-px flex-1 bg-border" />}
       </li>
     ))
   }

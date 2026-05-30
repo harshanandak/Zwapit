@@ -22,40 +22,40 @@ const promises = [
 
   <div class="space-y-5">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">Your seller promise</h2>
-      <p class="mt-1 text-sm text-slate-600">
+      <h2 class="text-lg font-semibold text-foreground">Your seller promise</h2>
+      <p class="mt-1 text-sm text-muted-foreground">
         Confirm these so buyers can trust the handoff.
       </p>
     </div>
 
-    <fieldset class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    <fieldset class="space-y-3 rounded-xl border border-border bg-card p-4">
       {
         promises.map((promise) => (
-          <label class="flex items-start gap-3 text-sm text-slate-700">
-            <input type="checkbox" checked class="mt-0.5" />
+          <label class="flex items-start gap-3 text-sm text-foreground">
+            <input type="checkbox" checked class="mt-0.5 accent-primary" />
             <span>{promise}</span>
           </label>
         ))
       }
     </fieldset>
 
-    <section class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-      <p class="text-sm font-semibold text-emerald-800">{result.title}</p>
-      <p class="mt-1 text-xs text-emerald-700">{result.detail}</p>
+    <section class="rounded-xl border border-accent/40 bg-accent/10 p-4">
+      <p class="text-sm font-semibold text-foreground">{result.title}</p>
+      <p class="mt-1 text-xs text-muted-foreground">{result.detail}</p>
       {
         listingValidation.ok && (
-          <p class="mt-2 text-xs text-emerald-700">All listing checks passed automatically.</p>
+          <p class="mt-2 text-xs text-muted-foreground">All listing checks passed automatically.</p>
         )
       }
     </section>
 
     <a
       href="/app/sell/orders"
-      class="block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white"
+      class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
     >
       Go to Orders
     </a>
-    <p class="text-center text-xs text-slate-400">
+    <p class="text-center text-xs text-muted-foreground">
       Mock flow for this slice — agreeing publishes instantly here.
     </p>
   </div>

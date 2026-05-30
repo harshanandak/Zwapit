@@ -8,32 +8,32 @@ import StepNav from "../../../components/seller/StepNav.astro";
 
   <div class="space-y-5">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">Upload your ticket</h2>
-      <p class="mt-1 text-sm text-slate-600">
+      <h2 class="text-lg font-semibold text-foreground">Upload your ticket</h2>
+      <p class="mt-1 text-sm text-muted-foreground">
         Add your ticket or pass and we'll detect the details for you — no long forms.
       </p>
     </div>
 
     <label
-      class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white p-8 text-center"
+      class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-card p-8 text-center"
     >
       <span class="text-2xl" aria-hidden="true">⬆️</span>
-      <span class="text-sm font-semibold text-slate-900">Add your ticket or pass</span>
-      <span class="text-xs text-slate-500">PDF, screenshot, or pass file</span>
+      <span class="text-sm font-semibold text-foreground">Add your ticket or pass</span>
+      <span class="text-xs text-muted-foreground">PDF, screenshot, or pass file</span>
       <input type="file" name="ticket" class="sr-only" />
     </label>
 
-    <p class="text-xs text-slate-500">
+    <p class="text-xs text-muted-foreground">
       We read the event, date, and seat details so you don't have to type them.
     </p>
 
     <a
       href="/app/sell/confirm"
-      class="block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white"
+      class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
     >
       Continue
     </a>
-    <p class="text-center text-xs text-slate-400">
+    <p class="text-center text-xs text-muted-foreground">
       Mock upload for this slice — real file reading is added later.
     </p>
   </div>

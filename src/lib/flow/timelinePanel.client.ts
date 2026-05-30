@@ -40,29 +40,29 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
       .map((label, index) => {
         const node =
           index < active
-            ? '<span class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">✓</span>'
+            ? '<span class="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">✓</span>'
             : index === active
-              ? `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">${index + 1}</span>`
-              : `<span class="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-400">${index + 1}</span>`;
+              ? `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">${index + 1}</span>`
+              : `<span class="flex h-6 w-6 items-center justify-center rounded-full border border-border text-xs font-semibold text-muted-foreground">${index + 1}</span>`;
         const text =
           index === active
-            ? `<span class="font-semibold text-slate-900">${label}</span>`
-            : `<span class="text-slate-500">${label}</span>`;
+            ? `<span class="font-semibold text-foreground">${label}</span>`
+            : `<span class="text-muted-foreground">${label}</span>`;
         return `<li class="flex flex-1 items-center gap-2">${node}${text}</li>`;
       })
       .join("");
 
     const next = nextActionLabel(state.order.state);
     const action = next
-      ? `<button data-advance class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Advance (demo)</button>
-         <p class="mt-1 text-xs text-slate-500">Next: ${next}</p>`
-      : '<p class="text-sm font-semibold text-emerald-700">Completed ✓</p>';
+      ? `<button data-advance class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm">Advance (demo)</button>
+         <p class="mt-1 text-xs text-muted-foreground">Next: ${next}</p>`
+      : '<p class="text-sm font-semibold text-foreground">Completed ✓</p>';
 
     container!.innerHTML = `
-      <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="rounded-xl border border-border bg-card p-4">
         <div class="flex items-center justify-between">
-          <p class="text-sm font-semibold text-slate-900">${title}</p>
-          <span class="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">${statusLabel}</span>
+          <p class="text-sm font-semibold text-foreground">${title}</p>
+          <span class="rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">${statusLabel}</span>
         </div>
         <ol class="mt-3 flex items-center gap-2 text-xs">${dots}</ol>
         <div class="mt-4">${action}</div>
@@ -78,7 +78,7 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
         render();
       } catch (error) {
         const note = document.createElement("p");
-        note.className = "mt-2 text-xs text-slate-500";
+        note.className = "mt-2 text-xs text-muted-foreground";
         note.textContent = `Can't advance: ${(error as Error).message}`;
         container!.appendChild(note);
       }

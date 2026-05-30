@@ -38,18 +38,18 @@ const details = [
 
   <div class="space-y-5">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">Detected details</h2>
-      <p class="mt-1 text-sm text-slate-600">
+      <h2 class="text-lg font-semibold text-foreground">Detected details</h2>
+      <p class="mt-1 text-sm text-muted-foreground">
         We detected these from your upload. Check they're right before you continue.
       </p>
     </div>
 
-    <dl class="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+    <dl class="divide-y divide-border rounded-xl border border-border bg-card">
       {
         details.map((detail) => (
           <div class="flex items-center justify-between gap-4 px-4 py-3 text-sm">
-            <dt class="text-slate-500">{detail.label}</dt>
-            <dd class="text-right font-medium text-slate-900">{detail.value}</dd>
+            <dt class="text-muted-foreground">{detail.label}</dt>
+            <dd class="text-right font-medium text-foreground">{detail.value}</dd>
           </div>
         ))
       }
@@ -58,13 +58,13 @@ const details = [
     <div class="flex gap-3">
       <a
         href="/app/sell/upload"
-        class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700"
+        class="rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground"
       >
         Edit
       </a>
       <a
         href="/app/sell/price"
-        class="flex-1 rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white"
+        class="flex-1 rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
       >
         Looks right
       </a>
