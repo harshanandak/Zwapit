@@ -83,6 +83,27 @@ describe("order state transitions", () => {
     ).toThrow("TRANSFER_DEADLINE_EXPIRED");
   });
 
+  test("rejects buyer confirmation for a different order transfer task", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+    const submitted = sellerMarkTransferred(paid.order, fixture.transferTask, {
+      actorId: fixture.order.sellerId,
+      evidenceSummary: "Official transfer submitted",
+      submittedAt: "2026-12-20T17:00:00+05:30",
+    });
+
+    expect(() =>
+      buyerConfirmReceived(
+        submitted.order,
+        {
+          ...submitted.transferTask,
+          orderId: "order_other_1",
+        },
+        fixture.order.buyerId,
+      ),
+    ).toThrow("INVALID_TRANSFER_TASK");
+  });
+
   test("moves missed transfer deadlines to timeout", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);

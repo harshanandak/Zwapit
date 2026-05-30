@@ -115,6 +115,9 @@ export function buyerConfirmReceived(
   if (transferTask.state !== "transfer_submitted") {
     throw new Error("INVALID_TRANSFER_STATE");
   }
+  if (transferTask.orderId !== order.id) {
+    throw new Error("INVALID_TRANSFER_TASK");
+  }
 
   const nextOrder: MockOrder = {
     ...order,
