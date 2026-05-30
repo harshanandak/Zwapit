@@ -27,5 +27,8 @@
     "@types/react-dom": "^19.2.3",
     "lefthook": "^2.1.8",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "yaml-language-server": "1.23.0"
   }
 }
