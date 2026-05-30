@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import { createMockFixture } from "../../mock/fixtures";
 import { mockPay } from "../../state/orderTransitions";
 import { validateTransferSubmission } from "../transferValidation";
 
 describe("transfer submission validation blockers", () => {
-  test("accepts seller evidence while transfer is pending", () => {
+  it("should accept seller evidence when transfer is pending", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
 
@@ -20,7 +20,7 @@ describe("transfer submission validation blockers", () => {
     ).toEqual({ ok: true, blockers: [] });
   });
 
-  test("blocks wrong state, wrong actor, and missing evidence", () => {
+  it("should block submission when state actor or evidence is invalid", () => {
     const fixture = createMockFixture();
     const result = validateTransferSubmission({
       order: fixture.order,
@@ -40,7 +40,7 @@ describe("transfer submission validation blockers", () => {
     expect(result.blockers).toContain("MISSING_TRANSFER_EVIDENCE");
   });
 
-  test("blocks transfer submission after the transfer deadline", () => {
+  it("should block transfer submission when the transfer deadline has passed", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
     const result = validateTransferSubmission({
@@ -55,7 +55,7 @@ describe("transfer submission validation blockers", () => {
     expect(result.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
   });
 
-  test("blocks transfer submission when timestamps are invalid", () => {
+  it("should block transfer submission when timestamps are invalid", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
 
