@@ -134,11 +134,16 @@ export interface TimelineActionResult {
   terminal: boolean;
 }
 
+export interface TimelineActionOptions {
+  submittedAt?: string;
+}
+
 // connectTimelineActions: apply the next valid transition for the current order
 // state using the local state helpers (each rejects invalid actor/state).
 export function connectTimelineActions(
   order: MockOrder,
   transferTask: MockTransferTask,
+  options: TimelineActionOptions = {},
 ): TimelineActionResult {
   switch (order.state) {
     case "checkout_pending": {
@@ -149,7 +154,7 @@ export function connectTimelineActions(
       const result = sellerMarkTransferred(order, transferTask, {
         actorId: order.sellerId,
         evidenceSummary: SELLER_EVIDENCE,
-        submittedAt: new Date().toISOString(),
+        submittedAt: options.submittedAt ?? new Date().toISOString(),
       });
       return {
         order: result.order,

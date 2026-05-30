@@ -10,6 +10,7 @@ import {
   connectMockListingFlow,
   connectSellerOrderFlow,
   connectTimelineActions,
+  NOW_BEFORE_DEADLINE,
   reportBuyerIssue,
 } from "../src/lib/flow/mockFlow.ts";
 
@@ -283,7 +284,7 @@ export async function verifyAcceptanceCriteria() {
   let state = { order: checkout.order, transferTask: fixture.transferTask };
   const sequence = [state.order.state];
   for (let i = 0; i < 6 && state.order.state !== "completed"; i += 1) {
-    const next = connectTimelineActions(state.order, state.transferTask);
+    const next = connectTimelineActions(state.order, state.transferTask, { submittedAt: NOW_BEFORE_DEADLINE });
     state = { order: next.order, transferTask: next.transferTask };
     sequence.push(state.order.state);
   }

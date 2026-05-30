@@ -204,7 +204,12 @@ export function transferDeadlineMissed(
     throw new Error("INVALID_TRANSFER_TASK");
   }
 
-  if (Date.parse(now) <= Date.parse(transferTask.deadlineAt)) {
+  const nowMs = Date.parse(now);
+  const deadlineAtMs = Date.parse(transferTask.deadlineAt);
+  if (Number.isNaN(nowMs) || Number.isNaN(deadlineAtMs)) {
+    throw new Error("TRANSFER_DEADLINE_EXPIRED");
+  }
+  if (nowMs <= deadlineAtMs) {
     throw new Error("TRANSFER_DEADLINE_ACTIVE");
   }
 

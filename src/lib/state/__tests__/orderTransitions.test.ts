@@ -153,6 +153,25 @@ describe("order state transitions", () => {
     ).toThrow("INVALID_TRANSFER_TASK");
   });
 
+  test("rejects missed transfer deadlines with invalid timestamps", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+
+    expect(() => transferDeadlineMissed(paid.order, fixture.transferTask, "not-a-date")).toThrow(
+      "TRANSFER_DEADLINE_EXPIRED",
+    );
+    expect(() =>
+      transferDeadlineMissed(
+        paid.order,
+        {
+          ...fixture.transferTask,
+          deadlineAt: "not-a-date",
+        },
+        "2026-12-20T18:30:00+05:30",
+      ),
+    ).toThrow("TRANSFER_DEADLINE_EXPIRED");
+  });
+
   test("captures buyer issue path with structured reason and evidence", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
