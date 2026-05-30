@@ -32,6 +32,7 @@ const displayState: OrderState = "transfer_pending";
 
     <section class="rounded-xl border border-slate-200 bg-white p-4">
       <h3 class="text-sm font-semibold text-slate-900">Your timeline</h3>
+      <div id="buyer-live-order" class="mt-3"></div>
       <div class="mt-3">
         <BuyerTimeline
           currentState={displayState}
@@ -56,6 +57,41 @@ const displayState: OrderState = "transfer_pending";
     <section>
       <h3 class="mb-2 text-sm font-semibold text-slate-900">Something wrong?</h3>
       <ReportIssue />
+      <p id="issue-status" class="mt-2 text-xs font-medium text-emerald-700"></p>
     </section>
   </div>
 </AppShell>
+
+<script>
+  import { createMockFixture } from "../../../lib/mock/fixtures";
+  import { loadDemoState, reportBuyerIssue, saveDemoState } from "../../../lib/flow/mockFlow";
+  import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
+
+  mountTimelinePanel("buyer-live-order", "buyer");
+
+  // Wire the existing Report-issue form to the local issue helper.
+  const form = document.querySelector("form");
+  const submitButton = form?.querySelector<HTMLButtonElement>('button[type="button"]');
+  submitButton?.addEventListener("click", () => {
+    const status = document.getElementById("issue-status");
+    const reason = form?.querySelector<HTMLInputElement>('input[name="reason"]:checked');
+    const detailsField = form?.querySelector<HTMLTextAreaElement>('textarea[name="details"]');
+    if (!reason) {
+      if (status) status.textContent = "Please pick a reason first.";
+      return;
+    }
+    const evidenceText = (detailsField?.value || "").trim() || "Reported from the order timeline (demo)";
+    const state = loadDemoState();
+    const { issue } = createMockFixture();
+    try {
+      const reported = reportBuyerIssue(state.order, issue, reason.value as typeof issue.reasonCode, evidenceText);
+      saveDemoState({ order: reported.order, transferTask: state.transferTask });
+      if (status) {
+        status.textContent = `Issue reported (${reason.value}). You're protected while we look into it.`;
+      }
+      mountTimelinePanel("buyer-live-order", "buyer");
+    } catch (error) {
+      if (status) status.textContent = `Can't report right now: ${(error as Error).message}`;
+    }
+  });
+</script>

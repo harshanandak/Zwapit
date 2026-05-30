@@ -59,6 +59,8 @@ const sellerOrders = [{ order, listing, displayState }];
               <span class="font-semibold text-slate-900">{formatInr(payout)}</span>
             </div>
 
+            <div id="seller-live" class="mt-4"></div>
+
             <div class="mt-4">
               <SellerTimeline
                 currentState={entry.displayState}
@@ -71,3 +73,8 @@ const sellerOrders = [{ order, listing, displayState }];
     }
   </div>
 </AppShell>
+
+<script>
+  import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
+  mountTimelinePanel("seller-live", "seller");
+</script>

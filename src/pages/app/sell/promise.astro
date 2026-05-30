@@ -2,12 +2,13 @@
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
 import { ruleDecisionResult } from "../../../components/seller/format";
-import { createMockFixture } from "../../../lib/mock/fixtures";
+import { connectMockListingFlow, connectSellerOrderFlow } from "../../../lib/flow/mockFlow";
 
-const { sourceRule } = createMockFixture();
-
-// System-first rule decision for this listing (AUTO_APPROVE for the fixture).
-const result = ruleDecisionResult(sourceRule.decision);
+// Decision comes from the local rule engine (Task 6); the seller listing is
+// checked by the local validation (Task 8).
+const { evaluation } = connectMockListingFlow();
+const { listingValidation } = connectSellerOrderFlow();
+const result = ruleDecisionResult(evaluation.decision);
 
 const promises = [
   "I'll transfer the ticket to the buyer before the deadline.",
@@ -41,6 +42,11 @@ const promises = [
     <section class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
       <p class="text-sm font-semibold text-emerald-800">{result.title}</p>
       <p class="mt-1 text-xs text-emerald-700">{result.detail}</p>
+      {
+        listingValidation.ok && (
+          <p class="mt-2 text-xs text-emerald-700">All listing checks passed automatically.</p>
+        )
+      }
     </section>
 
     <a

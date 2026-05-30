@@ -63,13 +63,36 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
     </section>
 
     <a
+      id="pay-button"
       href="/app/tickets"
       class="block rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white"
     >
       {payLabel}
     </a>
+    <p id="checkout-warning" class="text-center text-xs text-rose-600"></p>
     <p class="text-center text-xs text-slate-400">
       Mock checkout for this slice — no real payment is taken.
     </p>
   </div>
 </AppShell>
+
+<script>
+  import { createMockFixture } from "../../../lib/mock/fixtures";
+  import { connectMockCheckoutFlow, saveDemoState } from "../../../lib/flow/mockFlow";
+
+  // Mock pay: validate checkout, transition checkout_pending -> transfer_pending,
+  // persist the order locally, then show it in My Tickets. No real payment.
+  const payButton = document.getElementById("pay-button");
+  payButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    const { order, transferTask } = createMockFixture();
+    const result = connectMockCheckoutFlow(order);
+    if (!result.ok) {
+      const warning = document.getElementById("checkout-warning");
+      if (warning) warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;
+      return;
+    }
+    saveDemoState({ order: result.order, transferTask });
+    window.location.href = "/app/tickets";
+  });
+</script>
