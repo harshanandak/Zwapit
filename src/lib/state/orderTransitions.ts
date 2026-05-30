@@ -55,7 +55,7 @@ export function mockPay(order: MockOrder): OrderTransitionResult {
 export function sellerMarkTransferred(
   order: MockOrder,
   transferTask: MockTransferTask,
-  input: { actorId: string; evidenceSummary: string; submittedAt?: string },
+  input: { actorId: string; evidenceSummary: string; submittedAt: string },
 ): TransferTransitionResult {
   requireOrderState(order, "transfer_pending");
 
@@ -70,7 +70,7 @@ export function sellerMarkTransferred(
     throw new Error("INVALID_TRANSFER_TASK");
   }
 
-  const submittedAt = input.submittedAt ?? "2026-12-20T17:00:00+05:30";
+  const submittedAt = input.submittedAt;
   if (Date.parse(submittedAt) > Date.parse(transferTask.deadlineAt)) {
     throw new Error("TRANSFER_DEADLINE_EXPIRED");
   }

@@ -258,6 +258,7 @@ export async function verifyAcceptanceCriteria() {
   ], failures);
 
   mustContain("/app/orders/:orderId", built.get("/app/orders/:orderId") ?? "", [
+    "Complete checkout first",
     "Report issue",
     "Ticket wasn't transferred",
     "Wrong ticket",

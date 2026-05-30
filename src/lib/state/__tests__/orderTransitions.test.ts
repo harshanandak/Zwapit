@@ -47,6 +47,7 @@ describe("order state transitions", () => {
       sellerMarkTransferred(paid.order, fixture.transferTask, {
         actorId: fixture.order.buyerId,
         evidenceSummary: "buyer cannot submit",
+        submittedAt: "2026-12-20T17:00:00+05:30",
       }),
     ).toThrow("INVALID_ACTOR");
 

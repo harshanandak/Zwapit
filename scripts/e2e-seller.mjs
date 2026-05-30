@@ -54,6 +54,7 @@ throws(
     sellerMarkTransferred(freshPaid.order, freshPaid.transferTask, {
       actorId: "user_demo_1",
       evidenceSummary: "x",
+      submittedAt: new Date().toISOString(),
     }),
   "INVALID_ACTOR",
   "buyer acting as seller should be rejected",

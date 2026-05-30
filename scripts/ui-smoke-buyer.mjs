@@ -124,6 +124,7 @@ must("/app/tickets", tickets, [
 const orders = read("/app/orders/:orderId", "app/orders/order_demo_1");
 must("/app/orders/:orderId", orders, [
   'data-route-id="/app/orders/:orderId"',
+  "Complete checkout first",
   "Transfer needed",
   "Confirm receipt",
   "Protection active",
