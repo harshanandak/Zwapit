@@ -67,6 +67,34 @@ describe("checkout validation blockers", () => {
     expect(result.blockers).toContain("SELLER_PAYOUT_ACCOUNT_MISMATCH");
   });
 
+  test("should block checkout when transfer timestamps are invalid", () => {
+    const fixture = createMockFixture();
+    const invalidNow = validateCheckout({
+      listing: fixture.listing,
+      sourceRule: fixture.sourceRule,
+      sellerPaymentAccount: fixture.sellerPaymentAccount,
+      buyerEligibilityAcknowledged: true,
+      totalShownToBuyer: fixture.listing.totalPayable,
+      now: "not-a-date",
+    });
+    const invalidDeadline = validateCheckout({
+      listing: {
+        ...fixture.listing,
+        transferDeadlineAt: "not-a-date",
+      },
+      sourceRule: fixture.sourceRule,
+      sellerPaymentAccount: fixture.sellerPaymentAccount,
+      buyerEligibilityAcknowledged: true,
+      totalShownToBuyer: fixture.listing.totalPayable,
+      now: "2026-12-20T12:00:00+05:30",
+    });
+
+    expect(invalidNow.ok).toBe(false);
+    expect(invalidNow.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+    expect(invalidDeadline.ok).toBe(false);
+    expect(invalidDeadline.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+  });
+
   test("buyer confirmation blocks wrong order state", () => {
     const fixture = createMockFixture();
 

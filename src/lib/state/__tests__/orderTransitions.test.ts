@@ -82,6 +82,29 @@ describe("order state transitions", () => {
         submittedAt: "2026-12-20T19:00:00+05:30",
       }),
     ).toThrow("TRANSFER_DEADLINE_EXPIRED");
+
+    expect(() =>
+      sellerMarkTransferred(paid.order, fixture.transferTask, {
+        actorId: fixture.order.sellerId,
+        evidenceSummary: "Invalid submission time",
+        submittedAt: "not-a-date",
+      }),
+    ).toThrow("TRANSFER_DEADLINE_EXPIRED");
+
+    expect(() =>
+      sellerMarkTransferred(
+        paid.order,
+        {
+          ...fixture.transferTask,
+          deadlineAt: "not-a-date",
+        },
+        {
+          actorId: fixture.order.sellerId,
+          evidenceSummary: "Invalid deadline time",
+          submittedAt: "2026-12-20T17:00:00+05:30",
+        },
+      ),
+    ).toThrow("TRANSFER_DEADLINE_EXPIRED");
   });
 
   test("rejects buyer confirmation for a different order transfer task", () => {

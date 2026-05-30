@@ -23,9 +23,11 @@ export type BuyerConfirmationBlocker = "ORDER_NOT_TRANSFER_SUBMITTED";
 
 export function validateCheckout(input: CheckoutValidationInput): ValidationResult<CheckoutBlocker> {
   const blockers: CheckoutBlocker[] = [];
+  const nowMs = Date.parse(input.now);
+  const transferDeadlineMs = Date.parse(input.listing.transferDeadlineAt);
 
   if (input.listing.state !== "live") blockers.push("LISTING_NOT_LIVE");
-  if (Date.parse(input.now) > Date.parse(input.listing.transferDeadlineAt)) {
+  if (Number.isNaN(nowMs) || Number.isNaN(transferDeadlineMs) || nowMs > transferDeadlineMs) {
     blockers.push("TRANSFER_DEADLINE_EXPIRED");
   }
   if (input.buyerEligibilityAcknowledged !== true) blockers.push("BUYER_ELIGIBILITY_NOT_ACKNOWLEDGED");

@@ -71,7 +71,9 @@ export function sellerMarkTransferred(
   }
 
   const submittedAt = input.submittedAt;
-  if (Date.parse(submittedAt) > Date.parse(transferTask.deadlineAt)) {
+  const submittedAtMs = Date.parse(submittedAt);
+  const deadlineAtMs = Date.parse(transferTask.deadlineAt);
+  if (Number.isNaN(submittedAtMs) || Number.isNaN(deadlineAtMs) || submittedAtMs > deadlineAtMs) {
     throw new Error("TRANSFER_DEADLINE_EXPIRED");
   }
 
