@@ -170,7 +170,9 @@ export function openProtectionWindow(order: MockOrder): OrderTransitionResult {
 export function completeAfterWindow(order: MockOrder, now: string): OrderTransitionResult {
   requireOrderState(order, "dispute_window_open");
 
-  if (Date.parse(now) < Date.parse(order.issueWindowEndsAt)) {
+  const nowMs = Date.parse(now);
+  const issueWindowEndsAtMs = Date.parse(order.issueWindowEndsAt);
+  if (Number.isNaN(nowMs) || Number.isNaN(issueWindowEndsAtMs) || nowMs < issueWindowEndsAtMs) {
     throw new Error("PROTECTION_WINDOW_OPEN");
   }
 

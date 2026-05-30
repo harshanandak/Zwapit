@@ -128,6 +128,29 @@ describe("order state transitions", () => {
     ).toThrow("INVALID_TRANSFER_TASK");
   });
 
+  test("rejects completion when protection timestamps are invalid", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+    const submitted = sellerMarkTransferred(paid.order, fixture.transferTask, {
+      actorId: fixture.order.sellerId,
+      evidenceSummary: "Official transfer submitted",
+      submittedAt: "2026-12-20T17:00:00+05:30",
+    });
+    const confirmed = buyerConfirmReceived(submitted.order, submitted.transferTask, fixture.order.buyerId);
+    const windowOpen = openProtectionWindow(confirmed.order);
+
+    expect(() => completeAfterWindow(windowOpen.order, "not-a-date")).toThrow("PROTECTION_WINDOW_OPEN");
+    expect(() =>
+      completeAfterWindow(
+        {
+          ...windowOpen.order,
+          issueWindowEndsAt: "not-a-date",
+        },
+        "2026-12-22T00:00:00+05:30",
+      ),
+    ).toThrow("PROTECTION_WINDOW_OPEN");
+  });
+
   test("moves missed transfer deadlines to timeout", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
