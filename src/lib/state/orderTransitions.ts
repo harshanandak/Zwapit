@@ -198,6 +198,10 @@ export function transferDeadlineMissed(
 ): TransferTransitionResult {
   requireOrderState(order, "transfer_pending");
 
+  if (transferTask.orderId !== order.id) {
+    throw new Error("INVALID_TRANSFER_TASK");
+  }
+
   if (Date.parse(now) <= Date.parse(transferTask.deadlineAt)) {
     throw new Error("TRANSFER_DEADLINE_ACTIVE");
   }

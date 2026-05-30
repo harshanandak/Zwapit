@@ -62,6 +62,11 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
       </p>
     </section>
 
+    <label class="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-sm text-foreground">
+      <input id="eligibility-ack" type="checkbox" checked class="mt-0.5 accent-primary" />
+      <span>I understand the ticket rules and will carry any required ID or proof.</span>
+    </label>
+
     <a
       id="pay-button"
       href="/app/tickets"
@@ -83,10 +88,13 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
   // Mock pay: validate checkout, transition checkout_pending -> transfer_pending,
   // persist the order locally, then show it in My Tickets. No real payment.
   const payButton = document.getElementById("pay-button");
+  const eligibilityAck = document.getElementById("eligibility-ack") as HTMLInputElement | null;
   payButton?.addEventListener("click", (event) => {
     event.preventDefault();
     const { order, transferTask } = createMockFixture();
-    const result = connectMockCheckoutFlow(order);
+    const result = connectMockCheckoutFlow(order, {
+      buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
+    });
     if (!result.ok) {
       const warning = document.getElementById("checkout-warning");
       if (warning) warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;

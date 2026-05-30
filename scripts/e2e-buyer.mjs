@@ -37,7 +37,7 @@ ok(view.purchasable === true, "listing should be purchasable");
 // 2. Checkout: order starts checkout_pending, mock_pay -> transfer_pending.
 const { order, transferTask, issue } = createMockFixture();
 ok(order.state === "checkout_pending", "fixture order starts checkout_pending");
-const paid = connectMockCheckoutFlow(order);
+const paid = connectMockCheckoutFlow(order, { buyerEligibilityAcknowledged: true });
 ok(paid.ok === true, `checkout should succeed (blockers: ${paid.blockers.join(",")})`);
 ok(paid.order.state === "transfer_pending", "after mock pay order is transfer_pending");
 ok(paid.order.mockPaymentStatus === "mock_paid", "after mock pay status is mock_paid");
@@ -85,6 +85,7 @@ const blocked = validateCheckout({
   listing: { ...view.listing, state: "paused" },
   sourceRule: view.sourceRule,
   sellerPaymentAccount: { sellerId: "seller_demo_1", status: "mock_ready", provider: "mock" },
+  buyerEligibilityAcknowledged: true,
   totalShownToBuyer: view.listing.totalPayable,
   now: order.createdAt,
 });

@@ -58,6 +58,7 @@ export function connectMockListingFlow(): ListingFlowView {
     listing,
     sourceRule,
     sellerPaymentAccount,
+    buyerEligibilityAcknowledged: true,
     totalShownToBuyer: listing.totalPayable,
     now: NOW_BEFORE_DEADLINE,
   });
@@ -77,17 +78,23 @@ export interface CheckoutFlowResult {
   order: MockOrder;
 }
 
+export interface CheckoutFlowOptions {
+  buyerEligibilityAcknowledged?: boolean;
+  now?: string;
+}
+
 // connectMockCheckoutFlow: validate checkout then mock_pay the order
 // (checkout_pending -> transfer_pending). Mock-local only.
-export function connectMockCheckoutFlow(order: MockOrder, now = new Date().toISOString()): CheckoutFlowResult {
+export function connectMockCheckoutFlow(order: MockOrder, options: CheckoutFlowOptions = {}): CheckoutFlowResult {
   const { listing, sourceRule, sellerPaymentAccount } = createMockFixture();
 
   const validation = validateCheckout({
     listing,
     sourceRule,
     sellerPaymentAccount,
+    buyerEligibilityAcknowledged: options.buyerEligibilityAcknowledged === true,
     totalShownToBuyer: listing.totalPayable,
-    now,
+    now: options.now ?? new Date().toISOString(),
   });
 
   if (!validation.ok) {

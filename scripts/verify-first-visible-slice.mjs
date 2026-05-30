@@ -248,7 +248,7 @@ export async function verifyAcceptanceCriteria() {
   notes.push("purchasability gate is verified in connectMockListingFlow and enforced at checkout through validateCheckout");
 
   if (fixture.order.state !== "checkout_pending") failures.push("fixture order does not start checkout_pending");
-  const checkout = connectMockCheckoutFlow(fixture.order);
+  const checkout = connectMockCheckoutFlow(fixture.order, { buyerEligibilityAcknowledged: true });
   if (!checkout.ok) failures.push(`checkout did not pass: ${checkout.blockers.join(",")}`);
   if (checkout.order.state !== "transfer_pending") failures.push("mock_pay did not transition to transfer_pending");
 

@@ -10,6 +10,7 @@ describe("checkout validation blockers", () => {
       listing: fixture.listing,
       sourceRule: fixture.sourceRule,
       sellerPaymentAccount: fixture.sellerPaymentAccount,
+      buyerEligibilityAcknowledged: true,
       totalShownToBuyer: fixture.listing.totalPayable,
       now: "2026-12-20T12:00:00+05:30",
     });
@@ -34,6 +35,7 @@ describe("checkout validation blockers", () => {
         ...fixture.sellerPaymentAccount,
         status: "mock_missing",
       },
+      buyerEligibilityAcknowledged: false,
       totalShownToBuyer: undefined,
       now: "2026-12-20T12:00:00+05:30",
     });
@@ -41,6 +43,7 @@ describe("checkout validation blockers", () => {
     expect(result.ok).toBe(false);
     expect(result.blockers).toContain("LISTING_NOT_LIVE");
     expect(result.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+    expect(result.blockers).toContain("BUYER_ELIGIBILITY_NOT_ACKNOWLEDGED");
     expect(result.blockers).toContain("TOTAL_NOT_SHOWN");
     expect(result.blockers).toContain("RULE_NOT_PURCHASABLE");
     expect(result.blockers).toContain("SELLER_PAYOUT_NOT_READY");
@@ -55,6 +58,7 @@ describe("checkout validation blockers", () => {
         ...fixture.sellerPaymentAccount,
         sellerId: "seller_other_1",
       },
+      buyerEligibilityAcknowledged: true,
       totalShownToBuyer: fixture.listing.totalPayable,
       now: "2026-12-20T12:00:00+05:30",
     });

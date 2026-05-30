@@ -113,6 +113,22 @@ describe("order state transitions", () => {
     expect(timedOut.transferTask.state).toBe("transfer_timeout");
   });
 
+  test("rejects missed transfer deadlines for a different order transfer task", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+
+    expect(() =>
+      transferDeadlineMissed(
+        paid.order,
+        {
+          ...fixture.transferTask,
+          orderId: "order_other_1",
+        },
+        "2026-12-20T18:30:00+05:30",
+      ),
+    ).toThrow("INVALID_TRANSFER_TASK");
+  });
+
   test("captures buyer issue path with structured reason and evidence", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);

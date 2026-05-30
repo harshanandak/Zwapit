@@ -32,7 +32,7 @@ const promises = [
       {
         promises.map((promise) => (
           <label class="flex items-start gap-3 text-sm text-foreground">
-            <input type="checkbox" checked class="mt-0.5 accent-primary" />
+            <input type="checkbox" checked class="mt-0.5 accent-primary" data-seller-promise />
             <span>{promise}</span>
           </label>
         ))
@@ -50,13 +50,30 @@ const promises = [
     </section>
 
     <a
+      id="promise-continue"
       href="/app/sell/orders"
       class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
     >
       Go to Orders
     </a>
+    <p id="promise-warning" class="text-center text-xs font-medium text-destructive"></p>
     <p class="text-center text-xs text-muted-foreground">
       Mock flow for this slice — agreeing publishes instantly here.
     </p>
   </div>
 </AppShell>
+
+<script>
+  const continueLink = document.getElementById("promise-continue") as HTMLAnchorElement | null;
+  const warning = document.getElementById("promise-warning");
+
+  continueLink?.addEventListener("click", (event) => {
+    const promises = Array.from(document.querySelectorAll<HTMLInputElement>("[data-seller-promise]"));
+    const allAccepted = promises.length > 0 && promises.every((promise) => promise.checked);
+
+    if (!allAccepted) {
+      event.preventDefault();
+      if (warning) warning.textContent = "Accept the seller promise to continue.";
+    }
+  });
+</script>

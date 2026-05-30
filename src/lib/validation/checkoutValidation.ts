@@ -4,6 +4,7 @@ import { validationResult, type ValidationResult } from "./types";
 export type CheckoutBlocker =
   | "LISTING_NOT_LIVE"
   | "TRANSFER_DEADLINE_EXPIRED"
+  | "BUYER_ELIGIBILITY_NOT_ACKNOWLEDGED"
   | "TOTAL_NOT_SHOWN"
   | "RULE_NOT_PURCHASABLE"
   | "SELLER_PAYOUT_NOT_READY"
@@ -13,6 +14,7 @@ export interface CheckoutValidationInput {
   listing: MockListing;
   sourceRule: SourceRule;
   sellerPaymentAccount: MockSellerPaymentAccount;
+  buyerEligibilityAcknowledged?: boolean;
   totalShownToBuyer?: number;
   now: string;
 }
@@ -26,6 +28,7 @@ export function validateCheckout(input: CheckoutValidationInput): ValidationResu
   if (Date.parse(input.now) > Date.parse(input.listing.transferDeadlineAt)) {
     blockers.push("TRANSFER_DEADLINE_EXPIRED");
   }
+  if (input.buyerEligibilityAcknowledged !== true) blockers.push("BUYER_ELIGIBILITY_NOT_ACKNOWLEDGED");
   if (input.totalShownToBuyer !== input.listing.totalPayable) blockers.push("TOTAL_NOT_SHOWN");
   if (input.sourceRule.decision !== "AUTO_APPROVE" || input.listing.ruleDecision !== "AUTO_APPROVE") {
     blockers.push("RULE_NOT_PURCHASABLE");
