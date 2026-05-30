@@ -130,6 +130,33 @@ function gitChangedFiles(args) {
   return output ? output.split(/\r?\n/).map((path) => path.replace(/\\/g, "/")) : [];
 }
 
+function gitRefExists(ref) {
+  try {
+    gitOutput(["rev-parse", "--verify", `${ref}^{commit}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveBaseRef() {
+  const candidates = [];
+  if (process.env.GITHUB_BASE_REF) {
+    candidates.push(`origin/${process.env.GITHUB_BASE_REF}`);
+  }
+  try {
+    candidates.push(gitOutput(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]));
+  } catch {
+    // Some local checkouts do not have origin/HEAD configured.
+  }
+  candidates.push("origin/master", "origin/main");
+
+  for (const candidate of [...new Set(candidates.filter(Boolean))]) {
+    if (gitRefExists(candidate)) return candidate;
+  }
+  throw new Error(`unable to resolve base ref from candidates: ${candidates.join(", ")}`);
+}
+
 function allowedFirstSlicePath(path) {
   return allowedFirstSlicePaths.some((allowed) => (allowed instanceof RegExp ? allowed.test(path) : allowed === path));
 }
@@ -323,7 +350,7 @@ export async function verifyNoScopeDrift() {
   }
 
   try {
-    const baseRef = process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : "origin/master";
+    const baseRef = resolveBaseRef();
     const mergeBase = gitOutput(["merge-base", baseRef, "HEAD"]);
     const branchChanges = gitChangedFiles(["diff", "--name-only", "--diff-filter=ACMRT", mergeBase, "HEAD"]);
     const outOfScopeBranchChanges = branchChanges.filter((path) => !allowedFirstSlicePath(path));

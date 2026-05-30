@@ -15,6 +15,7 @@ describe("transfer submission validation blockers", () => {
         transferTask: fixture.transferTask,
         actorId: fixture.order.sellerId,
         evidenceSummary: "Official transfer submitted",
+        now: "2026-12-20T17:00:00+05:30",
       }),
     ).toEqual({ ok: true, blockers: [] });
   });
@@ -29,6 +30,7 @@ describe("transfer submission validation blockers", () => {
       },
       actorId: fixture.order.buyerId,
       evidenceSummary: "",
+      now: "2026-12-20T17:00:00+05:30",
     });
 
     expect(result.ok).toBe(false);
@@ -36,5 +38,20 @@ describe("transfer submission validation blockers", () => {
     expect(result.blockers).toContain("TRANSFER_TASK_NOT_PENDING");
     expect(result.blockers).toContain("INVALID_ACTOR");
     expect(result.blockers).toContain("MISSING_TRANSFER_EVIDENCE");
+  });
+
+  test("blocks transfer submission after the transfer deadline", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+    const result = validateTransferSubmission({
+      order: paid.order,
+      transferTask: fixture.transferTask,
+      actorId: fixture.order.sellerId,
+      evidenceSummary: "Official transfer submitted",
+      now: "2026-12-20T18:30:00+05:30",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
   });
 });
