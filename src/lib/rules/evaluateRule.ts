@@ -25,6 +25,13 @@ export interface SourceRuleEvaluationResult {
   manualReviewReasonCodes: string[];
 }
 
+function hasRequiredValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "boolean") return value;
+  return true;
+}
+
 export function classifySourceCategory(
   source: SourceRule["source"],
   category: SourceRule["category"],
@@ -82,7 +89,7 @@ export function evaluateSourceRule(input: SourceRuleEvaluationInput): SourceRule
   };
   const requiredFields = [...new Set([...rule.requiredFields, ...rule.eligibilityFields])];
   const missingRequiredFields = requiredFields.filter(
-    (field) => (input.requiredFieldValues[field] ?? explicitRequiredValues[field]) == null,
+    (field) => !hasRequiredValue(input.requiredFieldValues[field] ?? explicitRequiredValues[field]),
   );
   const priceResult = applyPriceRule(rule, input.listingPrice, input.faceValue);
   const manualReviewReasonCodes = [...rule.manualReviewReasonCodes];

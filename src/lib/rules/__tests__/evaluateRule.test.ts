@@ -106,6 +106,27 @@ describe("local source rule engine", () => {
     expect(result.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
   });
 
+  test("treats blank required text fields as missing", () => {
+    const result = evaluateSourceRule({
+      source: "bookmyshow",
+      category: "event_ticket",
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: {
+        title: "   ",
+        eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+        venueOrRoute: "",
+        quantity: 1,
+        transferDeadlineAt: "2026-12-20T18:00:00+05:30",
+        sellerPromiseAccepted: true,
+      },
+    });
+
+    expect(result.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(result.missingRequiredFields).toEqual(expect.arrayContaining(["title", "venueOrRoute"]));
+    expect(result.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
+  });
+
   test("rules include required metadata and policy fields", () => {
     const rule = getSourceRule("bookmyshow_event");
 
