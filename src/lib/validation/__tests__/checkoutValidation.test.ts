@@ -46,6 +46,23 @@ describe("checkout validation blockers", () => {
     expect(result.blockers).toContain("SELLER_PAYOUT_NOT_READY");
   });
 
+  test("blocks payout accounts that belong to a different seller", () => {
+    const fixture = createMockFixture();
+    const result = validateCheckout({
+      listing: fixture.listing,
+      sourceRule: fixture.sourceRule,
+      sellerPaymentAccount: {
+        ...fixture.sellerPaymentAccount,
+        sellerId: "seller_other_1",
+      },
+      totalShownToBuyer: fixture.listing.totalPayable,
+      now: "2026-12-20T12:00:00+05:30",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("SELLER_PAYOUT_ACCOUNT_MISMATCH");
+  });
+
   test("buyer confirmation blocks wrong order state", () => {
     const fixture = createMockFixture();
 

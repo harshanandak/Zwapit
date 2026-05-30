@@ -6,7 +6,8 @@ export type CheckoutBlocker =
   | "TRANSFER_DEADLINE_EXPIRED"
   | "TOTAL_NOT_SHOWN"
   | "RULE_NOT_PURCHASABLE"
-  | "SELLER_PAYOUT_NOT_READY";
+  | "SELLER_PAYOUT_NOT_READY"
+  | "SELLER_PAYOUT_ACCOUNT_MISMATCH";
 
 export interface CheckoutValidationInput {
   listing: MockListing;
@@ -28,6 +29,9 @@ export function validateCheckout(input: CheckoutValidationInput): ValidationResu
   if (input.totalShownToBuyer !== input.listing.totalPayable) blockers.push("TOTAL_NOT_SHOWN");
   if (input.sourceRule.decision !== "AUTO_APPROVE" || input.listing.ruleDecision !== "AUTO_APPROVE") {
     blockers.push("RULE_NOT_PURCHASABLE");
+  }
+  if (input.sellerPaymentAccount.sellerId !== input.listing.sellerId) {
+    blockers.push("SELLER_PAYOUT_ACCOUNT_MISMATCH");
   }
   if (input.sellerPaymentAccount.status !== "mock_ready") blockers.push("SELLER_PAYOUT_NOT_READY");
 

@@ -51,11 +51,12 @@ const FORBIDDEN = [
   "Sales",
   "Transactions",
 ];
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const forbiddenPattern = (term) => new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(term)}([^A-Za-z0-9_]|$)`, "i");
 const mustNot = (route, html) => {
   if (html === null) return;
-  const lower = html.toLowerCase();
   for (const term of FORBIDDEN) {
-    if (lower.includes(term.toLowerCase())) {
+    if (forbiddenPattern(term).test(html)) {
       failures.push(`${route}: forbidden user-facing term present -> ${JSON.stringify(term)}`);
     }
   }

@@ -42,6 +42,22 @@ const allowedTask10Paths = new Set([
   "src/lib/types.ts",
 ]);
 
+const allowedFirstSlicePaths = [
+  ".coderabbit.yaml",
+  "bun.lock",
+  "package.json",
+  "wrangler.jsonc",
+  "docs/deploy/cloudflare-workers.md",
+  /^\.github\/workflows\//,
+  /^scripts\//,
+  /^tests\//,
+  /^src\/components\//,
+  /^src\/layouts\//,
+  /^src\/lib\/(auth|flow|mock|rules|state|types|validation)/,
+  /^src\/pages\/(admin|app|index\.astro)/,
+  /^src\/styles\//,
+];
+
 const issueReasonCodes = [
   "ticket_not_transferred",
   "wrong_ticket",
@@ -105,13 +121,17 @@ function walkFiles(dir, predicate = () => true) {
   return entries;
 }
 
+function gitOutput(args) {
+  return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+}
+
 function gitChangedFiles(args) {
-  try {
-    const output = execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
-    return output ? output.split(/\r?\n/).map((path) => path.replace(/\\/g, "/")) : [];
-  } catch {
-    return [];
-  }
+  const output = gitOutput(args);
+  return output ? output.split(/\r?\n/).map((path) => path.replace(/\\/g, "/")) : [];
+}
+
+function allowedFirstSlicePath(path) {
+  return allowedFirstSlicePaths.some((allowed) => (allowed instanceof RegExp ? allowed.test(path) : allowed === path));
 }
 
 function routeHrefToBuiltFile(href) {
@@ -302,15 +322,28 @@ export async function verifyNoScopeDrift() {
     }
   }
 
-  const stagedChanges = gitChangedFiles(["diff", "--cached", "--name-only", "--diff-filter=ACMRT"]);
-  const outOfScopeStaged = stagedChanges.filter((path) => !allowedTask10Paths.has(path));
-  for (const path of outOfScopeStaged) {
-    failures.push(`out-of-scope staged Task 10 change: ${path}`);
-  }
-  const unstagedTracked = gitChangedFiles(["diff", "--name-only", "--diff-filter=ACMRT"]);
-  const outOfScopeUnstaged = unstagedTracked.filter((path) => !allowedTask10Paths.has(path));
-  if (outOfScopeUnstaged.length > 0) {
-    notes.push(`unrelated unstaged tracked changes excluded from Task 10 commit: ${outOfScopeUnstaged.join(", ")}`);
+  try {
+    const baseRef = process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : "origin/master";
+    const mergeBase = gitOutput(["merge-base", baseRef, "HEAD"]);
+    const branchChanges = gitChangedFiles(["diff", "--name-only", "--diff-filter=ACMRT", mergeBase, "HEAD"]);
+    const outOfScopeBranchChanges = branchChanges.filter((path) => !allowedFirstSlicePath(path));
+    for (const path of outOfScopeBranchChanges) {
+      failures.push(`out-of-scope first-slice branch change: ${path}`);
+    }
+
+    const stagedChanges = gitChangedFiles(["diff", "--cached", "--name-only", "--diff-filter=ACMRT"]);
+    const outOfScopeStaged = stagedChanges.filter((path) => !allowedTask10Paths.has(path) && !allowedFirstSlicePath(path));
+    for (const path of outOfScopeStaged) {
+      failures.push(`out-of-scope staged first-slice change: ${path}`);
+    }
+
+    const unstagedTracked = gitChangedFiles(["diff", "--name-only", "--diff-filter=ACMRT"]);
+    const outOfScopeUnstaged = unstagedTracked.filter((path) => !allowedFirstSlicePath(path));
+    if (outOfScopeUnstaged.length > 0) {
+      notes.push(`unrelated unstaged tracked changes excluded from first-slice commit: ${outOfScopeUnstaged.join(", ")}`);
+    }
+  } catch (error) {
+    failures.push(`git scope drift check failed: ${error.message}`);
   }
 
   notes.push("package.json was not changed; e2e and UI smoke scripts are run explicitly for Task 10");

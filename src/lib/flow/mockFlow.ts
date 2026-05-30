@@ -49,6 +49,8 @@ export function connectMockListingFlow(): ListingFlowView {
       eventOrTripStartAt: listing.eventOrTripStartAt,
       venueOrRoute: listing.venueOrRoute,
       quantity: listing.quantity,
+      transferDeadlineAt: listing.transferDeadlineAt,
+      sellerPromiseAccepted: true,
     },
   });
 
@@ -77,7 +79,7 @@ export interface CheckoutFlowResult {
 
 // connectMockCheckoutFlow: validate checkout then mock_pay the order
 // (checkout_pending -> transfer_pending). Mock-local only.
-export function connectMockCheckoutFlow(order: MockOrder): CheckoutFlowResult {
+export function connectMockCheckoutFlow(order: MockOrder, now = new Date().toISOString()): CheckoutFlowResult {
   const { listing, sourceRule, sellerPaymentAccount } = createMockFixture();
 
   const validation = validateCheckout({
@@ -85,7 +87,7 @@ export function connectMockCheckoutFlow(order: MockOrder): CheckoutFlowResult {
     sourceRule,
     sellerPaymentAccount,
     totalShownToBuyer: listing.totalPayable,
-    now: order.createdAt,
+    now,
   });
 
   if (!validation.ok) {

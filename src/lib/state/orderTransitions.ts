@@ -66,6 +66,14 @@ export function sellerMarkTransferred(
   if (transferTask.state !== "transfer_pending") {
     throw new Error("INVALID_TRANSFER_STATE");
   }
+  if (transferTask.orderId !== order.id) {
+    throw new Error("INVALID_TRANSFER_TASK");
+  }
+
+  const submittedAt = input.submittedAt ?? "2026-12-20T17:00:00+05:30";
+  if (Date.parse(submittedAt) > Date.parse(transferTask.deadlineAt)) {
+    throw new Error("TRANSFER_DEADLINE_EXPIRED");
+  }
 
   const nextOrder: MockOrder = {
     ...order,
@@ -74,7 +82,7 @@ export function sellerMarkTransferred(
   const nextTransferTask: MockTransferTask = {
     ...transferTask,
     state: "transfer_submitted",
-    submittedAt: input.submittedAt ?? "2026-12-20T17:00:00+05:30",
+    submittedAt,
     evidenceSummary: input.evidenceSummary,
   };
 
@@ -226,6 +234,9 @@ export function buyerReportIssue(
 
   if (order.state !== "transfer_pending" && order.state !== "transfer_submitted" && order.state !== "dispute_window_open") {
     throw new Error("INVALID_ORDER_STATE");
+  }
+  if (issue.orderId !== order.id) {
+    throw new Error("INVALID_ISSUE_ORDER");
   }
 
   const nextOrder: MockOrder = {

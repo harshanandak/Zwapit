@@ -1,7 +1,6 @@
 // Browser-only interactive timeline panel (Task 9 integration).
 // Renders a compact stepper + "Advance (demo)" control that drives the shared
 // mock order through local state transitions. Mock-local only (no server).
-import { mockPay } from "../state/orderTransitions";
 import {
   buyerStageIndex,
   buyerStages,
@@ -21,12 +20,6 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
   if (!container) return;
 
   const state: DemoState = loadDemoState();
-  // My Tickets / Orders represent a paid order: advance checkout_pending to paid.
-  if (state.order.state === "checkout_pending") {
-    const paid = mockPay(state.order);
-    state.order = paid.order;
-    saveDemoState(state);
-  }
 
   const stages = role === "seller" ? sellerStages : buyerStages;
   const indexOf = role === "seller" ? sellerStageIndex : buyerStageIndex;
@@ -53,10 +46,22 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
       .join("");
 
     const next = nextActionLabel(state.order.state);
+    const canAdvance =
+      (role === "seller" && state.order.state === "transfer_pending") ||
+      (role === "buyer" &&
+        (state.order.state === "transfer_submitted" ||
+          state.order.state === "buyer_confirmed" ||
+          state.order.state === "dispute_window_open"));
     const action = next
-      ? `<button data-advance class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm">Advance (demo)</button>
-         <p class="mt-1 text-xs text-muted-foreground">Next: ${next}</p>`
-      : '<p class="text-sm font-semibold text-foreground">Completed ✓</p>';
+      ? canAdvance
+        ? `<button data-advance class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm">Advance (demo)</button>
+           <p class="mt-1 text-xs text-muted-foreground">Next: ${next}</p>`
+        : `<p class="text-sm font-medium text-muted-foreground">Next: ${next}</p>`
+      : state.order.state === "issue_reported"
+        ? '<p class="text-sm font-semibold text-amber-700">Issue reported. Protection is active.</p>'
+        : state.order.state === "completed"
+          ? '<p class="text-sm font-semibold text-foreground">Completed</p>'
+          : '<p class="text-sm font-medium text-muted-foreground">No timeline action available.</p>';
 
     container!.innerHTML = `
       <div class="rounded-xl border border-border bg-card p-4">

@@ -80,7 +80,8 @@ export function evaluateSourceRule(input: SourceRuleEvaluationInput): SourceRule
     faceValue: input.faceValue,
     listingPrice: input.listingPrice,
   };
-  const missingRequiredFields = rule.requiredFields.filter(
+  const requiredFields = [...new Set([...rule.requiredFields, ...rule.eligibilityFields])];
+  const missingRequiredFields = requiredFields.filter(
     (field) => (input.requiredFieldValues[field] ?? explicitRequiredValues[field]) == null,
   );
   const priceResult = applyPriceRule(rule, input.listingPrice, input.faceValue);

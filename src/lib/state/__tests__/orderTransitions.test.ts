@@ -55,6 +55,34 @@ describe("order state transitions", () => {
     );
   });
 
+  test("rejects mismatched or expired transfer submissions", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+
+    expect(() =>
+      sellerMarkTransferred(
+        paid.order,
+        {
+          ...fixture.transferTask,
+          orderId: "order_other_1",
+        },
+        {
+          actorId: fixture.order.sellerId,
+          evidenceSummary: "Wrong order transfer",
+          submittedAt: "2026-12-20T17:00:00+05:30",
+        },
+      ),
+    ).toThrow("INVALID_TRANSFER_TASK");
+
+    expect(() =>
+      sellerMarkTransferred(paid.order, fixture.transferTask, {
+        actorId: fixture.order.sellerId,
+        evidenceSummary: "Late transfer",
+        submittedAt: "2026-12-20T19:00:00+05:30",
+      }),
+    ).toThrow("TRANSFER_DEADLINE_EXPIRED");
+  });
+
   test("moves missed transfer deadlines to timeout", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
@@ -77,5 +105,25 @@ describe("order state transitions", () => {
     expect(issue.issue.state).toBe("reported");
     expect(issue.issue.evidenceItems).toEqual(["screenshot uploaded"]);
     expect(issue.auditEvent.action).toBe("buyer_report_issue");
+  });
+
+  test("rejects buyer issues for a different order", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+
+    expect(() =>
+      buyerReportIssue(
+        paid.order,
+        {
+          ...fixture.issue,
+          orderId: "order_other_1",
+        },
+        {
+          actorId: fixture.order.buyerId,
+          reasonCode: "ticket_not_transferred",
+          evidenceItems: ["wrong order issue"],
+        },
+      ),
+    ).toThrow("INVALID_ISSUE_ORDER");
   });
 });

@@ -87,6 +87,25 @@ describe("local source rule engine", () => {
     expect(applyPriceRule(getSourceRule("bookmyshow_event"), 2500, 2400).passed).toBe(false);
   });
 
+  test("requires eligibility fields before auto-approving", () => {
+    const result = evaluateSourceRule({
+      source: "bookmyshow",
+      category: "event_ticket",
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: {
+        title: "Arijit Singh Live - Silver Pass",
+        eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+        venueOrRoute: "Bengaluru Arena",
+        quantity: 1,
+      },
+    });
+
+    expect(result.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(result.internalStatus).toBe("AMBER");
+    expect(result.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
+  });
+
   test("rules include required metadata and policy fields", () => {
     const rule = getSourceRule("bookmyshow_event");
 

@@ -1,14 +1,16 @@
 ---
 // Report-issue UI (Task 4). Captures a reason code + evidence placeholder.
 // Preview only — submission is wired to local state in Task 9.
-const reasons = [
+import type { IssueReasonCode } from "../../lib/types";
+
+const reasons: readonly { code: IssueReasonCode; label: string }[] = [
   { code: "ticket_not_transferred", label: "Ticket wasn't transferred" },
   { code: "wrong_ticket", label: "Wrong ticket" },
   { code: "qr_or_code_already_used", label: "Code already used" },
   { code: "details_do_not_match", label: "Details don't match" },
   { code: "eligibility_problem", label: "Eligibility problem" },
   { code: "cannot_access_ticket", label: "Can't access the ticket" },
-];
+] as const;
 ---
 
 <details class="rounded-lg border border-border bg-card p-4">
