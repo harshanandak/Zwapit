@@ -18,11 +18,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy Worker production
+  validate:
+    name: Production gate
     runs-on: ubuntu-latest
-    environment:
-      name: cloudflare-production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,6 +50,27 @@ jobs:
 
       - name: Acceptance verification
         run: bun scripts/verify-first-visible-slice.mjs
+
+  deploy:
+    name: Deploy Worker production
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: cloudflare-production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Create GitHub deployment
         id: deployment
