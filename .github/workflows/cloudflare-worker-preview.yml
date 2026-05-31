@@ -266,7 +266,7 @@ jobs:
           wrangler_status="${PIPESTATUS[0]}"
           set -e
           if [ "$wrangler_status" -ne 0 ]; then
-            if grep -Eiq 'Authentication error|Invalid access token|Unauthorized|(^|[^0-9])401([^0-9]|$)' wrangler-preview.log; then
+            if grep -aEiq 'Authentication|authenticating Wrangler|Invalid access token|code: 10000|code: 9109|Unauthorized|(^|[^0-9])401([^0-9]|$)' wrangler-preview.log; then
               echo "Cloudflare preview upload skipped because Wrangler credentials were rejected."
               echo "skipped=true" >> "$GITHUB_OUTPUT"
               echo "url=$fallback_preview_url" >> "$GITHUB_OUTPUT"
