@@ -1,11 +1,88 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
+import PriceBreakdown from "../../../components/buyer/PriceBreakdown.astro";
+import {
+  formatDateTime,
+  protectionLabel,
+  transferModeLabel,
+} from "../../../components/buyer/format";
+import { createMockFixture } from "../../../lib/mock/fixtures";
 
 export function getStaticPaths() {
   return [{ params: { listingId: "listing_bms_event_1" } }];
 }
+
+const { listing, sourceRule } = createMockFixture();
 ---
 
 <AppShell routeId="/app/listings/:listingId" title="Listing Detail" activeTab="home">
-  <p class="text-sm text-slate-700">Listing detail placeholder.</p>
+  <div class="space-y-5">
+    <div>
+      <h2 class="text-xl font-semibold text-foreground">{listing.title}</h2>
+      <p class="mt-1 text-sm text-muted-foreground">{listing.venueOrRoute}</p>
+      <p class="mt-0.5 text-sm text-muted-foreground">{formatDateTime(listing.eventOrTripStartAt)}</p>
+    </div>
+
+    <div class="flex flex-wrap gap-2 text-xs">
+      <span class="rounded-full bg-primary/15 px-2.5 py-1 font-semibold text-primary">
+        {transferModeLabel(listing.transferMode)}
+      </span>
+      <span class="rounded-full bg-accent px-2.5 py-1 font-semibold text-accent-foreground">
+        {protectionLabel(sourceRule.protectionLevel)}
+      </span>
+    </div>
+
+    <section class="rounded-xl border border-border bg-card p-4">
+      <h3 class="text-sm font-semibold text-foreground">How this handoff works</h3>
+      <dl class="mt-3 space-y-3 text-sm">
+        <div>
+          <dt class="font-medium text-foreground">Transfer method</dt>
+          <dd class="text-muted-foreground">
+            {transferModeLabel(listing.transferMode)} — the seller transfers the original
+            ticket to you through the official platform.
+          </dd>
+        </div>
+        <div>
+          <dt class="font-medium text-foreground">Your protection</dt>
+          <dd class="text-muted-foreground">
+            {protectionLabel(sourceRule.protectionLevel)} — we hold your money until you confirm
+            the transfer. Full refund if it doesn't arrive in time.
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="rounded-xl border border-border bg-card p-4">
+      <h3 class="text-sm font-semibold text-foreground">Price</h3>
+      <div class="mt-3">
+        <PriceBreakdown
+          itemPrice={listing.listingPrice}
+          platformFee={listing.platformFee}
+          gstOnFee={listing.gstOnFee}
+          totalPayable={listing.totalPayable}
+        />
+      </div>
+    </section>
+
+    <section class="rounded-xl border border-border bg-card p-4 text-sm">
+      <h3 class="text-sm font-semibold text-foreground">Key dates</h3>
+      <div class="mt-3 space-y-2">
+        <p>
+          <span class="font-medium text-foreground">Transfer by</span>
+          <span class="text-muted-foreground">{formatDateTime(listing.transferDeadlineAt)}</span>
+        </p>
+        <p>
+          <span class="font-medium text-foreground">Protected until</span>
+          <span class="text-muted-foreground">{formatDateTime(listing.protectionDeadlineAt)}</span>
+        </p>
+      </div>
+    </section>
+
+    <a
+      href={`/app/checkout/${listing.id}`}
+      class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+    >
+      Buy with Protection
+    </a>
+  </div>
 </AppShell>

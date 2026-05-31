@@ -1,0 +1,62 @@
+---
+import type { MockListing } from "../../lib/types";
+import { formatDateTime, formatInr, transferModeLabel } from "./format";
+
+interface Props {
+  listing: MockListing;
+}
+
+const { listing } = Astro.props;
+const isWaitlist = listing.state === "waitlist_only";
+---
+
+<article class="rounded-xl border border-border bg-card p-4 shadow-sm">
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <h3 class="text-base font-semibold text-foreground">{listing.title}</h3>
+      <p class="mt-0.5 text-sm text-muted-foreground">{listing.venueOrRoute}</p>
+      <p class="mt-0.5 text-xs text-muted-foreground">{formatDateTime(listing.eventOrTripStartAt)}</p>
+    </div>
+    <span
+      class="shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary"
+    >
+      {transferModeLabel(listing.transferMode)}
+    </span>
+  </div>
+
+  <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+    {
+      isWaitlist ? (
+        <span class="rounded-full bg-secondary px-2.5 py-1 font-semibold text-secondary-foreground">
+          Waitlist Only
+        </span>
+      ) : (
+        <span class="rounded-full bg-accent px-2.5 py-1 font-semibold text-accent-foreground">
+          Protected payment
+        </span>
+      )
+    }
+    <span class="text-muted-foreground">Qty {listing.quantity}</span>
+  </div>
+
+  <div class="mt-4 flex items-center justify-between">
+    <div>
+      <p class="text-xs text-muted-foreground">Price</p>
+      <p class="text-lg font-semibold text-foreground">{formatInr(listing.listingPrice)}</p>
+    </div>
+    {
+      isWaitlist ? (
+        <span class="rounded-lg bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground">
+          Waitlist Only
+        </span>
+      ) : (
+        <a
+          href={`/app/listings/${listing.id}`}
+          class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
+        >
+          Buy with Protection
+        </a>
+      )
+    }
+  </div>
+</article>

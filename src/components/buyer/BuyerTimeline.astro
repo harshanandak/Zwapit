@@ -1,0 +1,94 @@
+---
+import type { OrderState } from "../../lib/types";
+import { formatDateTime } from "./format";
+
+interface Props {
+  currentState: OrderState;
+  transferDeadlineAt: string;
+  protectionDeadlineAt: string;
+}
+
+const { currentState, transferDeadlineAt, protectionDeadlineAt } = Astro.props;
+
+const stages = [
+  { label: "Payment confirmed", note: "Protected payment received and held safely." },
+  { label: "Transfer needed", note: "Waiting for the seller to transfer your ticket." },
+  { label: "Confirm receipt", note: "Seller marked it transferred — confirm you received it." },
+  { label: "Protection active", note: "You're protected while you check everything is right." },
+  { label: "Completed", note: "All done. Enjoy the event!" },
+] as const;
+
+function stageIndex(state: OrderState): number {
+  switch (state) {
+    case "checkout_pending":
+    case "payment_captured":
+      return 0;
+    case "transfer_pending":
+    case "fulfilment_in_progress":
+    case "transfer_timeout":
+      return 1;
+    case "transfer_submitted":
+    case "issue_reported":
+    case "buyer_rejected":
+    case "refund_processing":
+    case "refunded":
+      return 2;
+    case "buyer_confirmed":
+    case "dispute_window_open":
+    case "payout_eligible":
+    case "payout_waiting":
+      return 3;
+    case "completed":
+    case "payout_released":
+    case "payout_sent":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+const current = stageIndex(currentState);
+---
+
+<ol class="space-y-4">
+  {
+    stages.map((stage, index) => {
+      const done = index < current;
+      const isCurrent = index === current;
+      return (
+        <li class="flex gap-3">
+          <div class="flex flex-col items-center">
+            <span
+              class:list={[
+                "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
+                done && "bg-accent text-accent-foreground",
+                isCurrent && "bg-primary text-primary-foreground",
+                !done && !isCurrent && "border border-border bg-card text-muted-foreground",
+              ]}
+            >
+              {done ? "✓" : index + 1}
+            </span>
+            {index < stages.length - 1 && <span class="mt-1 w-px flex-1 bg-border" />}
+          </div>
+          <div class="pb-1">
+            <p
+              class:list={[
+                "text-sm font-semibold",
+                isCurrent ? "text-foreground" : "text-muted-foreground",
+              ]}
+            >
+              {stage.label}
+            </p>
+            {isCurrent && <p class="mt-0.5 text-xs text-muted-foreground">{stage.note}</p>}
+          </div>
+        </li>
+      );
+    })
+  }
+</ol>
+
+<div class="mt-4 space-y-1 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+  <p><span class="font-medium text-foreground">Transfer by</span> {formatDateTime(transferDeadlineAt)}</p>
+  <p><span class="font-medium text-foreground">Protected until</span> {formatDateTime(protectionDeadlineAt)}</p>
+  <p>If the seller misses the transfer deadline, you get a full refund.</p>
+</div>

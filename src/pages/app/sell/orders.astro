@@ -1,7 +1,110 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
+import { formatDateTime, formatInr } from "../../../components/seller/format";
+import { createMockFixture } from "../../../lib/mock/fixtures";
+
+const { listing, sellerPaymentAccount } = createMockFixture();
+
+const payout = listing.listingPrice;
+const payoutReady = sellerPaymentAccount.status === "mock_ready";
 ---
 
 <AppShell routeId="/app/sell/orders" title="Orders" activeTab="sell">
-  <p class="text-sm text-slate-700">Seller-side received purchases placeholder.</p>
+  <div class="space-y-4">
+    <div
+      class="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-sm"
+    >
+      <span>
+        <span class="font-semibold text-foreground">Payout setup</span>
+        <span class="block text-xs text-muted-foreground">Where your payouts go</span>
+      </span>
+      <span
+        class:list={[
+          "rounded-full px-2.5 py-1 text-xs font-semibold",
+          payoutReady
+            ? "bg-accent text-accent-foreground"
+            : "bg-secondary text-secondary-foreground",
+        ]}
+      >
+        {payoutReady ? "Ready (mock)" : "Needs setup"}
+      </span>
+    </div>
+
+    <div id="seller-empty-state" class="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+      <p class="text-sm font-medium text-foreground">No orders yet</p>
+      <p class="mt-1 text-xs text-muted-foreground">
+        When someone buys your ticket, the transfer task shows up here.
+      </p>
+    </div>
+
+    <article id="seller-order-card" class="rounded-xl border border-border bg-card p-4" hidden>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-foreground">{listing.title}</h2>
+          <p class="mt-0.5 text-sm text-muted-foreground">{listing.venueOrRoute}</p>
+        </div>
+        <span
+          id="seller-status-label"
+          class="shrink-0 rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground"
+        >
+          Order received
+        </span>
+      </div>
+
+      <div class="mt-3 flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
+        <span class="text-muted-foreground">Your payout</span>
+        <span class="font-semibold text-foreground">{formatInr(payout)}</span>
+      </div>
+      <p class="mt-3 text-xs text-muted-foreground">
+        <span class="font-medium text-foreground">Transfer by</span>
+        {formatDateTime(listing.transferDeadlineAt)}
+      </p>
+
+      <div id="seller-live" class="mt-4"></div>
+    </article>
+
+    <template id="seller-stage-labels">
+      Transfer needed
+      Waiting for buyer
+      Payout waiting
+      Completed
+    </template>
+  </div>
 </AppShell>
+
+<script>
+  import type { MockOrder, MockTransferTask } from "../../../lib/types";
+  import { sellerStatusLabel } from "../../../components/seller/format";
+  import { loadDemoState } from "../../../lib/flow/mockFlow";
+  import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
+
+  const emptyState = document.getElementById("seller-empty-state");
+  const orderCard = document.getElementById("seller-order-card");
+  const statusLabel = document.getElementById("seller-status-label");
+  const state = loadDemoState();
+  const order = state.order as MockOrder | null | undefined;
+  const transferTask = state.transferTask as MockTransferTask | null | undefined;
+  const hasValidOrder =
+    order !== null &&
+    typeof order === "object" &&
+    typeof order.id === "string" &&
+    typeof order.state === "string" &&
+    typeof order.mockPaymentStatus === "string";
+  const hasValidTransfer =
+    transferTask !== null &&
+    typeof transferTask === "object" &&
+    typeof transferTask.orderId === "string" &&
+    transferTask.orderId === order?.id;
+  const hasCompletedCheckout =
+    hasValidOrder && hasValidTransfer && order.mockPaymentStatus === "mock_paid" && order.state !== "checkout_pending";
+
+  if (hasCompletedCheckout) {
+    if (emptyState) emptyState.hidden = true;
+    if (orderCard) orderCard.hidden = false;
+    if (statusLabel) statusLabel.textContent = sellerStatusLabel(order.state);
+    mountTimelinePanel("seller-live", "seller");
+  } else {
+    if (emptyState) emptyState.hidden = false;
+    if (orderCard) orderCard.hidden = true;
+  }
+</script>

@@ -1,11 +1,131 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
+import BuyerTimeline from "../../../components/buyer/BuyerTimeline.astro";
+import PriceBreakdown from "../../../components/buyer/PriceBreakdown.astro";
+import ReportIssue from "../../../components/buyer/ReportIssue.astro";
+import { buyerStatusLabel } from "../../../components/buyer/format";
+import { createMockFixture } from "../../../lib/mock/fixtures";
+import type { OrderState } from "../../../lib/types";
 
 export function getStaticPaths() {
   return [{ params: { orderId: "order_demo_1" } }];
 }
+
+const { listing, order } = createMockFixture();
+const summary = order.mockPaymentSummary;
+
+// Representative state for the UI slice; Task 9 binds it to the live order state.
+const displayState: OrderState = "transfer_pending";
 ---
 
 <AppShell routeId="/app/orders/:orderId" title="Transfer Timeline" activeTab="tickets">
-  <p class="text-sm text-slate-700">Order timeline placeholder.</p>
+  <div class="space-y-5">
+    <section id="order-checkout-required" class="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+      <p class="text-sm font-medium text-foreground">Complete checkout first</p>
+      <p class="mt-1 text-xs text-muted-foreground">
+        Your protected timeline appears here after payment is confirmed.
+      </p>
+      <a
+        href={`/app/checkout/${listing.id}`}
+        class="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
+      >
+        Continue checkout
+      </a>
+    </section>
+
+    <div id="paid-order-content" class="hidden space-y-5">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-foreground">{listing.title}</h2>
+          <p class="mt-0.5 text-sm text-muted-foreground">{listing.venueOrRoute}</p>
+        </div>
+        <span
+          id="order-status-pill"
+          class="shrink-0 rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground"
+        >
+          {buyerStatusLabel(displayState)}
+        </span>
+      </div>
+
+      <section class="rounded-xl border border-border bg-card p-4">
+        <h3 class="text-sm font-semibold text-foreground">Your timeline</h3>
+        <div id="buyer-live-order" class="mt-3"></div>
+        <div class="mt-3">
+          <BuyerTimeline
+            currentState={displayState}
+            transferDeadlineAt={listing.transferDeadlineAt}
+            protectionDeadlineAt={listing.protectionDeadlineAt}
+          />
+        </div>
+      </section>
+
+      <section class="rounded-xl border border-border bg-card p-4">
+        <h3 class="text-sm font-semibold text-foreground">What you paid</h3>
+        <div class="mt-3">
+          <PriceBreakdown
+            itemPrice={summary.itemPrice}
+            platformFee={summary.platformFee}
+            gstOnFee={summary.gstOnPlatformFee}
+            totalPayable={summary.totalPayable}
+          />
+        </div>
+      </section>
+
+      <section>
+        <h3 class="mb-2 text-sm font-semibold text-foreground">Something wrong?</h3>
+        <ReportIssue />
+        <p id="issue-status" class="mt-2 text-xs font-medium text-foreground"></p>
+      </section>
+    </div>
+  </div>
 </AppShell>
+
+<script>
+  import { createMockFixture } from "../../../lib/mock/fixtures";
+  import { buyerStatusLabel } from "../../../components/buyer/format";
+  import { loadDemoState, reportBuyerIssue, saveDemoState } from "../../../lib/flow/mockFlow";
+  import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
+
+  const state = loadDemoState();
+  const hasCompletedCheckout =
+    state.order?.id === "order_demo_1" &&
+    state.order?.mockPaymentStatus === "mock_paid" &&
+    state.order?.mockPaymentSummary?.status === "mock_paid" &&
+    state.order?.state !== "checkout_pending" &&
+    state.transferTask?.orderId === state.order.id;
+
+  if (hasCompletedCheckout) {
+    document.getElementById("order-checkout-required")?.classList.add("hidden");
+    document.getElementById("paid-order-content")?.classList.remove("hidden");
+    const statusPill = document.getElementById("order-status-pill");
+    if (statusPill) statusPill.textContent = buyerStatusLabel(state.order.state);
+    mountTimelinePanel("buyer-live-order", "buyer");
+
+    // Wire the existing Report-issue form to the local issue helper after the
+    // paid order gate passes.
+    const form = document.querySelector("form");
+    const submitButton = form?.querySelector<HTMLButtonElement>('button[type="button"]');
+    submitButton?.addEventListener("click", () => {
+      const status = document.getElementById("issue-status");
+      const reason = form?.querySelector<HTMLInputElement>('input[name="reason"]:checked');
+      const detailsField = form?.querySelector<HTMLTextAreaElement>('textarea[name="details"]');
+      if (!reason) {
+        if (status) status.textContent = "Please pick a reason first.";
+        return;
+      }
+      const evidenceText = (detailsField?.value || "").trim() || "Reported from the order timeline (demo)";
+      const currentState = loadDemoState();
+      const { issue } = createMockFixture();
+      try {
+        const reported = reportBuyerIssue(currentState.order, issue, reason.value as typeof issue.reasonCode, evidenceText);
+        saveDemoState({ order: reported.order, transferTask: currentState.transferTask });
+        if (status) {
+          status.textContent = `Issue reported (${reason.value}). You're protected while we look into it.`;
+        }
+        mountTimelinePanel("buyer-live-order", "buyer");
+      } catch (error) {
+        if (status) status.textContent = `Can't report right now: ${(error as Error).message}`;
+      }
+    });
+  }
+</script>

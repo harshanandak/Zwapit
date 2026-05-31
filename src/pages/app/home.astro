@@ -1,7 +1,46 @@
 ---
 import AppShell from "../../components/AppShell.astro";
+import ListingCard from "../../components/buyer/ListingCard.astro";
+import { createMockFixture } from "../../lib/mock/fixtures";
+
+const { listing } = createMockFixture();
+
+// First slice ships one fixture listing. Blocked / draft / under-review listings
+// are hidden from the marketplace; live and waitlist-only listings are shown.
+const catalogue = [listing];
+const visible = catalogue.filter(
+  (item) => item.state === "live" || item.state === "waitlist_only",
+);
 ---
 
 <AppShell routeId="/app/home" title="Home" activeTab="home">
-  <p class="text-sm text-slate-700">Home placeholder.</p>
+  <div class="space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-foreground">Tickets you can buy safely</h2>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Every listing uses protected payment — your money is held until the transfer is done.
+      </p>
+    </div>
+
+    {
+      visible.length === 0 ? (
+        <div class="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+          <p class="text-sm font-medium text-foreground">No tickets available yet</p>
+          <p class="mt-1 text-xs text-muted-foreground">Check back soon, or list one of your own.</p>
+          <a
+            href="/app/sell"
+            class="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
+          >
+            Upload to Sell
+          </a>
+        </div>
+      ) : (
+        <div class="space-y-3">
+          {visible.map((item) => (
+            <ListingCard listing={item} />
+          ))}
+        </div>
+      )
+    }
+  </div>
 </AppShell>

@@ -1,0 +1,54 @@
+---
+// Report-issue UI (Task 4). Captures a reason code + evidence placeholder.
+// Preview only — submission is wired to local state in Task 9.
+import type { IssueReasonCode } from "../../lib/types";
+
+const reasons: readonly { code: IssueReasonCode; label: string }[] = [
+  { code: "ticket_not_transferred", label: "Ticket wasn't transferred" },
+  { code: "wrong_ticket", label: "Wrong ticket" },
+  { code: "qr_or_code_already_used", label: "Code already used" },
+  { code: "details_do_not_match", label: "Details don't match" },
+  { code: "eligibility_problem", label: "Eligibility problem" },
+  { code: "cannot_access_ticket", label: "Can't access the ticket" },
+] as const;
+---
+
+<details class="rounded-lg border border-border bg-card p-4">
+  <summary class="cursor-pointer text-sm font-semibold text-foreground">Report issue</summary>
+  <p class="mt-2 text-xs text-muted-foreground">
+    Pick a reason and add a short note. You're protected while we look into it.
+  </p>
+  <form class="mt-3 space-y-3">
+    <fieldset class="space-y-2">
+      <legend class="text-xs font-medium text-foreground">What went wrong?</legend>
+      {
+        reasons.map((reason) => (
+          <label class="flex items-center gap-2 text-sm text-foreground">
+            <input type="radio" name="reason" value={reason.code} class="accent-primary" />
+            <span>{reason.label}</span>
+          </label>
+        ))
+      }
+    </fieldset>
+    <label class="block text-xs font-medium text-foreground">
+      Describe what happened
+      <textarea
+        name="details"
+        rows="3"
+        placeholder="Add any detail that helps us check quickly"
+        class="mt-1 w-full rounded-lg border border-border bg-transparent p-2 text-sm text-foreground placeholder:text-muted-foreground"
+      ></textarea>
+    </label>
+    <label class="block text-xs font-medium text-foreground">
+      Add a screenshot (optional)
+      <input type="file" name="evidence" class="mt-1 block w-full text-xs text-muted-foreground" />
+    </label>
+    <button
+      type="button"
+      class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
+    >
+      Submit report
+    </button>
+    <p class="text-xs text-muted-foreground">Preview only in this slice — submitting is connected later.</p>
+  </form>
+</details>
