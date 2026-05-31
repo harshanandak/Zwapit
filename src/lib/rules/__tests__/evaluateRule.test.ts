@@ -127,6 +127,27 @@ describe("local source rule engine", () => {
     expect(result.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
   });
 
+  test("should treat invalid required numeric fields as missing", () => {
+    const result = evaluateSourceRule({
+      source: "bookmyshow",
+      category: "event_ticket",
+      listingPrice: Number.NaN,
+      faceValue: 0,
+      requiredFieldValues: {
+        title: "Arijit Singh Live - Silver Pass",
+        eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+        venueOrRoute: "Bengaluru Arena",
+        quantity: 0,
+        transferDeadlineAt: "2026-12-20T18:00:00+05:30",
+        sellerPromiseAccepted: true,
+      },
+    });
+
+    expect(result.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(result.missingRequiredFields).toEqual(expect.arrayContaining(["faceValue", "listingPrice", "quantity"]));
+    expect(result.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
+  });
+
   test("rules include required metadata and policy fields", () => {
     const rule = getSourceRule("bookmyshow_event");
 
