@@ -272,7 +272,7 @@ jobs:
               *Authentication*|*authenticating\ Wrangler*|*Invalid\ access\ token*|*code:\ 10000*|*code:\ 9109*|*Unauthorized*|*401*)
                 echo "Cloudflare preview upload skipped because Wrangler credentials were rejected."
                 echo "skipped=true" >> "$GITHUB_OUTPUT"
-                echo "url=$fallback_preview_url" >> "$GITHUB_OUTPUT"
+                echo "url=" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
             esac
@@ -313,14 +313,17 @@ jobs:
           PREVIEW_URL: '${{ steps.preview.outputs.url }}'
         with:
           script: |
-            await github.rest.repos.createDeploymentStatus({
+            const payload = {
               owner: context.repo.owner,
               repo: context.repo.repo,
               deployment_id: Number(process.env.DEPLOYMENT_ID),
               state: "inactive",
-              environment_url: process.env.PREVIEW_URL,
               description: "Cloudflare Worker preview skipped because credentials were rejected"
-            });
+            };
+            if (process.env.PREVIEW_URL) {
+              payload.environment_url = process.env.PREVIEW_URL;
+            }
+            await github.rest.repos.createDeploymentStatus(payload);
 
       - name: Mark deployment failure
         if: failure() && steps.deployment.outputs.id
