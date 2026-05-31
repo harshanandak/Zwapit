@@ -252,11 +252,23 @@ jobs:
         run: |
           set -euo pipefail
           alias_name="pr-${{ github.event.pull_request.number }}"
+          set +e
           bunx wrangler versions upload \
             --preview-alias "$alias_name" \
             --tag "$alias_name" \
             --message "PR #${{ github.event.pull_request.number }} preview for ${{ github.sha }}" \
             2>&1 | tee wrangler-preview.log
+          wrangler_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$wrangler_status" -ne 0 ]; then
+            if grep -Eq 'Authentication error|Invalid access token' wrangler-preview.log; then
+              echo "Cloudflare preview upload skipped because Wrangler credentials were rejected."
+              echo "skipped=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            exit "$wrangler_status"
+          fi
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
           preview_url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev[^[:space:]]*' wrangler-preview.log | head -n 1 || true)"
           if [ -z "$preview_url" ]; then
             preview_url="$(grep -Eo '[[:alnum:]-]+-zwapit\.[^[:space:]]+\.workers\.dev' wrangler-preview.log | head -n 1 | sed 's#^#https://#' || true)"
@@ -267,6 +279,7 @@ jobs:
           echo "url=$preview_url" >> "$GITHUB_OUTPUT"
 
       - name: Mark deployment success
+        if: steps.preview.outputs.skipped != 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
           DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
@@ -280,6 +293,21 @@ jobs:
               state: "success",
               environment_url: process.env.PREVIEW_URL,
               description: "Cloudflare Worker preview is ready"
+            });
+
+      - name: Mark deployment skipped
+        if: steps.preview.outputs.skipped == 'true'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.DEPLOYMENT_ID),
+              state: "inactive",
+              description: "Cloudflare Worker preview skipped because credentials were rejected"
             });
 
       - name: Mark deployment failure
