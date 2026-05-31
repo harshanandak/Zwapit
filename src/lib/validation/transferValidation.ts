@@ -6,6 +6,7 @@ export type TransferSubmissionBlocker =
   | "TRANSFER_TASK_NOT_PENDING"
   | "TRANSFER_DEADLINE_EXPIRED"
   | "INVALID_ACTOR"
+  | "INVALID_TRANSFER_TASK"
   | "MISSING_TRANSFER_EVIDENCE";
 
 export interface TransferSubmissionValidationInput {
@@ -25,6 +26,7 @@ export function validateTransferSubmission(
 
   if (input.order.state !== "transfer_pending") blockers.push("ORDER_NOT_TRANSFER_PENDING");
   if (input.transferTask.state !== "transfer_pending") blockers.push("TRANSFER_TASK_NOT_PENDING");
+  if (input.transferTask.orderId !== input.order.id) blockers.push("INVALID_TRANSFER_TASK");
   if (Number.isNaN(nowMs) || Number.isNaN(deadlineMs) || nowMs > deadlineMs) {
     blockers.push("TRANSFER_DEADLINE_EXPIRED");
   }

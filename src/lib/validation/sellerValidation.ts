@@ -10,7 +10,8 @@ export type SellerListingBlocker =
   | "INVALID_LISTING_PRICE"
   | "MISSING_TRANSFER_DEADLINE"
   | "MISSING_PROTECTION_DEADLINE"
-  | "MISSING_SOURCE_RULE";
+  | "MISSING_SOURCE_RULE"
+  | "RULE_BLOCKED";
 
 export function validateSellerListing(
   listing: MockListing,
@@ -28,6 +29,9 @@ export function validateSellerListing(
   if (!listing.protectionDeadlineAt) blockers.push("MISSING_PROTECTION_DEADLINE");
   if (listing.sourceRuleId !== sourceRule.id || listing.sourceRuleVersion !== sourceRule.version) {
     blockers.push("MISSING_SOURCE_RULE");
+  }
+  if (listing.ruleDecision === "AUTO_BLOCK" || sourceRule.decision === "AUTO_BLOCK") {
+    blockers.push("RULE_BLOCKED");
   }
 
   return validationResult(blockers);

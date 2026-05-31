@@ -40,6 +40,24 @@ describe("transfer submission validation blockers", () => {
     expect(result.blockers).toContain("MISSING_TRANSFER_EVIDENCE");
   });
 
+  it("should block transfer submission when the transfer task belongs to another order", () => {
+    const fixture = createMockFixture();
+    const paid = mockPay(fixture.order);
+    const result = validateTransferSubmission({
+      order: paid.order,
+      transferTask: {
+        ...fixture.transferTask,
+        orderId: "order_other_1",
+      },
+      actorId: fixture.order.sellerId,
+      evidenceSummary: "Official transfer submitted",
+      now: "2026-12-20T17:00:00+05:30",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("INVALID_TRANSFER_TASK");
+  });
+
   it("should block transfer submission when the transfer deadline has passed", () => {
     const fixture = createMockFixture();
     const paid = mockPay(fixture.order);
