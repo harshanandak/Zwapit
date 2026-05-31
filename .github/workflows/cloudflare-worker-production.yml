@@ -98,11 +98,11 @@ jobs:
 
       - name: Deploy Worker
         id: deploy
+        shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          set -euo pipefail
-          set +e
+          set -uo pipefail
           bunx wrangler deploy \
             --tag "sha-${GITHUB_SHA::7}" \
             --message "Production deploy for ${GITHUB_SHA}" \
@@ -110,7 +110,7 @@ jobs:
           wrangler_status="${PIPESTATUS[0]}"
           set -e
           if [ "$wrangler_status" -ne 0 ]; then
-            if grep -Eq 'Authentication error|Invalid access token' wrangler-deploy.log; then
+            if grep -Eiq 'Authentication error|Invalid access token|Unauthorized|(^|[^0-9])401([^0-9]|$)' wrangler-deploy.log; then
               echo "Cloudflare production deploy skipped because Wrangler credentials were rejected."
               echo "skipped=true" >> "$GITHUB_OUTPUT"
               exit 0
