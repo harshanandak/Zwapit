@@ -9,6 +9,7 @@ permissions:
   deployments: write
   issues: write
   pull-requests: write
+  statuses: write
 
 env:
   CLOUDFLARE_WORKER_NAME: zwapit
@@ -324,6 +325,33 @@ jobs:
               deployment_id: Number(process.env.DEPLOYMENT_ID),
               state: "failure",
               description: "Cloudflare Worker preview upload failed"
+            });
+
+      - name: Publish preview status link
+        if: always() && steps.deployment.outputs.id
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          PREVIEW_URL: '${{ steps.preview.outputs.url }}'
+          PREVIEW_SKIPPED: '${{ steps.preview.outputs.skipped }}'
+          PREVIEW_OUTCOME: '${{ steps.preview.outcome }}'
+        with:
+          script: |
+            const skipped = process.env.PREVIEW_SKIPPED === "true";
+            const failed = process.env.PREVIEW_OUTCOME === "failure";
+            const previewUrl = process.env.PREVIEW_URL || "";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: failed ? "failure" : "success",
+              target_url: previewUrl || runUrl,
+              description: skipped
+                ? "Skipped - Cloudflare credentials rejected"
+                : failed
+                  ? "Cloudflare preview upload failed"
+                  : "Deployment has completed",
+              context: "Cloudflare Preview - zwapit"
             });
 
       - name: Comment preview status
