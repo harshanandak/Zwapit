@@ -34,6 +34,16 @@ jobs:
           BASE_REPO: ${{ github.repository }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
         run: |
+          if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "is_draft=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_draft=false" >> "$GITHUB_OUTPUT"
+          fi
           if [ "$HEAD_REPO" = "$BASE_REPO" ] && [ "$IS_DRAFT" != "true" ]; then
             echo "deployable=true" >> "$GITHUB_OUTPUT"
           else
@@ -41,7 +51,7 @@ jobs:
           fi
 
       - name: Publish skipped preview status
-        if: steps.mode.outputs.deployable != 'true'
+        if: steps.mode.outputs.deployable != 'true' && steps.mode.outputs.is_fork != 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
