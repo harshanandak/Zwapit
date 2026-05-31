@@ -41,8 +41,10 @@ jobs:
           fi
           if [ "$IS_DRAFT" = "true" ]; then
             echo "is_draft=true" >> "$GITHUB_OUTPUT"
+            echo "can_validate=false" >> "$GITHUB_OUTPUT"
           else
             echo "is_draft=false" >> "$GITHUB_OUTPUT"
+            echo "can_validate=true" >> "$GITHUB_OUTPUT"
           fi
           if [ "$HEAD_REPO" = "$BASE_REPO" ] && [ "$IS_DRAFT" != "true" ]; then
             echo "deployable=true" >> "$GITHUB_OUTPUT"
@@ -106,7 +108,7 @@ jobs:
             }
 
       - name: Checkout
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
@@ -192,41 +194,41 @@ jobs:
             core.setOutput("deployment_id", String(deployment.data.id));
 
       - name: Setup Bun
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: latest
 
       - name: Install dependencies
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun install --frozen-lockfile
 
       - name: Type check
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun run check
 
       - name: Build
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun run build
 
       - name: Route coverage
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun run check:routes
 
       - name: Unit and acceptance tests
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun test
 
       - name: Audit dependencies
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun audit
 
       - name: Acceptance verification
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: bun scripts/verify-first-visible-slice.mjs
 
       - name: Buyer and seller smoke checks
-        if: steps.mode.outputs.deployable == 'true'
+        if: steps.mode.outputs.can_validate == 'true'
         run: |
           bun scripts/e2e-buyer.mjs
           bun scripts/e2e-seller.mjs
