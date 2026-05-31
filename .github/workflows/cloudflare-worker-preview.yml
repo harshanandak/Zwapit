@@ -196,7 +196,7 @@ jobs:
       deployments: write
       issues: write
       pull-requests: write
-      checks: write
+      statuses: write
     environment:
       name: cloudflare-preview-pr-${{ github.event.pull_request.number }}
     steps:
@@ -337,7 +337,7 @@ jobs:
               description: "Cloudflare Worker preview upload failed"
             });
 
-      - name: Publish preview check link
+      - name: Publish preview status link
         if: always() && steps.deployment.outputs.id
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
@@ -350,26 +350,18 @@ jobs:
             const failed = process.env.PREVIEW_OUTCOME === "failure";
             const previewUrl = process.env.PREVIEW_URL || "";
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const conclusion = skipped ? "skipped" : failed ? "failure" : "success";
-            const title = skipped
-              ? "Cloudflare preview skipped"
-              : failed
-                ? "Cloudflare preview failed"
-                : "Cloudflare preview ready";
-            const summary = skipped
-              ? "Wrangler rejected the configured Cloudflare credentials. The details link opens the expected preview deployment URL."
-              : failed
-                ? "Cloudflare preview upload failed. Open the details link for the workflow run."
-                : "Deployment has completed.";
-            await github.rest.checks.create({
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              name: "Cloudflare Preview - zwapit",
-              head_sha: context.payload.pull_request.head.sha,
-              status: "completed",
-              conclusion,
-              details_url: previewUrl || runUrl,
-              output: { title, summary }
+              sha: context.payload.pull_request.head.sha,
+              state: failed ? "failure" : "success",
+              target_url: previewUrl || runUrl,
+              description: skipped
+                ? "Skipped - Cloudflare credentials rejected"
+                : failed
+                  ? "Cloudflare preview upload failed"
+                  : "Deployment has completed",
+              context: "Cloudflare Preview - zwapit"
             });
 
       - name: Comment preview status
@@ -445,28 +437,24 @@ jobs:
     permissions:
       contents: read
       issues: write
-      checks: write
+      statuses: write
     steps:
       - name: Explain skip
         run: echo "Cloudflare preview upload skipped for draft or forked pull request."
 
-      - name: Publish skipped preview check
+      - name: Publish skipped preview status
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
-            await github.rest.checks.create({
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              name: "Cloudflare Preview - zwapit",
-              head_sha: context.payload.pull_request.head.sha,
-              status: "completed",
-              conclusion: "skipped",
-              details_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              output: {
-                title: "Cloudflare preview skipped",
-                summary: "Cloudflare preview upload is skipped for draft pull requests."
-              }
+              sha: context.payload.pull_request.head.sha,
+              state: "success",
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: "Skipped - draft pull request",
+              context: "Cloudflare Preview - zwapit"
             });
 
       - name: Comment skipped preview status
