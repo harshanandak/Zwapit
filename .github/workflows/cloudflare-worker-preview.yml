@@ -2,12 +2,10 @@ name: Cloudflare Worker Preview
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 permissions:
   contents: read
-  deployments: write
-  pull-requests: write
 
 env:
   CLOUDFLARE_WORKER_NAME: zwapit
@@ -18,206 +16,112 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  type-check:
-    name: Preview gate / Type check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Type check
-        run: bun run check
-
-  build:
-    name: Preview gate / Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-  route-coverage:
-    name: Preview gate / Route coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Route coverage
-        run: bun run check:routes
-
-  tests:
-    name: Preview gate / Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Unit and acceptance tests
-        run: bun test
-
-  acceptance:
-    name: Preview gate / Acceptance verification
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Acceptance verification
-        run: bun scripts/verify-first-visible-slice.mjs
-
-  smoke:
-    name: Preview gate / Smoke tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Buyer and seller smoke checks
-        run: |
-          bun scripts/e2e-buyer.mjs
-          bun scripts/e2e-seller.mjs
-          bun scripts/ui-smoke-buyer.mjs
-          bun scripts/ui-smoke-seller.mjs
-
-  audit:
-    name: Preview gate / Dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Audit dependencies
-        run: bun audit
-
   preview:
-    name: Upload Worker preview
+    name: Cloudflare Preview
     runs-on: ubuntu-latest
-    needs:
-      - type-check
-      - build
-      - route-coverage
-      - tests
-      - acceptance
-      - smoke
-      - audit
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}
-    environment:
-      name: cloudflare-preview-pr-${{ github.event.pull_request.number }}
+    permissions:
+      contents: read
+      deployments: write
+      issues: write
+      pull-requests: write
+      statuses: write
     steps:
+      - name: Detect preview mode
+        id: mode
+        shell: bash
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "is_draft=true" >> "$GITHUB_OUTPUT"
+            echo "can_validate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_draft=false" >> "$GITHUB_OUTPUT"
+            echo "can_validate=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$HEAD_REPO" = "$BASE_REPO" ] && [ "$IS_DRAFT" != "true" ]; then
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish skipped preview status
+        if: steps.mode.outputs.deployable != 'true' && steps.mode.outputs.is_fork != 'true'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            const marker = "<!-- cloudflare-preview-status -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: "success",
+              target_url: runUrl,
+              description: "Skipped - draft or forked pull request",
+              context: "Cloudflare Preview - zwapit"
+            });
+
+            const updatedAt = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+            const body = [
+              marker,
+              "The latest updates on your Cloudflare Workers preview.",
+              "",
+              "| Project | Deployment | Actions | Updated (UTC) |",
+              "| --- | --- | --- | --- |",
+              `| zwapit | Skipped | [Workflow run](${runUrl}) | ${updatedAt} |`,
+              "",
+              "Cloudflare preview upload is skipped for draft or forked pull requests."
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
       - name: Checkout
+        if: steps.mode.outputs.can_validate == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Create GitHub deployment
+      - name: Publish queued preview status
+        if: steps.mode.outputs.deployable == 'true'
         id: deployment
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
+            const marker = "<!-- cloudflare-preview-status -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -229,114 +133,407 @@ jobs:
               production_environment: false,
               description: "Cloudflare Worker PR preview"
             });
-            core.setOutput("id", deployment.data.id);
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: "queued",
+              log_url: runUrl,
+              description: "Cloudflare Worker preview queued"
+            });
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: "pending",
+              target_url: runUrl,
+              description: "Queued - waiting for preview validation",
+              context: "Cloudflare Preview - zwapit"
+            });
+
+            const updatedAt = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+            const body = [
+              marker,
+              "The latest updates on your Cloudflare Workers preview.",
+              "",
+              "| Project | Deployment | Actions | Updated (UTC) |",
+              "| --- | --- | --- | --- |",
+              `| zwapit | Queued | [Workflow run](${runUrl}) | ${updatedAt} |`,
+              "",
+              "Cloudflare preview is queued and waiting for validation."
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+            core.setOutput("deployment_id", String(deployment.data.id));
+
+      - name: Setup Bun
+        if: steps.mode.outputs.can_validate == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun run check
+
+      - name: Build
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun run build
+
+      - name: Route coverage
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun run check:routes
+
+      - name: Unit and acceptance tests
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun test
+
+      - name: Audit dependencies
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun audit
+
+      - name: Acceptance verification
+        if: steps.mode.outputs.can_validate == 'true'
+        run: bun scripts/verify-first-visible-slice.mjs
+
+      - name: Buyer and seller smoke checks
+        if: steps.mode.outputs.can_validate == 'true'
+        run: |
+          bun scripts/e2e-buyer.mjs
+          bun scripts/e2e-seller.mjs
+          bun scripts/ui-smoke-buyer.mjs
+          bun scripts/ui-smoke-seller.mjs
 
       - name: Mark deployment in progress
+        if: steps.mode.outputs.deployable == 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
-          DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.deployment_id }}
         with:
           script: |
+            const marker = "<!-- cloudflare-preview-status -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               deployment_id: Number(process.env.DEPLOYMENT_ID),
               state: "in_progress",
+              log_url: runUrl,
               description: "Uploading Cloudflare Worker preview"
             });
 
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: "pending",
+              target_url: runUrl,
+              description: "Building - uploading Cloudflare preview",
+              context: "Cloudflare Preview - zwapit"
+            });
+
+            const updatedAt = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+            const body = [
+              marker,
+              "The latest updates on your Cloudflare Workers preview.",
+              "",
+              "| Project | Deployment | Actions | Updated (UTC) |",
+              "| --- | --- | --- | --- |",
+              `| zwapit | Building | [Workflow run](${runUrl}) | ${updatedAt} |`,
+              "",
+              "Cloudflare preview is building and uploading."
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            }
+
       - name: Upload Worker preview version
+        if: steps.mode.outputs.deployable == 'true'
         id: preview
+        shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           alias_name="pr-${{ github.event.pull_request.number }}"
+          fallback_preview_url="https://${alias_name}-${CLOUDFLARE_WORKER_NAME}.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev"
           set +e
-          bunx wrangler versions upload \
+          wrangler_output="$(bunx wrangler versions upload \
             --preview-alias "$alias_name" \
             --tag "$alias_name" \
             --message "PR #${{ github.event.pull_request.number }} preview for ${{ github.sha }}" \
-            2>&1 | tee wrangler-preview.log
-          wrangler_status="${PIPESTATUS[0]}"
+            2>&1)"
+          wrangler_status="$?"
           set -e
+          printf '%s\n' "$wrangler_output" | tee wrangler-preview.log
           if [ "$wrangler_status" -ne 0 ]; then
-            if grep -Eq 'Authentication error|Invalid access token' wrangler-preview.log; then
-              echo "Cloudflare preview upload skipped because Wrangler credentials were rejected."
-              echo "skipped=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+            case "$wrangler_output" in
+              *Authentication*|*authenticating\ Wrangler*|*Invalid\ access\ token*|*code:\ 10000*|*code:\ 9109*|*Unauthorized*|*401*)
+                echo "Cloudflare preview upload failed because Wrangler credentials were rejected."
+                echo "auth_failed=true" >> "$GITHUB_OUTPUT"
+                echo "url=" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
             exit "$wrangler_status"
           fi
-          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "auth_failed=false" >> "$GITHUB_OUTPUT"
           preview_url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev[^[:space:]]*' wrangler-preview.log | head -n 1 || true)"
           if [ -z "$preview_url" ]; then
             preview_url="$(grep -Eo '[[:alnum:]-]+-zwapit\.[^[:space:]]+\.workers\.dev' wrangler-preview.log | head -n 1 | sed 's#^#https://#' || true)"
           fi
           if [ -z "$preview_url" ]; then
-            preview_url="https://${alias_name}-${CLOUDFLARE_WORKER_NAME}.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev"
+            preview_url="$fallback_preview_url"
           fi
           echo "url=$preview_url" >> "$GITHUB_OUTPUT"
 
-      - name: Mark deployment success
-        if: steps.preview.outputs.skipped != 'true'
+      - name: Publish successful preview status
+        if: steps.mode.outputs.deployable == 'true' && steps.preview.outputs.auth_failed != 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
-          DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
-          PREVIEW_URL: '${{ steps.preview.outputs.url }}'
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.deployment_id }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
         with:
           script: |
+            const marker = "<!-- cloudflare-preview-status -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               deployment_id: Number(process.env.DEPLOYMENT_ID),
               state: "success",
               environment_url: process.env.PREVIEW_URL,
+              log_url: runUrl,
               description: "Cloudflare Worker preview is ready"
             });
 
-      - name: Mark deployment skipped
-        if: steps.preview.outputs.skipped == 'true'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
-        env:
-          DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
-        with:
-          script: |
-            await github.rest.repos.createDeploymentStatus({
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              deployment_id: Number(process.env.DEPLOYMENT_ID),
-              state: "inactive",
-              description: "Cloudflare Worker preview skipped because credentials were rejected"
+              sha: context.payload.pull_request.head.sha,
+              state: "success",
+              target_url: process.env.PREVIEW_URL,
+              description: "Deployment has completed",
+              context: "Cloudflare Preview - zwapit"
             });
 
-      - name: Mark deployment failure
-        if: failure() && steps.deployment.outputs.id
+            const updatedAt = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+            const body = [
+              marker,
+              "The latest updates on your Cloudflare Workers preview.",
+              "",
+              "| Project | Deployment | Actions | Updated (UTC) |",
+              "| --- | --- | --- | --- |",
+              `| zwapit | Ready | [Preview](${process.env.PREVIEW_URL}) | ${updatedAt} |`,
+              "",
+              "This branch was successfully deployed to Cloudflare Workers."
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+      - name: Publish auth failure preview status
+        if: steps.mode.outputs.deployable == 'true' && steps.preview.outputs.auth_failed == 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
-          DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.deployment_id }}
         with:
           script: |
+            const marker = "<!-- cloudflare-preview-status -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               deployment_id: Number(process.env.DEPLOYMENT_ID),
               state: "failure",
-              description: "Cloudflare Worker preview upload failed"
+              log_url: runUrl,
+              description: "Cloudflare Worker preview failed because credentials were rejected"
             });
 
-  preview-skipped:
-    name: Preview skipped
-    runs-on: ubuntu-latest
-    needs:
-      - type-check
-      - build
-      - route-coverage
-      - tests
-      - acceptance
-      - smoke
-      - audit
-    if: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.draft }}
-    steps:
-      - name: Explain skip
-        run: echo "Cloudflare preview upload skipped for draft or forked pull request."
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: "failure",
+              target_url: runUrl,
+              description: "Failed - Cloudflare credentials rejected",
+              context: "Cloudflare Preview - zwapit"
+            });
+
+            const updatedAt = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+            const body = [
+              marker,
+              "The latest updates on your Cloudflare Workers preview.",
+              "",
+              "| Project | Deployment | Actions | Updated (UTC) |",
+              "| --- | --- | --- | --- |",
+              `| zwapit | Failed | [Workflow run](${runUrl}) | ${updatedAt} |`,
+              "",
+              "Cloudflare preview upload failed because Wrangler rejected the configured credentials."
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+      - name: Publish failed preview status
+        if: failure() && steps.mode.outputs.deployable == 'true' && steps.deployment.outputs.deployment_id
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.deployment_id }}
+        with:
+          script: |
+            const marker = "<!-- cloudflare-preview-status -->";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.DEPLOYMENT_ID),
+              state: "failure",
+              log_url: runUrl,
+              description: "Cloudflare Worker preview failed"
+            });
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: "failure",
+              target_url: runUrl,
+              description: "Cloudflare preview failed",
+              context: "Cloudflare Preview - zwapit"
+            });
+
+            const updatedAt = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+            const body = [
+              marker,
+              "The latest updates on your Cloudflare Workers preview.",
+              "",
+              "| Project | Deployment | Actions | Updated (UTC) |",
+              "| --- | --- | --- | --- |",
+              `| zwapit | Failed | [Workflow run](${runUrl}) | ${updatedAt} |`,
+              "",
+              "Cloudflare preview was not deployed because validation or upload failed."
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+      - name: Fail auth-rejected preview
+        if: steps.mode.outputs.deployable == 'true' && steps.preview.outputs.auth_failed == 'true'
+        run: exit 1
