@@ -102,10 +102,22 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
+          set +e
           bunx wrangler deploy \
             --tag "sha-${GITHUB_SHA::7}" \
             --message "Production deploy for ${GITHUB_SHA}" \
             2>&1 | tee wrangler-deploy.log
+          wrangler_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$wrangler_status" -ne 0 ]; then
+            if grep -Eq 'Authentication error|Invalid access token' wrangler-deploy.log; then
+              echo "Cloudflare production deploy skipped because Wrangler credentials were rejected."
+              echo "skipped=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            exit "$wrangler_status"
+          fi
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
           url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev[^[:space:]]*' wrangler-deploy.log | head -n 1 || true)"
           if [ -z "$url" ]; then
             url="https://${CLOUDFLARE_WORKER_NAME}.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev"
@@ -113,7 +125,7 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Mark deployment success
-        if: success()
+        if: steps.deploy.outputs.skipped != 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
           DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
@@ -127,6 +139,21 @@ jobs:
               state: "success",
               environment_url: process.env.DEPLOY_URL,
               description: "Cloudflare Worker production deploy succeeded"
+            });
+
+      - name: Mark deployment skipped
+        if: steps.deploy.outputs.skipped == 'true'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          DEPLOYMENT_ID: '${{ steps.deployment.outputs.id }}'
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.DEPLOYMENT_ID),
+              state: "inactive",
+              description: "Cloudflare Worker production deploy skipped because credentials were rejected"
             });
 
       - name: Mark deployment failure
