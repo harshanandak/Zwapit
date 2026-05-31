@@ -258,20 +258,24 @@ jobs:
           set -uo pipefail
           alias_name="pr-${{ github.event.pull_request.number }}"
           fallback_preview_url="https://${alias_name}-${CLOUDFLARE_WORKER_NAME}.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev"
-          bunx wrangler versions upload \
+          set +e
+          wrangler_output="$(bunx wrangler versions upload \
             --preview-alias "$alias_name" \
             --tag "$alias_name" \
             --message "PR #${{ github.event.pull_request.number }} preview for ${{ github.sha }}" \
-            2>&1 | tee wrangler-preview.log
-          wrangler_status="${PIPESTATUS[0]}"
+            2>&1)"
+          wrangler_status="$?"
           set -e
+          printf '%s\n' "$wrangler_output" | tee wrangler-preview.log
           if [ "$wrangler_status" -ne 0 ]; then
-            if grep -aEiq 'Authentication|authenticating Wrangler|Invalid access token|code: 10000|code: 9109|Unauthorized|(^|[^0-9])401([^0-9]|$)' wrangler-preview.log; then
-              echo "Cloudflare preview upload skipped because Wrangler credentials were rejected."
-              echo "skipped=true" >> "$GITHUB_OUTPUT"
-              echo "url=$fallback_preview_url" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+            case "$wrangler_output" in
+              *Authentication*|*authenticating\ Wrangler*|*Invalid\ access\ token*|*code:\ 10000*|*code:\ 9109*|*Unauthorized*|*401*)
+                echo "Cloudflare preview upload skipped because Wrangler credentials were rejected."
+                echo "skipped=true" >> "$GITHUB_OUTPUT"
+                echo "url=$fallback_preview_url" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
             exit "$wrangler_status"
           fi
           echo "skipped=false" >> "$GITHUB_OUTPUT"

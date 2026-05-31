@@ -103,18 +103,22 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -uo pipefail
-          bunx wrangler deploy \
+          set +e
+          wrangler_output="$(bunx wrangler deploy \
             --tag "sha-${GITHUB_SHA::7}" \
             --message "Production deploy for ${GITHUB_SHA}" \
-            2>&1 | tee wrangler-deploy.log
-          wrangler_status="${PIPESTATUS[0]}"
+            2>&1)"
+          wrangler_status="$?"
           set -e
+          printf '%s\n' "$wrangler_output" | tee wrangler-deploy.log
           if [ "$wrangler_status" -ne 0 ]; then
-            if grep -aEiq 'Authentication|authenticating Wrangler|Invalid access token|code: 10000|code: 9109|Unauthorized|(^|[^0-9])401([^0-9]|$)' wrangler-deploy.log; then
-              echo "Cloudflare production deploy skipped because Wrangler credentials were rejected."
-              echo "skipped=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+            case "$wrangler_output" in
+              *Authentication*|*authenticating\ Wrangler*|*Invalid\ access\ token*|*code:\ 10000*|*code:\ 9109*|*Unauthorized*|*401*)
+                echo "Cloudflare production deploy skipped because Wrangler credentials were rejected."
+                echo "skipped=true" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
             exit "$wrangler_status"
           fi
           echo "skipped=false" >> "$GITHUB_OUTPUT"
