@@ -292,9 +292,11 @@ export const buyerReportIssue = mutation({
     orderKey: v.optional(v.string()),
     reasonCode: issueReasonCode,
     evidenceText: v.optional(v.string()),
+    actorRole: v.optional(actorRole),
   },
   returns: v.object({ orderState: v.string(), issueState: v.string() }),
   handler: async (ctx, args) => {
+    if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
     const text = args.evidenceText?.trim();
     const evidenceItems = text ? [text] : [];
     const { order, issue } = await applyReportIssue(
