@@ -45,7 +45,6 @@ async function validatePersistedCheckout(
     orderKey: string;
     buyerEligibilityAcknowledged?: boolean;
     totalShownToBuyer?: number;
-    now?: string;
   },
 ): Promise<void> {
   const orderDoc = await ctx.db
@@ -82,7 +81,7 @@ async function validatePersistedCheckout(
     },
     buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged === true,
     totalShownToBuyer: args.totalShownToBuyer,
-    now: args.now ?? new Date().toISOString(),
+    now: new Date().toISOString(),
   });
   if (!validation.ok) throw new Error(`CHECKOUT_BLOCKED:${validation.blockers.join(",")}`);
 }
@@ -248,7 +247,6 @@ export const mockCheckout = mutation({
     orderKey: v.optional(v.string()),
     buyerEligibilityAcknowledged: v.optional(v.boolean()),
     totalShownToBuyer: v.optional(v.number()),
-    now: v.optional(v.string()),
   },
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
@@ -257,7 +255,6 @@ export const mockCheckout = mutation({
       orderKey,
       buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged,
       totalShownToBuyer: args.totalShownToBuyer,
-      now: args.now,
     });
     const order = await applyMockPay(ctx, orderKey);
     return { state: order.state };

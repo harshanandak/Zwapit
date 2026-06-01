@@ -148,7 +148,6 @@ export async function runMockCheckout(
     await client.mutation(functionRefs.mockCheckout, {
       buyerEligibilityAcknowledged: options.buyerEligibilityAcknowledged === true,
       totalShownToBuyer: order.mockPaymentSummary.totalPayable,
-      now: options.now,
     });
     const res = await client.query(functionRefs.getBuyerOrder, {});
     return { ok: true, blockers: [], order: (res?.order ?? local.order) as MockOrder };
