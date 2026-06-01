@@ -278,9 +278,10 @@ export const sellerSubmitTransfer = mutation({
 });
 
 export const buyerConfirmTransfer = mutation({
-  args: { orderKey: v.optional(v.string()) },
+  args: { orderKey: v.optional(v.string()), actorRole: v.optional(actorRole) },
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
+    if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
     const order = await applyBuyerConfirm(ctx, args.orderKey ?? DEMO_ORDER_KEY);
     return { state: order.state };
   },
