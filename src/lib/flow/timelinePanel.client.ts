@@ -4,14 +4,13 @@
 import {
   buyerStageIndex,
   buyerStages,
-  connectTimelineActions,
   loadDemoState,
   nextActionLabel,
-  saveDemoState,
   sellerStageIndex,
   sellerStages,
   type DemoState,
 } from "./mockFlow";
+import { loadBuyerOrderState, runAdvanceTimeline } from "../convex/dataAdapter";
 
 type Role = "buyer" | "seller";
 
@@ -19,7 +18,10 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const state: DemoState = loadDemoState();
+  // First paint uses the local/seeded demo state so the screen is never blank
+  // and never shows a new product state. When Convex is configured the state is
+  // then hydrated from the backend (see the loadBuyerOrderState() call below).
+  let state: DemoState = loadDemoState();
 
   const stages = role === "seller" ? sellerStages : buyerStages;
   const indexOf = role === "seller" ? sellerStageIndex : buyerStageIndex;
@@ -75,20 +77,34 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
 
     const button = container!.querySelector<HTMLButtonElement>("button[data-advance]");
     button?.addEventListener("click", () => {
-      try {
-        const result = connectTimelineActions(state.order, state.transferTask, { submittedAt: new Date().toISOString() });
-        state.order = result.order;
-        state.transferTask = result.transferTask;
-        saveDemoState(state);
-        render();
-      } catch (error) {
-        const note = document.createElement("p");
-        note.className = "mt-2 text-xs text-muted-foreground";
-        note.textContent = `Can't advance: ${(error as Error).message}`;
-        container!.appendChild(note);
-      }
+      if (button) button.disabled = true;
+      // runAdvanceTimeline persists through Convex when configured and otherwise
+      // falls back to the existing local transition + localStorage behavior.
+      void runAdvanceTimeline(state, { submittedAt: new Date().toISOString() })
+        .then((result) => {
+          state = { order: result.order, transferTask: result.transferTask };
+          render();
+        })
+        .catch((error) => {
+          if (button) button.disabled = false;
+          const note = document.createElement("p");
+          note.className = "mt-2 text-xs text-muted-foreground";
+          note.textContent = `Can't advance: ${(error as Error).message}`;
+          container!.appendChild(note);
+        });
     });
   }
 
   render();
+
+  // Hydrate from Convex when configured; a no-op (returns the same local state)
+  // otherwise, so behavior is unchanged when Convex is not set up locally.
+  void loadBuyerOrderState()
+    .then((loaded) => {
+      state = loaded;
+      render();
+    })
+    .catch(() => {
+      // Keep the first-paint local state on any error.
+    });
 }
