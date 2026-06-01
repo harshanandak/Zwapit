@@ -83,26 +83,38 @@ const displayState: OrderState = "transfer_pending";
 <script>
   import { createMockFixture } from "../../../lib/mock/fixtures";
   import { buyerStatusLabel } from "../../../components/buyer/format";
-  import { loadDemoState, reportBuyerIssue, saveDemoState } from "../../../lib/flow/mockFlow";
+  import { loadDemoState, saveDemoState, type DemoState } from "../../../lib/flow/mockFlow";
   import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
+  import { loadBuyerOrderState, runReportBuyerIssue } from "../../../lib/convex/dataAdapter";
 
-  const state = loadDemoState();
-  const hasCompletedCheckout =
-    state.order?.id === "order_demo_1" &&
-    state.order?.mockPaymentStatus === "mock_paid" &&
-    state.order?.mockPaymentSummary?.status === "mock_paid" &&
-    state.order?.state !== "checkout_pending" &&
-    state.transferTask?.orderId === state.order.id;
+  // A paid order has moved past checkout with a confirmed mock payment and a
+  // matching transfer task. Same predicate as before — only the SOURCE of
+  // `state` now also includes Convex (see the two checks at the bottom).
+  function isPaidOrder(state: DemoState | null | undefined): boolean {
+    return Boolean(
+      state &&
+        state.order?.id === "order_demo_1" &&
+        state.order?.mockPaymentStatus === "mock_paid" &&
+        state.order?.mockPaymentSummary?.status === "mock_paid" &&
+        state.order?.state !== "checkout_pending" &&
+        state.transferTask?.orderId === state.order.id,
+    );
+  }
 
-  if (hasCompletedCheckout) {
+  let revealed = false;
+
+  function revealPaidOrder(state: DemoState): void {
+    if (revealed) return;
+    revealed = true;
+
     document.getElementById("order-checkout-required")?.classList.add("hidden");
     document.getElementById("paid-order-content")?.classList.remove("hidden");
     const statusPill = document.getElementById("order-status-pill");
     if (statusPill) statusPill.textContent = buyerStatusLabel(state.order.state);
     mountTimelinePanel("buyer-live-order", "buyer");
 
-    // Wire the existing Report-issue form to the local issue helper after the
-    // paid order gate passes.
+    // Wire the Report-issue form. It reads the freshest order state (Convex when
+    // configured, local otherwise) so it stays valid after a direct Convex load.
     const form = document.querySelector("form");
     const submitButton = form?.querySelector<HTMLButtonElement>('button[type="button"]');
     submitButton?.addEventListener("click", () => {
@@ -114,18 +126,44 @@ const displayState: OrderState = "transfer_pending";
         return;
       }
       const evidenceText = (detailsField?.value || "").trim() || "Reported from the order timeline (demo)";
-      const currentState = loadDemoState();
       const { issue } = createMockFixture();
-      try {
-        const reported = reportBuyerIssue(currentState.order, issue, reason.value as typeof issue.reasonCode, evidenceText);
-        saveDemoState({ order: reported.order, transferTask: currentState.transferTask });
-        if (status) {
-          status.textContent = `Issue reported (${reason.value}). You're protected while we look into it.`;
-        }
-        mountTimelinePanel("buyer-live-order", "buyer");
-      } catch (error) {
-        if (status) status.textContent = `Can't report right now: ${(error as Error).message}`;
-      }
+      void loadBuyerOrderState()
+        .then((current) =>
+          runReportBuyerIssue(
+            current.order,
+            issue,
+            reason.value as typeof issue.reasonCode,
+            evidenceText,
+          ).then((reported) => ({ reported, current })),
+        )
+        .then(({ reported, current }) => {
+          // Keep the local demo timeline in sync (and as the offline fallback).
+          saveDemoState({ order: reported.order, transferTask: current.transferTask });
+          if (status) {
+            status.textContent = `Issue reported (${reason.value}). You're protected while we look into it.`;
+          }
+          mountTimelinePanel("buyer-live-order", "buyer");
+        })
+        .catch((error) => {
+          if (status) status.textContent = `Can't report right now: ${(error as Error).message}`;
+        });
     });
   }
+
+  // 1) Synchronous local gate — unchanged behavior; reveals instantly when
+  //    localStorage already holds a paid mock checkout (checkout -> order flow),
+  //    and is the only path when Convex is not configured.
+  const local = loadDemoState();
+  if (isPaidOrder(local)) revealPaidOrder(local);
+
+  // 2) Convex hydration — reveals the timeline when the backend has a paid order
+  //    even if localStorage is empty (direct order-page load). Falls back to the
+  //    same local state when Convex is not configured, so behavior is unchanged.
+  void loadBuyerOrderState()
+    .then((hydrated) => {
+      if (isPaidOrder(hydrated)) revealPaidOrder(hydrated);
+    })
+    .catch(() => {
+      // Keep the synchronous local gate result on any error.
+    });
 </script>

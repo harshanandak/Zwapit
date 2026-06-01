@@ -392,3 +392,93 @@ Relevant files:
 Claude should fix the UI wiring so the order page can hydrate from Convex before
 or alongside the local mock checkout gate. After that, rerun Codex Tasks 7-9,
 especially the browser reload-persistence smoke.
+
+---
+
+# Wave 2 Browser-Blocker Fix (Claude)
+
+Date: 2026-06-01
+Branch: `claude/convex-persistence-slice-wave1`
+Scope: fix ONLY the browser behavior blocker from the Codex validation above.
+
+## Root Cause (two coupled causes)
+
+1. **Gate before hydration** (the reported blocker): the order page revealed the
+   timeline only from a synchronous `loadDemoState()` (localStorage). On a direct
+   load with empty localStorage it never gave Convex a chance to reveal a paid
+   order.
+2. **Client env var never exposed** (deeper cause): the client read
+   `VITE_CONVEX_URL`, but **Astro inlines only `PUBLIC_`-prefixed vars into
+   client-side code** (verified in Astro docs). So `isConvexConfigured()` was
+   always false in the browser and the Convex-connected path could never activate
+   — even with the gate fixed. Checkout also persisted only to localStorage, so a
+   Convex-backed order page would have diverged back to the stale Convex state.
+
+## Exact Fix Summary
+
+- `src/lib/convex/env.ts` — `getConvexUrl()` now reads `PUBLIC_CONVEX_URL`
+  (Astro client) first, then `VITE_CONVEX_URL`, then `process.env` fallbacks.
+  Direct `import.meta.env.PUBLIC_CONVEX_URL` access (inside try/catch) so Astro
+  statically inlines it; unchanged unconfigured fallback for tests/SSR.
+- `src/env.d.ts` — typed `PUBLIC_CONVEX_URL` (primary) and kept `VITE_CONVEX_URL`.
+- `src/pages/app/orders/[orderId].astro` — the reveal is now driven by an
+  idempotent `revealPaidOrder()` called from TWO sources: (1) the original
+  synchronous local gate (unchanged fast path / offline fallback) and (2) an
+  async `loadBuyerOrderState()` (Convex) hydration that reveals when the backend
+  has a paid order even if localStorage is empty. The Report-issue handler now
+  reads the freshest state via `loadBuyerOrderState()` and persists through the
+  adapter (`runReportBuyerIssue`), so it stays valid after a direct Convex load.
+- `src/pages/app/checkout/[listingId].astro` — the Pay action routes through
+  `runMockCheckout` (adapter) and AWAITS the Convex write before navigating, so a
+  later direct order-page load reveals the paid timeline from Convex. Identical
+  local validation/blocker behavior and localStorage fallback are preserved.
+
+No `connectMock*`/adapter signatures changed; no unrelated flows reworked. Convex
+schema/functions were not changed (the blocker was purely client-side).
+
+## Commands Run
+
+- `bun run check` — 0 errors, 0 warnings, 11 hints.
+- `bunx tsc --noEmit` — exit 0.
+- `bun run build` — success, 15 routes.
+- `bun test` — 49 pass, 0 fail (run with Convex unconfigured, i.e. the committed
+  default; adapter fallback parity holds).
+- Browser smoke (Convex configured): `bunx convex dev` (local anonymous backend
+  on `:3210`, already seeded; order at `transfer_submitted`/`mock_paid`), a
+  production build with `PUBLIC_CONVEX_URL=http://127.0.0.1:3210` supplied via a
+  gitignored `.env.production.local` (build-mode only, removed after the smoke so
+  it is never committed and never affects `bun test`), served via
+  `bunx astro preview` on `http://localhost:4321`, driven with the Chrome
+  automation tools. URL confirmed inlined into the client bundle.
+
+## Browser Smoke Result — Direct Load of `/app/orders/order_demo_1`
+
+After clearing localStorage and reloading (so localStorage held NO demo order),
+the page state was:
+
+- `localStorage` demo order: empty
+- `#order-checkout-required` ("Complete checkout first"): hidden
+- `#paid-order-content`: visible
+- status pill: `Confirm receipt` (= Convex order state `transfer_submitted`)
+- timeline `Advance (demo)` button: present
+
+With localStorage empty, the only source of the paid state is Convex — this
+proves the order page hydrates from Convex on direct load. BLOCKER RESOLVED.
+
+## Browser Smoke Result — Checkout -> Order Route -> Reload
+
+1. `/app/checkout/listing_bms_event_1`: checked eligibility, clicked
+   `Pay ₹2,411.80`.
+2. Redirected to `/app/tickets` (My Tickets), no checkout warning.
+3. Navigated to `/app/orders/order_demo_1`: gate hidden, paid content visible,
+   `Advance (demo)` present.
+4. Reloaded the order route: still revealed (gate hidden, paid content visible,
+   Advance present) — state persisted across reload.
+
+## Hard Exclusions — Confirmation (NOT Added)
+
+This fix only changed client wiring (env var resolution + two Astro page scripts)
+and a TypeScript env type. No real Clerk, Razorpay, real payments, payout setup,
+production admin, demand discovery, category expansion, wallet, real KYC, real
+OCR, AI parser, or production source integration was added. Mock auth remains
+`user_demo_1`; mock checkout remains mock-only.
