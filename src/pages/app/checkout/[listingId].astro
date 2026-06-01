@@ -95,8 +95,8 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
   payButton?.addEventListener("click", (event) => {
     event.preventDefault();
     const { order, transferTask } = createMockFixture();
-    // runMockCheckout runs the same local validation/mock-pay and never rejects;
-    // it persists through Convex when configured and falls back to local-only.
+    // runMockCheckout runs the same local validation/mock-pay. With Convex
+    // configured, a rejected persistence write surfaces as a blocker.
     void runMockCheckout(order, {
       buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
     }).then((result) => {

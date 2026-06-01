@@ -1,9 +1,8 @@
 // Public order queries + the mock-visible flow mutations.
 //
 // Scope guardrails (first persistence slice):
-//   * No real auth. The actor for every privileged transition is derived
-//     SERVER-SIDE from the stored order's buyerId/sellerId — the client never
-//     supplies an actor id (see design.md OWASP notes).
+//   * No real auth. Mutations accept only the visible demo role where needed;
+//     actor ids are still derived SERVER-SIDE from stored order buyerId/sellerId.
 //   * `mockCheckout` only records the existing mock paid state + fee breakdown.
 //   * No payment/refund/payout/admin operations are exposed.
 //
@@ -11,6 +10,7 @@
 // flow (src/lib/state/*), wrapped in convex/model.ts.
 
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import {
   applyBuyerConfirm,
@@ -25,6 +25,7 @@ import {
   sourceRuleDocToMock,
   transferDocToMock,
 } from "./model";
+import { validateCheckout } from "../src/lib/validation/checkoutValidation";
 
 const DEMO_ORDER_KEY = "order_demo_1";
 
@@ -36,6 +37,55 @@ const issueReasonCode = v.union(
   v.literal("eligibility_problem"),
   v.literal("cannot_access_ticket"),
 );
+const actorRole = v.union(v.literal("buyer"), v.literal("seller"));
+
+async function validatePersistedCheckout(
+  ctx: MutationCtx,
+  args: {
+    orderKey: string;
+    buyerEligibilityAcknowledged?: boolean;
+    totalShownToBuyer?: number;
+    now?: string;
+  },
+): Promise<void> {
+  const orderDoc = await ctx.db
+    .query("orders")
+    .withIndex("by_key", (q) => q.eq("orderKey", args.orderKey))
+    .unique();
+  if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+
+  const listingDoc = await ctx.db
+    .query("listings")
+    .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))
+    .unique();
+  if (!listingDoc) throw new Error("LISTING_NOT_FOUND");
+
+  const sourceRuleDoc = await ctx.db
+    .query("source_rules")
+    .withIndex("by_key", (q) => q.eq("sourceRuleKey", listingDoc.sourceRuleId))
+    .unique();
+  if (!sourceRuleDoc) throw new Error("SOURCE_RULE_NOT_FOUND");
+
+  const sellerPaymentAccount = await ctx.db
+    .query("seller_payment_accounts")
+    .withIndex("by_seller", (q) => q.eq("sellerId", listingDoc.sellerId))
+    .first();
+  if (!sellerPaymentAccount) throw new Error("SELLER_PAYOUT_NOT_READY");
+
+  const validation = validateCheckout({
+    listing: listingDocToMock(listingDoc),
+    sourceRule: sourceRuleDocToMock(sourceRuleDoc),
+    sellerPaymentAccount: {
+      sellerId: sellerPaymentAccount.sellerId,
+      status: sellerPaymentAccount.status,
+      provider: sellerPaymentAccount.provider,
+    },
+    buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged === true,
+    totalShownToBuyer: args.totalShownToBuyer,
+    now: args.now ?? new Date().toISOString(),
+  });
+  if (!validation.ok) throw new Error(`CHECKOUT_BLOCKED:${validation.blockers.join(",")}`);
+}
 
 // ---- Queries ----
 
@@ -194,18 +244,35 @@ export const getSellerOrders = query({
 // ---- Mutations (mock-visible flow only) ----
 
 export const mockCheckout = mutation({
-  args: { orderKey: v.optional(v.string()) },
+  args: {
+    orderKey: v.optional(v.string()),
+    buyerEligibilityAcknowledged: v.optional(v.boolean()),
+    totalShownToBuyer: v.optional(v.number()),
+    now: v.optional(v.string()),
+  },
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
-    const order = await applyMockPay(ctx, args.orderKey ?? DEMO_ORDER_KEY);
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await validatePersistedCheckout(ctx, {
+      orderKey,
+      buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged,
+      totalShownToBuyer: args.totalShownToBuyer,
+      now: args.now,
+    });
+    const order = await applyMockPay(ctx, orderKey);
     return { state: order.state };
   },
 });
 
 export const sellerSubmitTransfer = mutation({
-  args: { orderKey: v.optional(v.string()), submittedAt: v.optional(v.string()) },
+  args: {
+    orderKey: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    actorRole: v.optional(actorRole),
+  },
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
+    if (args.actorRole !== "seller") throw new Error("SELLER_ACTOR_REQUIRED");
     const order = await applySellerSubmit(ctx, args.orderKey ?? DEMO_ORDER_KEY, {
       submittedAt: args.submittedAt,
     });
@@ -246,7 +313,11 @@ export const buyerReportIssue = mutation({
 // valid transition for the order's current state. This preserves the existing
 // "Advance (demo)" island behavior, now persisted in Convex.
 export const advanceTimeline = mutation({
-  args: { orderKey: v.optional(v.string()), submittedAt: v.optional(v.string()) },
+  args: {
+    orderKey: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    actorRole: v.optional(actorRole),
+  },
   returns: v.object({ state: v.string(), action: v.string() }),
   handler: async (ctx, args) => {
     const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
@@ -258,22 +329,23 @@ export const advanceTimeline = mutation({
 
     switch (orderDoc.state) {
       case "checkout_pending": {
-        const order = await applyMockPay(ctx, orderKey);
-        return { state: order.state, action: "mock_pay" };
+        throw new Error("USE_MOCK_CHECKOUT");
       }
       case "transfer_pending": {
-        const order = await applySellerSubmit(ctx, orderKey, { submittedAt: args.submittedAt });
-        return { state: order.state, action: "seller_mark_transferred" };
+        throw new Error("SELLER_TRANSFER_MUTATION_REQUIRED");
       }
       case "transfer_submitted": {
+        if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
         const order = await applyBuyerConfirm(ctx, orderKey);
         return { state: order.state, action: "buyer_confirm_received" };
       }
       case "buyer_confirmed": {
+        if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
         const order = await applyOpenProtectionWindow(ctx, orderKey);
         return { state: order.state, action: "open_protection_window" };
       }
       case "dispute_window_open": {
+        if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
         const order = await applyComplete(ctx, orderKey);
         return { state: order.state, action: "complete_after_window" };
       }

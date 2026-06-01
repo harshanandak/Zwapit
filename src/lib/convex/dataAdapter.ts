@@ -110,20 +110,27 @@ export async function runAdvanceTimeline(
     return result;
   }
   try {
-    const advanced = await client.mutation(functionRefs.advanceTimeline, {
-      submittedAt: options.submittedAt,
-    });
+    const advanced =
+      options.actorRole === "seller" && state.order.state === "transfer_pending"
+        ? await client.mutation(functionRefs.sellerSubmitTransfer, {
+            submittedAt: options.submittedAt,
+            actorRole: options.actorRole,
+          })
+        : await client.mutation(functionRefs.advanceTimeline, {
+            submittedAt: options.submittedAt,
+            actorRole: options.actorRole,
+          });
     const res = await client.query(functionRefs.getBuyerOrder, {});
-    return {
+    const result = {
       order: (res?.order ?? state.order) as MockOrder,
       transferTask: res?.transferTask ?? state.transferTask,
       action: advanced?.action ?? "none",
       terminal: (advanced?.action ?? "none") === "none",
     };
-  } catch {
-    const result = connectTimelineActions(state.order, state.transferTask, options);
     saveDemoState({ order: result.order, transferTask: result.transferTask });
     return result;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("Convex timeline advance failed");
   }
 }
 
@@ -138,11 +145,15 @@ export async function runMockCheckout(
   if (!client || !local.ok) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    await client.mutation(functionRefs.mockCheckout, {});
+    await client.mutation(functionRefs.mockCheckout, {
+      buyerEligibilityAcknowledged: options.buyerEligibilityAcknowledged === true,
+      totalShownToBuyer: order.mockPaymentSummary.totalPayable,
+      now: options.now,
+    });
     const res = await client.query(functionRefs.getBuyerOrder, {});
     return { ok: true, blockers: [], order: (res?.order ?? local.order) as MockOrder };
   } catch {
-    return local;
+    return { ok: false, blockers: ["PERSISTENCE_WRITE_FAILED"], order };
   }
 }
 
@@ -157,13 +168,8 @@ export async function runReportBuyerIssue(
   // shape; Convex persistence is performed alongside when configured.
   const local = reportBuyerIssue(order, issue, reasonCode, evidenceText);
   const client = await getConvexClient();
-  if (client) {
-    try {
-      await client.mutation(functionRefs.seedDemoFixture, {});
-      await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText });
-    } catch {
-      // Persistence is best-effort; the local result preserves UI behavior.
-    }
-  }
+  if (!client) return local;
+  await client.mutation(functionRefs.seedDemoFixture, {});
+  await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText });
   return local;
 }

@@ -80,7 +80,7 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
       if (button) button.disabled = true;
       // runAdvanceTimeline persists through Convex when configured and otherwise
       // falls back to the existing local transition + localStorage behavior.
-      void runAdvanceTimeline(state, { submittedAt: new Date().toISOString() })
+      void runAdvanceTimeline(state, { submittedAt: new Date().toISOString(), actorRole: role })
         .then((result) => {
           state = { order: result.order, transferTask: result.transferTask };
           render();
