@@ -292,3 +292,103 @@ Verified by dependency scan + source grep (`src` + `convex`):
 - Transition logic is not re-implemented in Convex — `convex/model.ts` calls the
   same pure helpers in `src/lib/state/orderTransitions.ts` /
   `issueTransitions.ts`. Audit logs are append-only via `appendAuditLog`.
+
+---
+
+# Codex Validation Handoff (Tasks 7-9)
+
+Date: 2026-06-01
+Validator: Codex
+Branch validated: `claude/convex-persistence-slice-wave1`
+
+## Validation Result
+
+Gate status: blocked on browser behavior preservation.
+
+The backend/schema/test guard portions now validate, but the Convex-connected UI
+reload path does not yet satisfy the plan's Task 8 acceptance criterion.
+
+## Commands Run
+
+- `bunx convex dev --once`
+- `bunx convex run seed:seedDemoFixture`
+- `bunx convex run seed:seedDemoFixture`
+- `bunx convex run orders:getCurrentFixtureView`
+- `bunx convex run orders:advanceTimeline`
+- `bun run check`
+- `bunx tsc --noEmit`
+- `bun run build`
+- `bun test`
+- `git diff --check`
+- hard-exclusion source searches over `convex`, `src`, `package.json`, and this
+  work folder
+- Chrome DevTools Protocol smoke against
+  `http://127.0.0.1:3037/app/orders/order_demo_1`
+- Chrome DevTools Protocol smoke through
+  `http://127.0.0.1:3037/app/checkout/listing_bms_event_1`
+
+## Passing Evidence
+
+- `bunx convex dev --once` completed and generated/pushed Convex functions.
+- `seed:seedDemoFixture` returned valid JSON twice with the same public demo keys.
+  The command exits with Windows Convex CLI libuv assertion noise, but the JSON
+  mutation result is returned before process shutdown.
+- `orders:getCurrentFixtureView` returned the demo listing, order, transfer task,
+  issue, user, source rule, and mocked seller payment readiness.
+- `orders:advanceTimeline` returned a persisted transition result. In this
+  validation run the backend had already moved past checkout, so the transition
+  observed was `seller_mark_transferred` to `transfer_submitted`.
+- `bun run check`: 0 errors, 0 warnings, 11 hints.
+- `bunx tsc --noEmit`: exit 0.
+- `bun run build`: success.
+- `bun test`: exit 0 after updating the stale first-slice scope guard to allow
+  the authorized Convex slice paths and dependency while still banning real
+  Clerk/Razorpay/Stripe/Supabase/Neon/Postgres integrations.
+- `git diff --check`: clean.
+- Hard-exclusion grep found no real Clerk, Razorpay, Stripe, payment provider,
+  payout setup, production admin, demand discovery, category expansion, wallet,
+  real OCR, AI parser, or production source integration code.
+
+## Validation-Owned Guard Update
+
+Updated `scripts/verify-first-visible-slice.mjs` to reflect the authorized slice:
+
+- allowed `.beads/team-map.jsonl`, `.gitignore`, `src/env.d.ts`, `tsconfig.json`,
+  `convex/**`, `docs/work/**`, and `src/lib/convex/**`
+- removed `convex` from the forbidden dependency/import pattern
+- left real out-of-scope provider checks in place:
+  `clerk|razorpay|stripe|supabase|neon|postgres`
+
+This was a validation guard update only; it did not change app behavior.
+
+## Blocking Browser Finding
+
+Browser smoke did not confirm Convex-connected reload persistence.
+
+Observed with a real Chrome instance against the local dev server:
+
+1. Direct load of `/app/orders/order_demo_1` rendered:
+   - `Complete checkout first`
+   - `Your protected timeline appears here after payment is confirmed.`
+   - no timeline panel
+2. The persisted Convex backend at that time already returned an order beyond
+   checkout via `orders:getCurrentFixtureView`.
+3. The order page script gates timeline mounting on local `loadDemoState()`
+   before it calls `mountTimelinePanel()`, so the Convex-backed hydration path
+   cannot run when local storage does not already contain a paid mock checkout.
+4. A checkout-page browser smoke clicked `Pay ₹2,411.80`, then navigated to the
+   order route, but the route still rendered `Complete checkout first`; no
+   timeline panel or `Advance (demo)` button appeared.
+
+Relevant files:
+
+- `src/pages/app/orders/[orderId].astro`
+- `src/pages/app/checkout/[listingId].astro`
+- `src/lib/flow/timelinePanel.client.ts`
+- `src/lib/convex/dataAdapter.ts`
+
+## Required Follow-Up
+
+Claude should fix the UI wiring so the order page can hydrate from Convex before
+or alongside the local mock checkout gate. After that, rerun Codex Tasks 7-9,
+especially the browser reload-persistence smoke.
