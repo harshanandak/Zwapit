@@ -421,13 +421,18 @@ Scope: fix ONLY the browser behavior blocker from the Codex validation above.
   Direct `import.meta.env.PUBLIC_CONVEX_URL` access (inside try/catch) so Astro
   statically inlines it; unchanged unconfigured fallback for tests/SSR.
 - `src/env.d.ts` — typed `PUBLIC_CONVEX_URL` (primary) and kept `VITE_CONVEX_URL`.
-- `src/pages/app/orders/[orderId].astro` — the reveal is now driven by an
-  idempotent `revealPaidOrder()` called from TWO sources: (1) the original
-  synchronous local gate (unchanged fast path / offline fallback) and (2) an
-  async `loadBuyerOrderState()` (Convex) hydration that reveals when the backend
-  has a paid order even if localStorage is empty. The Report-issue handler now
-  reads the freshest state via `loadBuyerOrderState()` and persists through the
-  adapter (`runReportBuyerIssue`), so it stays valid after a direct Convex load.
+- `src/pages/app/orders/[orderId].astro` — an `applyState()` helper is called
+  from TWO sources: (1) the original synchronous local gate (unchanged fast path
+  / offline fallback) and (2) an async `loadBuyerOrderState()` (Convex) hydration
+  that reveals when the backend has a paid order even if localStorage is empty.
+  `applyState()` reveals the paid content + mounts the timeline ONCE (idempotent)
+  but updates the status pill on EVERY call, so the async Convex hydration
+  re-syncs the pill to the Convex state and it stays in step with the timeline
+  stepper (pre-Convex they always agreed — this preserves that; without it the
+  pill could keep a stale local state while the stepper showed Convex). The
+  Report-issue handler now reads the freshest state via `loadBuyerOrderState()`
+  and persists through the adapter (`runReportBuyerIssue`), so it stays valid
+  after a direct Convex load.
 - `src/pages/app/checkout/[listingId].astro` — the Pay action routes through
   `runMockCheckout` (adapter) and AWAITS the Convex write before navigating, so a
   later direct order-page load reveals the paid timeline from Convex. Identical
@@ -474,6 +479,23 @@ proves the order page hydrates from Convex on direct load. BLOCKER RESOLVED.
    `Advance (demo)` present.
 4. Reloaded the order route: still revealed (gate hidden, paid content visible,
    Advance present) — state persisted across reload.
+
+Pill/stepper sync re-verified: with localStorage at `transfer_pending` (written
+by the mock checkout) but Convex at `transfer_submitted`, the status pill first
+paints `Transfer needed` (local) then re-syncs to `Confirm receipt` after Convex
+hydration, matching the timeline stepper (which renders the `Confirm receipt`
+stage with the `Advance (demo)` button). No persistent pill/stepper divergence.
+
+## Note For Codex Re-Validation (Tasks 7-9)
+
+- The client env contract changed from `VITE_CONVEX_URL` to `PUBLIC_CONVEX_URL`
+  (Astro only inlines `PUBLIC_`-prefixed vars into client code). For the browser
+  smoke, set `PUBLIC_CONVEX_URL` (e.g. via a gitignored `.env.production.local`)
+  pointing at the local Convex deployment, then `bun run build` + serve. The
+  client still honors `VITE_CONVEX_URL` as a fallback.
+- Any remaining `VITE_CONVEX_URL` references in `design.md` / deploy docs are now
+  stale and should be updated to `PUBLIC_CONVEX_URL` (left to Codex/the doc owner;
+  out of this fix's scope).
 
 ## Hard Exclusions — Confirmation (NOT Added)
 

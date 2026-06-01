@@ -103,18 +103,26 @@ const displayState: OrderState = "transfer_pending";
 
   let revealed = false;
 
-  function revealPaidOrder(state: DemoState): void {
-    if (revealed) return;
-    revealed = true;
-
-    document.getElementById("order-checkout-required")?.classList.add("hidden");
-    document.getElementById("paid-order-content")?.classList.remove("hidden");
+  // applyState reveals the paid order content exactly once (idempotent), then
+  // updates the status pill on EVERY call. Calling it from both the synchronous
+  // local gate and the async Convex hydration means Convex wins the pill on
+  // hydration, keeping the pill in step with the Convex-backed timeline stepper
+  // (pre-Convex the pill and stepper always agreed — this preserves that).
+  function applyState(state: DemoState): void {
+    if (!revealed) {
+      revealed = true;
+      document.getElementById("order-checkout-required")?.classList.add("hidden");
+      document.getElementById("paid-order-content")?.classList.remove("hidden");
+      mountTimelinePanel("buyer-live-order", "buyer");
+      wireReportIssueForm();
+    }
     const statusPill = document.getElementById("order-status-pill");
     if (statusPill) statusPill.textContent = buyerStatusLabel(state.order.state);
-    mountTimelinePanel("buyer-live-order", "buyer");
+  }
 
-    // Wire the Report-issue form. It reads the freshest order state (Convex when
-    // configured, local otherwise) so it stays valid after a direct Convex load.
+  // Wire the Report-issue form. It reads the freshest order state (Convex when
+  // configured, local otherwise) so it stays valid after a direct Convex load.
+  function wireReportIssueForm(): void {
     const form = document.querySelector("form");
     const submitButton = form?.querySelector<HTMLButtonElement>('button[type="button"]');
     submitButton?.addEventListener("click", () => {
@@ -154,14 +162,15 @@ const displayState: OrderState = "transfer_pending";
   //    localStorage already holds a paid mock checkout (checkout -> order flow),
   //    and is the only path when Convex is not configured.
   const local = loadDemoState();
-  if (isPaidOrder(local)) revealPaidOrder(local);
+  if (isPaidOrder(local)) applyState(local);
 
   // 2) Convex hydration — reveals the timeline when the backend has a paid order
-  //    even if localStorage is empty (direct order-page load). Falls back to the
-  //    same local state when Convex is not configured, so behavior is unchanged.
+  //    even if localStorage is empty (direct order-page load), and re-syncs the
+  //    status pill to the Convex state. Falls back to the same local state when
+  //    Convex is not configured, so behavior is unchanged.
   void loadBuyerOrderState()
     .then((hydrated) => {
-      if (isPaidOrder(hydrated)) revealPaidOrder(hydrated);
+      if (isPaidOrder(hydrated)) applyState(hydrated);
     })
     .catch(() => {
       // Keep the synchronous local gate result on any error.
