@@ -5,6 +5,7 @@ import {
   autoApproveListing,
   autoBlockListing,
   autoWaitlistListing,
+  markListingSold,
   submitForRuleCheck,
 } from "../listingTransitions";
 
@@ -46,5 +47,20 @@ describe("listing state transitions", () => {
   test("rejects invalid listing states", () => {
     expect(() => submitForRuleCheck({ ...draftListing, state: "live" })).toThrow("INVALID_LISTING_STATE");
     expect(() => autoApproveListing(draftListing)).toThrow("INVALID_LISTING_STATE");
+  });
+
+  test("marks live listings sold", () => {
+    const liveListing = { ...draftListing, state: "live" } satisfies MockListing;
+    const result = markListingSold(liveListing);
+
+    expect(result.listing.state).toBe("sold");
+    expect(result.auditEvent).toMatchObject({
+      actorRole: "system",
+      action: "mark_listing_sold",
+      entityType: "listing",
+      entityId: liveListing.id,
+      fromState: "live",
+      toState: "sold",
+    });
   });
 });

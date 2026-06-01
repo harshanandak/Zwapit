@@ -24,6 +24,7 @@ import {
   openProtectionWindow,
   sellerMarkTransferred,
 } from "../src/lib/state/orderTransitions";
+import { markListingSold } from "../src/lib/state/listingTransitions";
 
 // Mock clocks — kept identical to src/lib/flow/mockFlow.ts so the persisted
 // Convex flow reaches the same visible states as the local demo. Today is in
@@ -181,13 +182,22 @@ export async function appendAuditLog(ctx: MutationCtx, event: AuditEvent): Promi
 
 export async function applyMockPay(ctx: MutationCtx, orderKey: string): Promise<MockOrder> {
   const orderDoc = await orderByKey(ctx, orderKey);
+  const listingDoc = await ctx.db
+    .query("listings")
+    .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))
+    .unique();
+  if (!listingDoc) throw new Error("LISTING_NOT_FOUND");
+
   const { order, auditEvent } = mockPay(orderDocToMock(orderDoc));
+  const soldListing = markListingSold(listingDocToMock(listingDoc));
   await ctx.db.patch(orderDoc._id, {
     state: order.state,
     mockPaymentStatus: order.mockPaymentStatus,
     mockPaymentSummary: order.mockPaymentSummary,
   });
+  await ctx.db.patch(listingDoc._id, { state: soldListing.listing.state });
   await appendAuditLog(ctx, auditEvent);
+  await appendAuditLog(ctx, soldListing.auditEvent);
   return order;
 }
 

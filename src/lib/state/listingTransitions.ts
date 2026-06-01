@@ -51,3 +51,8 @@ export function autoBlockListing(listing: MockListing): ListingTransitionResult 
   requireListingState(listing, "under_review");
   return transitionListing({ ...listing, ruleDecision: "AUTO_BLOCK" }, "blocked", "auto_block_listing");
 }
+
+export function markListingSold(listing: MockListing): ListingTransitionResult {
+  requireListingState(listing, "live");
+  return transitionListing(listing, "sold", "mark_listing_sold");
+}
