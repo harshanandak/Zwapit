@@ -221,13 +221,30 @@ is libuv shutdown noise on process exit; the mutations returned correct JSON.)
   unset (CI/build/local-without-Convex), every adapter function returns the
   existing local mock data; `convex/browser` is loaded only via dynamic import
   when a URL is present, so SSG/build/tests never evaluate it.
-- Astro pages remain server-rendered from `createMockFixture()`, so the static
-  HTML (and every acceptance needle) is byte-stable and unchanged.
+- Astro pages remain server-rendered from `createMockFixture()`, so the rendered
+  text content / every acceptance needle is unchanged (the bundled island
+  `<script>` differs because `timelinePanel.client.ts` changed, but the
+  user-visible HTML content does not).
 - The timeline island first-paints from local/seeded state (no blank/loading
-  product state), then hydrates from Convex when configured. The "Advance (demo)"
-  control persists transitions in Convex when configured; reload re-reads them.
+  product state), then hydrates from Convex when configured.
 - Convex errors fall back to local behavior (best-effort persistence), so the UI
   never regresses if a deployment is unreachable.
+
+## Verification Scope (what was / was not run)
+
+- VERIFIED — backend via CLI: schema push, idempotent seed (twice), assembled
+  fixture view, and a real `advanceTimeline` transition + audit write, all via
+  `bunx convex run` against the local anonymous deployment.
+- VERIFIED — fallback via automated tests: the adapter contract tests and the
+  full `bun test` suite exercise the Convex-UNCONFIGURED branch (no
+  `VITE_CONVEX_URL`), proving shape parity and unchanged local behavior.
+- NOT YET BROWSER-VERIFIED — the Convex-CONNECTED UI path end-to-end (browser
+  island -> `dataAdapter` -> `ConvexClient` WebSocket -> re-render, and the
+  "demo data survives page reload during local dev" criterion with
+  `VITE_CONVEX_URL` set). This is implemented but was not click-tested in a
+  browser; it is left to Codex Task 8 ("local browser smoke if a dev server is
+  used"). The persistence path is exercised at the function level via the CLI
+  evidence above.
 
 ## Known Scope-Guard Conflict (for Codex / user decision)
 
