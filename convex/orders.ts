@@ -68,7 +68,7 @@ async function validatePersistedCheckout(
   const sellerPaymentAccount = await ctx.db
     .query("seller_payment_accounts")
     .withIndex("by_seller", (q) => q.eq("sellerId", listingDoc.sellerId))
-    .first();
+    .unique();
   if (!sellerPaymentAccount) throw new Error("SELLER_PAYOUT_NOT_READY");
 
   const validation = validateCheckout({

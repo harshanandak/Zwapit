@@ -22,6 +22,7 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
   // and never shows a new product state. When Convex is configured the state is
   // then hydrated from the backend (see the loadBuyerOrderState() call below).
   let state: DemoState = loadDemoState();
+  let mutationVersion = 0;
 
   const stages = role === "seller" ? sellerStages : buyerStages;
   const indexOf = role === "seller" ? sellerStageIndex : buyerStageIndex;
@@ -82,6 +83,7 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
       // falls back to the existing local transition + localStorage behavior.
       void runAdvanceTimeline(state, { submittedAt: new Date().toISOString(), actorRole: role })
         .then((result) => {
+          mutationVersion += 1;
           state = { order: result.order, transferTask: result.transferTask };
           render();
         })
@@ -99,8 +101,10 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
 
   // Hydrate from Convex when configured; a no-op (returns the same local state)
   // otherwise, so behavior is unchanged when Convex is not set up locally.
+  const hydrationVersion = mutationVersion;
   void loadBuyerOrderState()
     .then((loaded) => {
+      if (mutationVersion !== hydrationVersion) return;
       state = loaded;
       render();
     })

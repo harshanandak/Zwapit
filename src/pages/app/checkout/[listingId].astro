@@ -90,24 +90,37 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
   // persist the order (Convex when configured, local otherwise), then show it in
   // My Tickets. No real payment. The Convex write is awaited BEFORE navigating so
   // a later direct load of the order page reveals the paid timeline from Convex.
-  const payButton = document.getElementById("pay-button");
+  let checkoutInFlight = false;
+  const payButton = document.getElementById("pay-button") as HTMLAnchorElement | null;
   const eligibilityAck = document.getElementById("eligibility-ack") as HTMLInputElement | null;
-  payButton?.addEventListener("click", (event) => {
+  payButton?.addEventListener("click", async (event) => {
     event.preventDefault();
+    if (checkoutInFlight) return;
+    checkoutInFlight = true;
+    payButton.setAttribute("aria-disabled", "true");
+    payButton.classList.add("pointer-events-none", "opacity-70");
+    const warning = document.getElementById("checkout-warning");
+    if (warning) warning.textContent = "";
     const { order, transferTask } = createMockFixture();
     // runMockCheckout runs the same local validation/mock-pay. With Convex
     // configured, a rejected persistence write surfaces as a blocker.
-    void runMockCheckout(order, {
-      buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
-    }).then((result) => {
+    try {
+      const result = await runMockCheckout(order, {
+        buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
+      });
       if (!result.ok) {
-        const warning = document.getElementById("checkout-warning");
         if (warning) warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;
         return;
       }
       // Keep the local demo timeline working (and as the offline fallback).
       saveDemoState({ order: result.order, transferTask });
       window.location.href = "/app/tickets";
-    });
+    } catch {
+      if (warning) warning.textContent = "Checkout could not be completed right now. Please try again.";
+    } finally {
+      checkoutInFlight = false;
+      payButton.removeAttribute("aria-disabled");
+      payButton.classList.remove("pointer-events-none", "opacity-70");
+    }
   });
 </script>

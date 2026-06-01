@@ -164,7 +164,7 @@ No existing `connectMock*` export signatures or behaviors were changed.
 
 ## Convex Dev Command Used
 
-```
+```bash
 bunx convex dev --once
 ```
 
@@ -185,7 +185,7 @@ to configure a Convex project"), so the dev command above is the documented path
 
 ## Seed Command / Mutation Used
 
-```
+```bash
 bunx convex run seed:seedDemoFixture     # run 1 -> { "created": true,  ... }
 bunx convex run seed:seedDemoFixture     # run 2 -> { "created": false, ... }
 ```

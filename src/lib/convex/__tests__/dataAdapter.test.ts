@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { createMockFixture } from "../../mock/fixtures";
 import {
@@ -17,6 +17,26 @@ import {
 } from "../dataAdapter";
 
 const NOW_BEFORE_DEADLINE = "2026-05-29T12:00:00+05:30";
+const ORIGINAL_PUBLIC_CONVEX_URL = process.env.PUBLIC_CONVEX_URL;
+const ORIGINAL_VITE_CONVEX_URL = process.env.VITE_CONVEX_URL;
+
+function restoreEnv(name: "PUBLIC_CONVEX_URL" | "VITE_CONVEX_URL", value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
+beforeEach(() => {
+  delete process.env.PUBLIC_CONVEX_URL;
+  delete process.env.VITE_CONVEX_URL;
+});
+
+afterEach(() => {
+  restoreEnv("PUBLIC_CONVEX_URL", ORIGINAL_PUBLIC_CONVEX_URL);
+  restoreEnv("VITE_CONVEX_URL", ORIGINAL_VITE_CONVEX_URL);
+});
 
 // These tests run with Convex NOT configured (no PUBLIC_CONVEX_URL or
 // VITE_CONVEX_URL fallback), so the

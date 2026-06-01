@@ -168,7 +168,11 @@ export async function runReportBuyerIssue(
   const local = reportBuyerIssue(order, issue, reasonCode, evidenceText);
   const client = await getConvexClient();
   if (!client) return local;
-  await client.mutation(functionRefs.seedDemoFixture, {});
-  await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
+  try {
+    await client.mutation(functionRefs.seedDemoFixture, {});
+    await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
+  } catch {
+    return local;
+  }
   return local;
 }

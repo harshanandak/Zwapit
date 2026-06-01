@@ -82,7 +82,7 @@ TDD steps:
 
 1. Add schema/type checks for required fields and indexes.
 2. Implement schema.
-3. Regenerate Convex generated files through the documented Convex dev command.
+3. Regenerate Convex-generated files through the documented Convex dev command.
 
 Expected output:
 

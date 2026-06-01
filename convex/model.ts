@@ -211,7 +211,7 @@ export async function applySellerSubmit(
   const result = sellerMarkTransferred(orderDocToMock(orderDoc), transferDocToMock(transferDoc), {
     actorId: orderDoc.sellerId,
     evidenceSummary: SELLER_EVIDENCE,
-    submittedAt: new Date().toISOString(),
+    submittedAt: options.submittedAt ?? NOW_BEFORE_DEADLINE,
   });
   await ctx.db.patch(orderDoc._id, { state: result.order.state });
   await ctx.db.patch(transferDoc._id, {
