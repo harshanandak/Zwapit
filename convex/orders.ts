@@ -349,7 +349,7 @@ export const advanceTimeline = mutation({
       }
       case "dispute_window_open": {
         if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
-        const order = await applyComplete(ctx, orderKey);
+        const order = await applyComplete(ctx, orderKey, new Date().toISOString());
         return { state: order.state, action: "complete_after_window" };
       }
       default:
