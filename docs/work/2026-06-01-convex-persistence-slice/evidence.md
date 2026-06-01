@@ -493,9 +493,9 @@ stage with the `Advance (demo)` button). No persistent pill/stepper divergence.
   smoke, set `PUBLIC_CONVEX_URL` (e.g. via a gitignored `.env.production.local`)
   pointing at the local Convex deployment, then `bun run build` + serve. The
   client still honors `VITE_CONVEX_URL` as a fallback.
-- Any remaining `VITE_CONVEX_URL` references in `design.md` / deploy docs are now
-  stale and should be updated to `PUBLIC_CONVEX_URL` (left to Codex/the doc owner;
-  out of this fix's scope).
+- Remaining current-plan `VITE_CONVEX_URL` references in `design.md`, `research.md`,
+  `tasks.md`, and source comments are stale unless they describe the fallback;
+  Codex updated those in the re-validation pass below.
 
 ## Hard Exclusions — Confirmation (NOT Added)
 
@@ -504,3 +504,86 @@ and a TypeScript env type. No real Clerk, Razorpay, real payments, payout setup,
 production admin, demand discovery, category expansion, wallet, real KYC, real
 OCR, AI parser, or production source integration was added. Mock auth remains
 `user_demo_1`; mock checkout remains mock-only.
+
+---
+
+# Codex Re-Validation After Wave 2 Fix
+
+Date: 2026-06-01
+Validator: Codex
+Branch validated: `claude/convex-persistence-slice-wave1`
+Latest commit before Codex doc/comment updates: `767ba7a`
+
+## Result
+
+Gate status: pass.
+
+The browser blocker from the prior Codex validation is resolved. Direct order
+route loads can reveal the paid timeline from Convex with empty localStorage, and
+the checkout -> order -> reload path preserves the paid timeline.
+
+## Commands Run
+
+- `bun run check`
+- `bunx tsc --noEmit`
+- `bun run build`
+- `bun test`
+- `git diff --check`
+- `bunx convex run seed:seedDemoFixture`
+- `bunx convex run seed:seedDemoFixture`
+- `bunx convex run orders:getCurrentFixtureView`
+- production build with `PUBLIC_CONVEX_URL=http://127.0.0.1:3210`
+- `bunx astro preview --host 127.0.0.1 --port 4325`
+- Chrome DevTools Protocol smoke against `http://127.0.0.1:4325`
+
+## Validation Evidence
+
+- Standard checks passed:
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bunx tsc --noEmit`: exit 0.
+  - `bun run build`: success, 15 pages built.
+  - `bun test`: exit 0.
+  - `git diff --check`: clean.
+- Convex seed returned the same public demo keys twice:
+  `listing_bms_event_1`, `order_demo_1`, `transfer_demo_1`.
+  The Convex CLI still prints the known Windows libuv shutdown assertion after
+  returning valid JSON.
+- `orders:getCurrentFixtureView` returned the persisted demo fixture.
+- Direct order-route browser smoke with localStorage cleared:
+  - `#order-checkout-required`: hidden.
+  - `#paid-order-content`: visible.
+  - status pill: `Receipt confirmed`.
+  - `Advance (demo)` button: present.
+  - `Complete checkout first`: absent from visible text.
+- Checkout browser smoke:
+  - Loaded `/app/checkout/listing_bms_event_1`.
+  - Checked `#eligibility-ack`.
+  - Clicked `Pay ₹2,411.80`.
+  - Browser reached `/app/tickets` with no checkout warning.
+  - Navigated to `/app/orders/order_demo_1`: paid content visible and
+    `Advance (demo)` present.
+  - Reloaded the order route: paid content still visible and `Advance (demo)`
+    still present.
+
+## Codex Doc/Comment Update
+
+Claude noted that remaining `VITE_CONVEX_URL` references in design/deploy docs
+were stale after the browser variable change. Codex updated current plan docs and
+source comments to say browser code uses `PUBLIC_CONVEX_URL`, with
+`VITE_CONVEX_URL` retained as a fallback.
+
+Files updated:
+
+- `docs/work/2026-06-01-convex-persistence-slice/design.md`
+- `docs/work/2026-06-01-convex-persistence-slice/research.md`
+- `docs/work/2026-06-01-convex-persistence-slice/tasks.md`
+- `src/lib/convex/client.ts`
+- `src/lib/convex/dataAdapter.ts`
+- `src/lib/convex/env.ts`
+- `src/lib/convex/__tests__/dataAdapter.test.ts`
+
+## Hard Exclusions
+
+No real Clerk, Razorpay, real payments, payout setup, production admin, demand
+discovery, category expansion, wallet, real KYC, real OCR, AI parser, or
+production source integration was added during Codex re-validation.

@@ -1,7 +1,7 @@
 // Convex configuration boundary.
 //
 // The app must stay bootable when Convex is NOT configured in a local shell
-// (no VITE_CONVEX_URL). Every Convex code path checks `isConvexConfigured()`
+// (no PUBLIC_CONVEX_URL or VITE_CONVEX_URL fallback). Every Convex code path checks `isConvexConfigured()`
 // first and falls back to the existing local mock flow when it returns false.
 
 export function getConvexUrl(): string | undefined {

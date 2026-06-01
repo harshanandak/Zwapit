@@ -87,8 +87,9 @@ mock-visible flow in Convex while preserving current UI behavior.
 Sources queried through Context7 on 2026-06-01:
 
 - Convex React quickstart: `https://docs.convex.dev/quickstart/react`
-  - React integration uses `ConvexReactClient`, `ConvexProvider`, and
-    `VITE_CONVEX_URL`.
+  - React integration uses `ConvexReactClient` and `ConvexProvider`. The generic
+    Vite example uses `VITE_CONVEX_URL`, but this Astro app exposes the browser
+    value as `PUBLIC_CONVEX_URL` and keeps `VITE_CONVEX_URL` only as a fallback.
 - Convex React API: `https://docs.convex.dev/api/modules/react`
   - `useQuery` returns `undefined` while loading and subscribes reactively.
   - `useMutation` is the React write hook for Convex functions.

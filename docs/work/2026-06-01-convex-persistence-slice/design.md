@@ -196,8 +196,9 @@ and ask the user before expanding scope.
 
 Convex docs checked on 2026-06-01:
 
-- React apps wrap descendants in `ConvexProvider` with `ConvexReactClient` and
-  use `VITE_CONVEX_URL`.
+- React apps wrap descendants in `ConvexProvider` with `ConvexReactClient`.
+  In this Astro app, browser code must use `PUBLIC_CONVEX_URL`; `VITE_CONVEX_URL`
+  remains a legacy fallback only.
 - React `useQuery` returns `undefined` while loading and subscribes to updates.
 - Convex schema lives in `convex/schema.ts` with `defineSchema` and
   `defineTable`.

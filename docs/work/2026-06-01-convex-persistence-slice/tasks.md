@@ -35,7 +35,8 @@ What to implement:
 
 - Install the `convex` package.
 - Initialize the local `convex/` folder.
-- Add a provider/client boundary using `VITE_CONVEX_URL`.
+- Add a provider/client boundary using `PUBLIC_CONVEX_URL` for browser code,
+  with `VITE_CONVEX_URL` retained only as a legacy fallback.
 - Keep app boot resilient when Convex is not configured in a local shell.
 
 TDD steps:

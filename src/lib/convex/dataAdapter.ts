@@ -2,7 +2,8 @@
 //
 // Returns the SAME effective shapes the local mock flow already produces
 // (createMockFixture(), connectMock* and the DemoState/TimelineActionResult used
-// by the timeline island). When Convex is configured (VITE_CONVEX_URL), reads
+// by the timeline island). When Convex is configured (PUBLIC_CONVEX_URL, or the
+// legacy VITE_CONVEX_URL fallback), reads
 // and the mock-visible flow transitions go through Convex (so demo state
 // persists and survives reload); otherwise every function falls back to the
 // existing local behavior with no UI change.

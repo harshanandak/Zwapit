@@ -18,7 +18,8 @@ import {
 
 const NOW_BEFORE_DEADLINE = "2026-05-29T12:00:00+05:30";
 
-// These tests run with Convex NOT configured (no VITE_CONVEX_URL), so the
+// These tests run with Convex NOT configured (no PUBLIC_CONVEX_URL or
+// VITE_CONVEX_URL fallback), so the
 // adapter exercises its fallback path. They prove the adapter returns the SAME
 // effective shapes the local mock flow produces — the contract that lets routes
 // switch from direct fixture reads to adapter reads with no UI/state regression.
