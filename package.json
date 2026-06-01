@@ -35,6 +35,7 @@
     "wrangler": "^4.95.0"
   },
   "overrides": {
+    "ws": "8.20.1",
     "yaml-language-server": "1.23.0"
   }
 }
