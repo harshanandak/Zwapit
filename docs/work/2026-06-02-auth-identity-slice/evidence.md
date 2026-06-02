@@ -146,6 +146,23 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Fresh review found another unresolved Codex thread:
+  - `src/lib/convex/dataAdapter.ts`: Clerk-configured paths called current-user mutations, but the Convex client did not provide a Clerk JWT and no `syncAppUserFromProvider` call existed in `src/`.
+- Fix:
+  - `src/lib/convex/client.ts` now installs an optional `ConvexClient.setAuth(...)` token fetcher when Clerk auth is configured, using `window.Clerk.session.getToken({ template: "convex" })` when a Clerk runtime is present.
+  - Guarded data-adapter mutation paths now call `identity:syncAppUserFromProvider` before current-user checkout/timeline/issue mutations.
+- Source checked: Convex docs for Clerk integration and `ConvexClient.setAuth` token behavior.
+- Fresh verification after token wiring fix:
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts src/lib/auth/__tests__/authAdapter.test.ts`: 13 pass, 0 fail, 34 assertions.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.
 
 ## `/review` Follow-Up Evidence
 

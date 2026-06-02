@@ -39,6 +39,11 @@ import { validateCheckout } from "../validation/checkoutValidation";
 import { getConvexClient } from "./client";
 import { functionRefs } from "./functionRefs";
 
+async function syncCurrentUserForGuardedPath(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
+  if (!client || !isClerkAuthConfigured()) return;
+  await client.mutation(functionRefs.syncAppUserFromProvider, {});
+}
+
 // ---- Reads ----
 
 // Full demo fixture (same shape as createMockFixture()).
@@ -160,6 +165,7 @@ export async function runAdvanceTimeline(
   }
   try {
     const useGuardedMutations = isClerkAuthConfigured();
+    await syncCurrentUserForGuardedPath(client);
     const advanced = useGuardedMutations
       ? state.order.state === "transfer_pending"
         ? await client.mutation(functionRefs.sellerSubmitTransferForCurrentUser, {
@@ -205,6 +211,7 @@ export async function runMockCheckout(
       totalShownToBuyer: order.mockPaymentSummary.totalPayable,
     };
     if (isClerkAuthConfigured()) {
+      await syncCurrentUserForGuardedPath(client);
       await client.mutation(functionRefs.mockCheckoutForCurrentUser, checkoutArgs);
     } else {
       await client.mutation(functionRefs.mockCheckout, checkoutArgs);
@@ -231,6 +238,7 @@ export async function runReportBuyerIssue(
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
     if (isClerkAuthConfigured()) {
+      await syncCurrentUserForGuardedPath(client);
       await client.mutation(functionRefs.buyerReportIssueForCurrentUser, { reasonCode, evidenceText });
     } else {
       await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
