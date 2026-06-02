@@ -390,3 +390,17 @@ Fresh verification:
   - `bun audit`: no vulnerabilities found.
   - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
   - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+- Ninth review follow-up found a still-valid seller timeline hydration gap:
+  - Sell > Orders used `loadSellerOrderView()` to reveal the seller card, but `mountTimelinePanel(..., "seller")` still initialized and hydrated through buyer-local state via `loadBuyerOrderState()`.
+- Fix: the seller page now passes the seller-scoped order/transfer task into the timeline panel, and the panel hydrates with `loadSellerOrderView()` for seller role while preserving buyer hydration for buyer role.
+- Fresh verification after ninth review fix:
+  - Initial parallel `bun run check` attempt hit an Astro checker `EPIPE`/timeout while output was being collected; rerun sequentially passed.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun audit`: no vulnerabilities found.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.

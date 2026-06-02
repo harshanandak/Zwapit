@@ -10,18 +10,18 @@ import {
   sellerStages,
   type DemoState,
 } from "./mockFlow";
-import { loadBuyerOrderState, runAdvanceTimeline } from "../convex/dataAdapter";
+import { loadBuyerOrderState, loadSellerOrderView, runAdvanceTimeline } from "../convex/dataAdapter";
 
 type Role = "buyer" | "seller";
 
-export function mountTimelinePanel(containerId: string, role: Role): void {
+export function mountTimelinePanel(containerId: string, role: Role, initialState?: DemoState): void {
   const container = document.getElementById(containerId);
   if (!container) return;
 
   // First paint uses the local/seeded demo state so the screen is never blank
   // and never shows a new product state. When Convex is configured the state is
-  // then hydrated from the backend (see the loadBuyerOrderState() call below).
-  let state: DemoState = loadDemoState();
+  // then hydrated from the backend through the role-scoped read below.
+  let state: DemoState = initialState ?? loadDemoState();
   let mutationVersion = 0;
 
   const stages = role === "seller" ? sellerStages : buyerStages;
@@ -99,10 +99,18 @@ export function mountTimelinePanel(containerId: string, role: Role): void {
 
   render();
 
+  async function loadRoleState(): Promise<DemoState> {
+    if (role === "seller") {
+      const view = await loadSellerOrderView();
+      return { order: view.order, transferTask: view.transferTask };
+    }
+    return loadBuyerOrderState();
+  }
+
   // Hydrate from Convex when configured; a no-op (returns the same local state)
   // otherwise, so behavior is unchanged when Convex is not set up locally.
   const hydrationVersion = mutationVersion;
-  void loadBuyerOrderState()
+  void loadRoleState()
     .then((loaded) => {
       if (mutationVersion !== hydrationVersion) return;
       state = loaded;
