@@ -174,3 +174,20 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Fourth review thread found in `src/pages/app/listings/[listingId].astro`: page-level auth gates still passed `undefined`, which relied on the adapter's demo mock default.
+- Fix: added `createCurrentAuthState()` and `isClerkAuthConfigured()`; pages now pass explicit auth state. No-Clerk local/demo mode remains mock-authenticated, while Clerk-configured mode defaults to signed-out until a real Clerk runtime supplies a user.
+- Fifth review thread found in `src/lib/convex/functionRefs.ts`: visible Convex adapter writes could still use legacy role-based mutations.
+- Fix: added `orders:advanceTimelineForCurrentUser`; `src/lib/convex/dataAdapter.ts` uses current-user guarded mutations when Clerk auth is configured and keeps legacy role-based mutations only for explicit no-Clerk demo compatibility.
+- Fresh verification after fourth/fifth review fixes:
+  - `bun test src/lib/auth/__tests__/authAdapter.test.ts convex/__tests__/identity.test.ts`: 8 pass, 0 fail, 34 assertions.
+  - `rg -n "getAuthActionState\\(" src/pages`: all page-level buy/sell gates pass explicit `authState` plus `{ requirePhoneVerified: true }`.
+  - `rg -n "sellerSubmitTransfer\\b|buyerReportIssue\\b|advanceTimeline\\b|ForCurrentUser" src/lib/convex/dataAdapter.ts src/lib/convex/functionRefs.ts`: guarded current-user mutations are used in Clerk-configured mode; legacy refs remain in demo fallback only.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.

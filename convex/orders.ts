@@ -427,3 +427,44 @@ export const advanceTimeline = mutation({
     }
   },
 });
+
+export const advanceTimelineForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+  },
+  returns: v.object({ state: v.string(), action: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+
+    switch (orderDoc.state) {
+      case "checkout_pending": {
+        throw new Error("USE_MOCK_CHECKOUT");
+      }
+      case "transfer_pending": {
+        throw new Error("SELLER_TRANSFER_MUTATION_REQUIRED");
+      }
+      case "transfer_submitted": {
+        await requireBuyerForOrder(ctx, orderKey);
+        const order = await applyBuyerConfirm(ctx, orderKey);
+        return { state: order.state, action: "buyer_confirm_received" };
+      }
+      case "buyer_confirmed": {
+        await requireBuyerForOrder(ctx, orderKey);
+        const order = await applyOpenProtectionWindow(ctx, orderKey);
+        return { state: order.state, action: "open_protection_window" };
+      }
+      case "dispute_window_open": {
+        await requireBuyerForOrder(ctx, orderKey);
+        const order = await applyComplete(ctx, orderKey, new Date().toISOString());
+        return { state: order.state, action: "complete_after_window" };
+      }
+      default:
+        return { state: orderDoc.state, action: "none" };
+    }
+  },
+});

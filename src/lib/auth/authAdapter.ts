@@ -35,6 +35,26 @@ export interface ClerkAuthStateInput {
   phoneVerified: boolean;
 }
 
+function readPublicEnv(name: "PUBLIC_CLERK_PUBLISHABLE_KEY" | "VITE_CLERK_PUBLISHABLE_KEY"): string | undefined {
+  try {
+    const value = import.meta.env[name];
+    if (typeof value === "string" && value.length > 0) return value;
+  } catch {
+    // import.meta.env is not available in bun tests and some server contexts.
+  }
+
+  if (typeof process !== "undefined" && process.env) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+
+  return undefined;
+}
+
+export function isClerkAuthConfigured(): boolean {
+  return readPublicEnv("PUBLIC_CLERK_PUBLISHABLE_KEY") !== undefined || readPublicEnv("VITE_CLERK_PUBLISHABLE_KEY") !== undefined;
+}
+
 export function createMockAuthState(): AuthState {
   return {
     status: "authenticated",
@@ -46,6 +66,11 @@ export function createMockAuthState(): AuthState {
 
 export function createSignedOutAuthState(): AuthState {
   return { status: "signed_out" };
+}
+
+export function createCurrentAuthState(): AuthState {
+  if (isClerkAuthConfigured()) return createSignedOutAuthState();
+  return createMockAuthState();
 }
 
 export function createClerkAuthState(input: ClerkAuthStateInput): AuthState {

@@ -1,10 +1,11 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import AuthActionGate from "../../../components/AuthActionGate.astro";
-import { getAuthActionState } from "../../../lib/auth/authAdapter";
+import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/authAdapter";
 
-const uploadAction = getAuthActionState("sell", "/app/sell/upload", undefined, { requirePhoneVerified: true });
-const ordersAction = getAuthActionState("sell", "/app/sell/orders", undefined, { requirePhoneVerified: true });
+const authState = createCurrentAuthState();
+const uploadAction = getAuthActionState("sell", "/app/sell/upload", authState, { requirePhoneVerified: true });
+const ordersAction = getAuthActionState("sell", "/app/sell/orders", authState, { requirePhoneVerified: true });
 ---
 
 <AppShell routeId="/app/sell" title="Sell" activeTab="sell">

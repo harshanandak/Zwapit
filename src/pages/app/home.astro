@@ -2,11 +2,12 @@
 import AppShell from "../../components/AppShell.astro";
 import AuthActionGate from "../../components/AuthActionGate.astro";
 import ListingCard from "../../components/buyer/ListingCard.astro";
-import { getAuthActionState } from "../../lib/auth/authAdapter";
+import { createCurrentAuthState, getAuthActionState } from "../../lib/auth/authAdapter";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
-const sellAction = getAuthActionState("sell", "/app/sell", undefined, { requirePhoneVerified: true });
+const authState = createCurrentAuthState();
+const sellAction = getAuthActionState("sell", "/app/sell", authState, { requirePhoneVerified: true });
 
 // First slice ships one fixture listing. Blocked / draft / under-review listings
 // are hidden from the marketplace; live and waitlist-only listings are shown.

@@ -1,18 +1,39 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   createClerkAuthState,
+  createCurrentAuthState,
   createSignedOutAuthState,
   getAuthActionState,
   getCurrentUser,
+  isClerkAuthConfigured,
   requirePhoneVerified,
   requireUser,
   syncUserToConvex,
 } from "../authAdapter";
 import { mockCurrentUserId } from "../mockAuth";
 
+const ORIGINAL_PUBLIC_CLERK_PUBLISHABLE_KEY = process.env.PUBLIC_CLERK_PUBLISHABLE_KEY;
+const ORIGINAL_VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+function restoreEnv(name: "PUBLIC_CLERK_PUBLISHABLE_KEY" | "VITE_CLERK_PUBLISHABLE_KEY", value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
 describe("auth adapter contract", () => {
+  afterEach(() => {
+    restoreEnv("PUBLIC_CLERK_PUBLISHABLE_KEY", ORIGINAL_PUBLIC_CLERK_PUBLISHABLE_KEY);
+    restoreEnv("VITE_CLERK_PUBLISHABLE_KEY", ORIGINAL_VITE_CLERK_PUBLISHABLE_KEY);
+  });
+
   test("keeps the mock demo user as the default local auth state", () => {
+    delete process.env.PUBLIC_CLERK_PUBLISHABLE_KEY;
+    delete process.env.VITE_CLERK_PUBLISHABLE_KEY;
+
     const user = getCurrentUser();
     const sync = syncUserToConvex();
 
@@ -20,6 +41,23 @@ describe("auth adapter contract", () => {
     expect(sync.appUser.id).toBe(mockCurrentUserId);
     expect(sync.authIdentity.appUserId).toBe(mockCurrentUserId);
     expect(sync.authIdentity.providerUserId).not.toBe(mockCurrentUserId);
+    expect(isClerkAuthConfigured()).toBe(false);
+    expect(createCurrentAuthState().status).toBe("authenticated");
+  });
+
+  test("uses signed-out gates instead of mock state when Clerk auth is configured", () => {
+    process.env.PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_zwapit";
+
+    const state = createCurrentAuthState();
+
+    expect(isClerkAuthConfigured()).toBe(true);
+    expect(state.status).toBe("signed_out");
+    expect(getAuthActionState("buy", "/app/checkout/listing_bms_event_1", state, { requirePhoneVerified: true })).toEqual({
+      action: "buy",
+      href: "/app/checkout/listing_bms_event_1",
+      reason: "AUTH_REQUIRED",
+      status: "sign_in_required",
+    });
   });
 
   test("normalizes Clerk identity without exposing provider id as the app user id", () => {

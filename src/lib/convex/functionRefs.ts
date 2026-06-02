@@ -26,4 +26,5 @@ export const functionRefs = {
   sellerSubmitTransferForCurrentUser: makeFunctionReference<"mutation">("orders:sellerSubmitTransferForCurrentUser"),
   buyerConfirmTransferForCurrentUser: makeFunctionReference<"mutation">("orders:buyerConfirmTransferForCurrentUser"),
   buyerReportIssueForCurrentUser: makeFunctionReference<"mutation">("orders:buyerReportIssueForCurrentUser"),
+  advanceTimelineForCurrentUser: makeFunctionReference<"mutation">("orders:advanceTimelineForCurrentUser"),
 } as const;

@@ -32,6 +32,7 @@ import {
   type TimelineActionOptions,
   type TimelineActionResult,
 } from "../flow/mockFlow";
+import { isClerkAuthConfigured } from "../auth/authAdapter";
 import { createMockFixture } from "../mock/fixtures";
 import { evaluateSourceRule } from "../rules/evaluateRule";
 import { validateCheckout } from "../validation/checkoutValidation";
@@ -158,8 +159,14 @@ export async function runAdvanceTimeline(
     return result;
   }
   try {
-    const advanced =
-      options.actorRole === "seller" && state.order.state === "transfer_pending"
+    const useGuardedMutations = isClerkAuthConfigured();
+    const advanced = useGuardedMutations
+      ? state.order.state === "transfer_pending"
+        ? await client.mutation(functionRefs.sellerSubmitTransferForCurrentUser, {
+            submittedAt: options.submittedAt,
+          })
+        : await client.mutation(functionRefs.advanceTimelineForCurrentUser, {})
+      : options.actorRole === "seller" && state.order.state === "transfer_pending"
         ? await client.mutation(functionRefs.sellerSubmitTransfer, {
             submittedAt: options.submittedAt,
             actorRole: options.actorRole,
@@ -218,7 +225,11 @@ export async function runReportBuyerIssue(
   if (!client) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
+    if (isClerkAuthConfigured()) {
+      await client.mutation(functionRefs.buyerReportIssueForCurrentUser, { reasonCode, evidenceText });
+    } else {
+      await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
+    }
   } catch {
     return local;
   }

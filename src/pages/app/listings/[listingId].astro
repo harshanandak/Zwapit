@@ -7,7 +7,7 @@ import {
   protectionLabel,
   transferModeLabel,
 } from "../../../components/buyer/format";
-import { getAuthActionState } from "../../../lib/auth/authAdapter";
+import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/authAdapter";
 import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 export function getStaticPaths() {
@@ -15,7 +15,8 @@ export function getStaticPaths() {
 }
 
 const { listing, sourceRule, purchasable } = await loadListingFlowView();
-const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`, undefined, { requirePhoneVerified: true });
+const authState = createCurrentAuthState();
+const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`, authState, { requirePhoneVerified: true });
 ---
 
 <AppShell routeId="/app/listings/:listingId" title="Listing Detail" activeTab="home">
