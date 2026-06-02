@@ -263,6 +263,22 @@ Fresh verification:
   - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
+- Fresh Codex follow-up comment after commit `4a9a7c5`:
+  - `src/lib/convex/dataAdapter.ts`: Clerk-configured seller order reads that hit `SELLER_CLAIM_CLOSED` fell back to local paid seller state.
+- Fix:
+  - `loadSellerOrderView` now returns the baseline checkout-pending seller fixture for Clerk-configured claim/read errors, which the page renders as the empty seller state instead of stale paid seller controls.
+- Focused verification after this fix:
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts convex/__tests__/identity.test.ts src/lib/auth/__tests__/authAdapter.test.ts`: 16 pass, 0 fail, 46 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+- Full verification after this fix:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bun run build`: 15 pages built.
+  - `bun audit`: no vulnerabilities found.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
 
 ## `/review` Follow-Up Evidence
 

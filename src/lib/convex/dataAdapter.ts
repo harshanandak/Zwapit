@@ -120,6 +120,7 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
     }
     return connectSellerOrderFlow();
   } catch {
+    if (isClerkAuthConfigured()) return connectSellerOrderFlow();
     return base;
   }
 }
