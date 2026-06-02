@@ -91,7 +91,7 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
         transferTask: first.transferTask,
       };
     }
-    return base;
+    return connectSellerOrderFlow();
   } catch {
     return base;
   }

@@ -120,6 +120,12 @@ const displayState: OrderState = "transfer_pending";
     if (statusPill) statusPill.textContent = buyerStatusLabel(state.order.state);
   }
 
+  function hidePaidState(): void {
+    revealed = false;
+    document.getElementById("order-checkout-required")?.classList.remove("hidden");
+    document.getElementById("paid-order-content")?.classList.add("hidden");
+  }
+
   // Wire the Report-issue form. It reads the freshest order state (Convex when
   // configured, local otherwise) so it stays valid after a direct Convex load.
   function wireReportIssueForm(): void {
@@ -170,7 +176,11 @@ const displayState: OrderState = "transfer_pending";
   //    Convex is not configured, so behavior is unchanged.
   void loadBuyerOrderState()
     .then((hydrated) => {
-      if (isPaidOrder(hydrated)) applyState(hydrated);
+      if (isPaidOrder(hydrated)) {
+        applyState(hydrated);
+      } else {
+        hidePaidState();
+      }
     })
     .catch(() => {
       // Keep the synchronous local gate result on any error.
