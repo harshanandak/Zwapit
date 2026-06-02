@@ -290,6 +290,32 @@ export const mockCheckout = mutation({
   },
 });
 
+export const mockCheckoutForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+    buyerEligibilityAcknowledged: v.optional(v.boolean()),
+    totalShownToBuyer: v.optional(v.number()),
+  },
+  returns: v.object({ state: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const user = await requireAuthenticatedAppUser(ctx);
+    await validatePersistedCheckout(ctx, {
+      orderKey,
+      buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged,
+      totalShownToBuyer: args.totalShownToBuyer,
+    });
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+    await ctx.db.patch(orderDoc._id, { buyerId: user.appUserId, sellerId: user.appUserId });
+    const order = await applyMockPay(ctx, orderKey);
+    return { state: order.state };
+  },
+});
+
 export const sellerSubmitTransfer = mutation({
   args: {
     orderKey: v.optional(v.string()),

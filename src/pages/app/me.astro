@@ -3,5 +3,46 @@ import AppShell from "../../components/AppShell.astro";
 ---
 
 <AppShell routeId="/app/me" title="Me" activeTab="me">
-  <p class="text-sm text-muted-foreground">Profile placeholder.</p>
+  <section class="space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-foreground">Your account</h2>
+      <p class="mt-1 text-sm text-muted-foreground">Sign in or verify your phone to continue the protected action.</p>
+    </div>
+
+    <div class="rounded-xl border border-border bg-card p-4">
+      <p id="auth-intent-label" class="text-sm font-semibold text-foreground">Account required</p>
+      <p id="auth-intent-copy" class="mt-1 text-sm text-muted-foreground">
+        Complete your account step, then return to the action you started.
+      </p>
+      <a
+        id="auth-intent-next"
+        href="/app/home"
+        class="mt-4 block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+        data-auth-intent="next"
+      >
+        Continue
+      </a>
+    </div>
+  </section>
 </AppShell>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const next = params.get("next");
+  const target = next && next.startsWith("/app/") ? next : "/app/home";
+  const link = document.getElementById("auth-intent-next");
+  const label = document.getElementById("auth-intent-label");
+  const copy = document.getElementById("auth-intent-copy");
+  const hasClerkKey = Boolean(import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+
+  if (link instanceof HTMLAnchorElement) {
+    link.href = target;
+    link.textContent = hasClerkKey ? "Continue after account step" : "Continue demo";
+  }
+  if (label) label.textContent = hasClerkKey ? "Account step required" : "Demo account ready";
+  if (copy) {
+    copy.textContent = hasClerkKey
+      ? "Your requested action is saved. Complete sign-in or phone verification, then continue."
+      : "The local demo account is active, so you can return to the action you started.";
+  }
+</script>

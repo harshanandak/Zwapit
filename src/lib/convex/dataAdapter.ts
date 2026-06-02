@@ -200,10 +200,15 @@ export async function runMockCheckout(
   if (!client || !local.ok) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    await client.mutation(functionRefs.mockCheckout, {
+    const checkoutArgs = {
       buyerEligibilityAcknowledged: options.buyerEligibilityAcknowledged === true,
       totalShownToBuyer: order.mockPaymentSummary.totalPayable,
-    });
+    };
+    if (isClerkAuthConfigured()) {
+      await client.mutation(functionRefs.mockCheckoutForCurrentUser, checkoutArgs);
+    } else {
+      await client.mutation(functionRefs.mockCheckout, checkoutArgs);
+    }
     const res = await client.query(functionRefs.getBuyerOrder, {});
     return { ok: true, blockers: [], order: (res?.order ?? local.order) as MockOrder };
   } catch {

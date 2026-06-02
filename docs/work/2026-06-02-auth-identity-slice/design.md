@@ -28,6 +28,45 @@ Extend the existing adapter instead of introducing a parallel auth path:
 - Add role-specific identity guards for persisted order/listing mutations so actors are derived from authenticated app user id, not client-supplied ids.
 - Add UI auth states only at buy/sell action boundaries, preserving existing navigation and copy.
 
+## Alternatives Considered
+
+### Direct Clerk Integration Without Adapter
+
+- Rejected because UI, Convex identity mapping, and future provider replacement would all depend directly on Clerk-specific ids and runtime APIs.
+- Chosen approach keeps Clerk behind `src/lib/auth/authAdapter.ts`, so app data continues to use internal app user ids.
+
+### Inline Provider Identity In `users`
+
+- Rejected because storing provider subjects directly on `users` would mix app user state with auth-provider state.
+- Chosen approach keeps provider subjects in `auth_identities`, while `users`, `orders`, `listings`, and `user_verifications` reference internal app user ids.
+
+### Client-Supplied Actor IDs
+
+- Rejected because a browser client could claim a buyer or seller role for protected state transitions.
+- Chosen approach resolves actors from Convex auth identity, maps that identity through `auth_identities`, and compares the mapped app user id to stored order ownership.
+
+### Auth-First UI Flow
+
+- Rejected for this slice because the accepted visible mock flow delays login until buy/sell actions.
+- Chosen approach gates only buy/sell action CTAs and preserves existing navigation.
+
+## OWASP Security Analysis
+
+### A01:2021 - Broken Access Control
+
+- Risk: provider subjects or client-supplied actor ids could be used to access another user's order.
+- Mitigation: provider ids are stored only in `auth_identities`; protected Convex mutations derive the actor from authenticated identity and compare that app user id against stored order buyer/seller ids.
+
+### A04:2021 - Insecure Design
+
+- Risk: mixing demo identity with real auth could leave role-based mock mutations reachable in authenticated paths.
+- Mitigation: mock mode remains explicit no-Clerk demo compatibility; Clerk-configured paths use current-user guarded mutations and explicit auth state gates.
+
+### A07:2021 - Identification And Authentication Failures
+
+- Risk: a user with an unverified phone claim could reach buy/sell actions if phone status is inferred from phone number presence.
+- Mitigation: phone verification is represented through `user_verifications`; Convex sync treats only provider verified-phone claims as verified, and buy/sell gates require the phone-verification action state.
+
 ## Data Contract
 
 Existing tables already provide the first contract:
@@ -84,4 +123,3 @@ Codex validates before ship:
 - buyer/seller smoke scripts
 - auth identity tests
 - scope drift search for excluded terms and forbidden integrations
-

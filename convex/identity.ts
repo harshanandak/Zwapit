@@ -16,6 +16,7 @@ type ConvexAuthIdentity = {
 type AuthCtx = QueryCtx | MutationCtx;
 
 const PROVIDER = "clerk" as const;
+const PHONE_REQUIRED_ACTIONS: Array<"buy" | "sell"> = ["buy", "sell"];
 
 function displayNameFromIdentity(identity: ConvexAuthIdentity): string {
   return identity.name ?? identity.email ?? "Zwapit user";
@@ -134,6 +135,15 @@ export const syncAppUserFromProvider = mutation({
 
 export const getCurrentAppUser = query({
   args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      displayName: v.string(),
+      id: v.string(),
+      phoneVerified: v.boolean(),
+      role: v.literal("buyer_seller"),
+    }),
+  ),
   handler: async (ctx) => {
     const user = await resolveCurrentAppUser(ctx);
     if (!user) return null;
@@ -148,22 +158,33 @@ export const getCurrentAppUser = query({
 
 export const getPhoneVerificationRequirement = query({
   args: {},
+  returns: v.object({
+    appUserId: v.string(),
+    phoneVerified: v.boolean(),
+    requiredFor: v.array(v.union(v.literal("buy"), v.literal("sell"))),
+    status: v.union(v.literal("verified"), v.literal("required")),
+  }),
   handler: async (ctx) => {
     const user = await requireAuthenticatedAppUser(ctx);
     return {
       appUserId: user.appUserId,
       phoneVerified: user.phoneVerified,
-      requiredFor: ["buy", "sell"] as const,
-      status: user.phoneVerified ? "verified" : "required",
+      requiredFor: PHONE_REQUIRED_ACTIONS,
+      status: user.phoneVerified ? ("verified" as const) : ("required" as const),
     };
   },
 });
 
 export const requirePhoneVerifiedForAction = mutation({
   args: { action: v.union(v.literal("buy"), v.literal("sell")) },
+  returns: v.object({
+    action: v.union(v.literal("buy"), v.literal("sell")),
+    appUserId: v.string(),
+    status: v.literal("verified"),
+  }),
   handler: async (ctx, args) => {
     const user = await requireAuthenticatedAppUser(ctx);
     if (!user.phoneVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
-    return { action: args.action, appUserId: user.appUserId, status: "verified" };
+    return { action: args.action, appUserId: user.appUserId, status: "verified" as const };
   },
 });

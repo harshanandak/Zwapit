@@ -146,6 +146,32 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+
+## `/review` Follow-Up Evidence
+
+- Fresh review found two unresolved Codex threads:
+  - `src/components/AuthActionGate.astro`: gated CTAs routed to `/app/me?next=...`, but `/app/me` was only a placeholder.
+  - `src/lib/convex/dataAdapter.ts`: Clerk-configured current-user mutations could reject the seeded demo order because owner ids remained mock fixture ids.
+- Older CodeRabbit review body still had actionable planning/API-contract comments:
+  - `docs/work/2026-06-02-auth-identity-slice/design.md`: missing alternatives considered and OWASP security analysis.
+  - `convex/identity.ts`: missing return validators on identity functions.
+- Fixes:
+  - `/app/me` now preserves and resumes the `next` intent as an auth-step handoff surface without adding real Clerk UI.
+  - `orders:mockCheckoutForCurrentUser` validates checkout, claims the demo order to the current internal app user, and then applies the mock pay transition.
+  - `src/lib/convex/dataAdapter.ts` uses `mockCheckoutForCurrentUser` in Clerk-configured mode.
+  - `identity:*` functions now declare return validators.
+  - `design.md` now documents alternatives considered and OWASP A01/A04/A07 analysis.
+- Fresh verification after follow-up review fixes:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test convex/__tests__/identity.test.ts src/lib/auth/__tests__/authAdapter.test.ts`: 8 pass, 0 fail, 34 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.
 - Second review thread found in `src/pages/app/listings/[listingId].astro`: buy/sell UI gates did not pass the phone-verification-required option.
 - Fix: every page-level `getAuthActionState("buy" | "sell", ...)` call now passes `{ requirePhoneVerified: true }`.
 - Regression: `src/lib/auth/__tests__/authAdapter.test.ts` covers the phone-required buy state as well as sell.
