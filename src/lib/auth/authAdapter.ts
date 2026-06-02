@@ -51,8 +51,12 @@ function readPublicEnv(name: "PUBLIC_CLERK_PUBLISHABLE_KEY" | "VITE_CLERK_PUBLIS
   return undefined;
 }
 
+export function getClerkPublishableKey(): string | undefined {
+  return readPublicEnv("PUBLIC_CLERK_PUBLISHABLE_KEY") ?? readPublicEnv("VITE_CLERK_PUBLISHABLE_KEY");
+}
+
 export function isClerkAuthConfigured(): boolean {
-  return readPublicEnv("PUBLIC_CLERK_PUBLISHABLE_KEY") !== undefined || readPublicEnv("VITE_CLERK_PUBLISHABLE_KEY") !== undefined;
+  return getClerkPublishableKey() !== undefined;
 }
 
 export function createMockAuthState(): AuthState {

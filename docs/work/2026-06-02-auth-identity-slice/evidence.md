@@ -185,6 +185,26 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Fresh Codex follow-up comments after commit `92077ba`:
+  - `convex/orders.ts`: `mockCheckoutForCurrentUser` required auth but did not enforce `phoneVerified` at the backend boundary.
+  - `src/lib/convex/client.ts`: Clerk-configured mode installed a Convex token callback but had no Clerk runtime loader, so `window.Clerk` could remain missing.
+- Fix:
+  - `convex/identity.ts` now exposes `requirePhoneVerifiedAppUser`, reusing the existing `PHONE_VERIFICATION_REQUIRED` boundary.
+  - `mockCheckoutForCurrentUser` now uses `requirePhoneVerifiedAppUser`, so buy checkout is blocked server-side for unverified authenticated users.
+  - `src/lib/auth/authAdapter.ts` exposes the configured Clerk publishable key through the auth adapter.
+  - `src/lib/convex/client.ts` lazily loads ClerkJS from the configured public key before asking Clerk for the Convex token. No package or lockfile dependency was added.
+- Focused verification after these fixes:
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test convex/__tests__/identity.test.ts src/lib/auth/__tests__/authAdapter.test.ts src/lib/convex/__tests__/dataAdapter.test.ts`: 16 pass, 0 fail, 46 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+- Full verification after these fixes:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bun run build`: 15 pages built.
+  - `bun audit`: no vulnerabilities found.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
 
 ## `/review` Follow-Up Evidence
 

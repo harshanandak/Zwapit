@@ -12,7 +12,7 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAuthenticatedAppUser } from "./identity";
+import { requireAuthenticatedAppUser, requirePhoneVerifiedAppUser } from "./identity";
 import {
   applyBuyerConfirm,
   applyComplete,
@@ -299,7 +299,7 @@ export const mockCheckoutForCurrentUser = mutation({
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
     const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
-    const user = await requireAuthenticatedAppUser(ctx);
+    const user = await requirePhoneVerifiedAppUser(ctx);
     await validatePersistedCheckout(ctx, {
       orderKey,
       buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged,

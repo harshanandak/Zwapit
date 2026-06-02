@@ -125,6 +125,12 @@ export async function requireAuthenticatedAppUser(ctx: AuthCtx): Promise<Doc<"us
   return user;
 }
 
+export async function requirePhoneVerifiedAppUser(ctx: AuthCtx): Promise<Doc<"users">> {
+  const user = await requireAuthenticatedAppUser(ctx);
+  if (!user.phoneVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
+  return user;
+}
+
 export const syncAppUserFromProvider = mutation({
   args: {},
   handler: async (ctx) => {
@@ -183,8 +189,7 @@ export const requirePhoneVerifiedForAction = mutation({
     status: v.literal("verified"),
   }),
   handler: async (ctx, args) => {
-    const user = await requireAuthenticatedAppUser(ctx);
-    if (!user.phoneVerified) throw new Error("PHONE_VERIFICATION_REQUIRED");
+    const user = await requirePhoneVerifiedAppUser(ctx);
     return { action: args.action, appUserId: user.appUserId, status: "verified" as const };
   },
 });
