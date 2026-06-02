@@ -101,7 +101,7 @@ const payoutReady = sellerPaymentAccount.status === "mock_ready";
       if (emptyState) emptyState.hidden = true;
       if (orderCard) orderCard.hidden = false;
       if (statusLabel) statusLabel.textContent = sellerStatusLabel(order.state);
-      mountTimelinePanel("seller-live", "seller");
+      mountTimelinePanel("seller-live", "seller", { order, transferTask });
     } else {
       if (emptyState) emptyState.hidden = false;
       if (orderCard) orderCard.hidden = true;

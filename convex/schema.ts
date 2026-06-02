@@ -128,7 +128,7 @@ export default defineSchema({
   // Provider identity stored separately from the internal app user id.
   auth_identities: defineTable({
     appUserId: v.string(),
-    provider: v.literal("mock_phone"),
+    provider: v.union(v.literal("mock_phone"), v.literal("clerk")),
     providerUserId: v.string(),
   })
     .index("by_app_user_id", ["appUserId"])
@@ -137,7 +137,7 @@ export default defineSchema({
   user_verifications: defineTable({
     appUserId: v.string(),
     phoneVerified: v.boolean(),
-    verificationMode: v.literal("mock"),
+    verificationMode: v.union(v.literal("mock"), v.literal("clerk_phone"), v.literal("unverified")),
   }).index("by_app_user_id", ["appUserId"]),
 
   // Mocked seller payout readiness only. No real payout/KYC fields.

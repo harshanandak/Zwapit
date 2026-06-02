@@ -1,9 +1,13 @@
 ---
 import AppShell from "../../components/AppShell.astro";
+import AuthActionGate from "../../components/AuthActionGate.astro";
 import ListingCard from "../../components/buyer/ListingCard.astro";
+import { createCurrentAuthState, getAuthActionState } from "../../lib/auth/authAdapter";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
+const authState = createCurrentAuthState();
+const sellAction = getAuthActionState("sell", "/app/sell", authState, { requirePhoneVerified: true });
 
 // First slice ships one fixture listing. Blocked / draft / under-review listings
 // are hidden from the marketplace; live and waitlist-only listings are shown.
@@ -28,12 +32,11 @@ const visible = catalogue.filter(
     >
       <p class="text-sm font-medium text-foreground">No tickets available yet</p>
       <p class="mt-1 text-xs text-muted-foreground">Check back soon, or list one of your own.</p>
-      <a
-        href="/app/sell"
+      <AuthActionGate
+        state={sellAction}
+        label="Upload to Sell"
         class="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
-      >
-        Upload to Sell
-      </a>
+      />
     </div>
 
     <div id="home-listing-card" class={visible.length === 0 ? "hidden space-y-3" : "space-y-3"}>

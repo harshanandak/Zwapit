@@ -32,11 +32,28 @@ import {
   type TimelineActionOptions,
   type TimelineActionResult,
 } from "../flow/mockFlow";
+import { isClerkAuthConfigured } from "../auth/authAdapter";
 import { createMockFixture } from "../mock/fixtures";
 import { evaluateSourceRule } from "../rules/evaluateRule";
 import { validateCheckout } from "../validation/checkoutValidation";
 import { getConvexClient } from "./client";
 import { functionRefs } from "./functionRefs";
+
+async function syncCurrentUserForGuardedPath(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
+  if (!client || !isClerkAuthConfigured()) return;
+  await client.mutation(functionRefs.syncAppUserFromProvider, {});
+}
+
+async function claimCurrentUserSellerOrder(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
+  if (!client || !isClerkAuthConfigured()) return;
+  await syncCurrentUserForGuardedPath(client);
+  await client.mutation(functionRefs.claimDemoSellerOrderForCurrentUser, {});
+}
+
+function createBaselineDemoState(): DemoState {
+  const fixture = createMockFixture();
+  return { order: fixture.order, transferTask: fixture.transferTask };
+}
 
 // ---- Reads ----
 
@@ -62,12 +79,18 @@ export async function loadBuyerOrderState(): Promise<DemoState> {
   if (!client) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    const res = await client.query(functionRefs.getBuyerOrder, {});
+    if (isClerkAuthConfigured()) await syncCurrentUserForGuardedPath(client);
+    const res = await client.query(
+      isClerkAuthConfigured() ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
+      {},
+    );
     if (res?.order && res?.transferTask) {
       return { order: res.order, transferTask: res.transferTask };
     }
+    if (isClerkAuthConfigured()) return createBaselineDemoState();
     return local;
   } catch {
+    if (isClerkAuthConfigured()) return createBaselineDemoState();
     return local;
   }
 }
@@ -81,7 +104,11 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
   if (!client) return base;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    const rows = await client.query(functionRefs.getSellerOrders, {});
+    if (isClerkAuthConfigured()) await claimCurrentUserSellerOrder(client);
+    const rows = await client.query(
+      isClerkAuthConfigured() ? functionRefs.getSellerOrdersForCurrentUser : functionRefs.getSellerOrders,
+      {},
+    );
     const first = Array.isArray(rows) ? rows[0] : null;
     if (first?.order && first?.transferTask) {
       return {
@@ -93,6 +120,7 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
     }
     return connectSellerOrderFlow();
   } catch {
+    if (isClerkAuthConfigured()) return connectSellerOrderFlow();
     return base;
   }
 }
@@ -158,20 +186,42 @@ export async function runAdvanceTimeline(
     return result;
   }
   try {
-    const advanced =
-      options.actorRole === "seller" && state.order.state === "transfer_pending"
-        ? await client.mutation(functionRefs.sellerSubmitTransfer, {
-            submittedAt: options.submittedAt,
-            actorRole: options.actorRole,
-          })
-        : await client.mutation(functionRefs.advanceTimeline, {
-            submittedAt: options.submittedAt,
-            actorRole: options.actorRole,
-          });
-    const res = await client.query(functionRefs.getBuyerOrder, {});
+    const useGuardedMutations = isClerkAuthConfigured();
+    const usedSellerScopedMutation =
+      useGuardedMutations && options.actorRole === "seller" && state.order.state === "transfer_pending";
+    await syncCurrentUserForGuardedPath(client);
+    let advanced;
+    if (usedSellerScopedMutation) {
+      await claimCurrentUserSellerOrder(client);
+      advanced = await client.mutation(functionRefs.sellerSubmitTransferForCurrentUser, {
+        submittedAt: options.submittedAt,
+      });
+    } else if (useGuardedMutations) {
+      advanced = await client.mutation(functionRefs.advanceTimelineForCurrentUser, {});
+    } else if (options.actorRole === "seller" && state.order.state === "transfer_pending") {
+      advanced = await client.mutation(functionRefs.sellerSubmitTransfer, {
+        submittedAt: options.submittedAt,
+        actorRole: options.actorRole,
+      });
+    } else {
+      advanced = await client.mutation(functionRefs.advanceTimeline, {
+        submittedAt: options.submittedAt,
+        actorRole: options.actorRole,
+      });
+    }
+    const sellerRows = usedSellerScopedMutation ? await client.query(functionRefs.getSellerOrdersForCurrentUser, {}) : null;
+    const sellerRes = Array.isArray(sellerRows)
+      ? sellerRows.find((row) => row.order.id === state.order.id) ?? null
+      : null;
+    const buyerRes = usedSellerScopedMutation
+      ? null
+      : await client.query(
+          useGuardedMutations ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
+          {},
+        );
     const result = {
-      order: (res?.order ?? state.order) as MockOrder,
-      transferTask: res?.transferTask ?? state.transferTask,
+      order: ((sellerRes?.order ?? buyerRes?.order) ?? state.order) as MockOrder,
+      transferTask: (sellerRes?.transferTask ?? buyerRes?.transferTask) ?? state.transferTask,
       action: advanced?.action ?? "none",
       terminal: (advanced?.action ?? "none") === "none",
     };
@@ -193,11 +243,20 @@ export async function runMockCheckout(
   if (!client || !local.ok) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    await client.mutation(functionRefs.mockCheckout, {
+    const checkoutArgs = {
       buyerEligibilityAcknowledged: options.buyerEligibilityAcknowledged === true,
       totalShownToBuyer: order.mockPaymentSummary.totalPayable,
-    });
-    const res = await client.query(functionRefs.getBuyerOrder, {});
+    };
+    if (isClerkAuthConfigured()) {
+      await syncCurrentUserForGuardedPath(client);
+      await client.mutation(functionRefs.mockCheckoutForCurrentUser, checkoutArgs);
+    } else {
+      await client.mutation(functionRefs.mockCheckout, checkoutArgs);
+    }
+    const res = await client.query(
+      isClerkAuthConfigured() ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
+      {},
+    );
     return { ok: true, blockers: [], order: (res?.order ?? local.order) as MockOrder };
   } catch {
     return { ok: false, blockers: ["PERSISTENCE_WRITE_FAILED"], order };
@@ -218,7 +277,12 @@ export async function runReportBuyerIssue(
   if (!client) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
+    if (isClerkAuthConfigured()) {
+      await syncCurrentUserForGuardedPath(client);
+      await client.mutation(functionRefs.buyerReportIssueForCurrentUser, { reasonCode, evidenceText });
+    } else {
+      await client.mutation(functionRefs.buyerReportIssue, { reasonCode, evidenceText, actorRole: "buyer" });
+    }
   } catch {
     return local;
   }

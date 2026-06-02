@@ -1,11 +1,13 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
+import AuthActionGate from "../../../components/AuthActionGate.astro";
 import PriceBreakdown from "../../../components/buyer/PriceBreakdown.astro";
 import {
   formatDateTime,
   protectionLabel,
   transferModeLabel,
 } from "../../../components/buyer/format";
+import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/authAdapter";
 import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 export function getStaticPaths() {
@@ -13,6 +15,8 @@ export function getStaticPaths() {
 }
 
 const { listing, sourceRule, purchasable } = await loadListingFlowView();
+const authState = createCurrentAuthState();
+const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`, authState, { requirePhoneVerified: true });
 ---
 
 <AppShell routeId="/app/listings/:listingId" title="Listing Detail" activeTab="home">
@@ -78,13 +82,12 @@ const { listing, sourceRule, purchasable } = await loadListingFlowView();
       </div>
     </section>
 
-    <a
+    <AuthActionGate
       id="buy-link"
-      href={`/app/checkout/${listing.id}`}
+      state={buyAction}
+      label="Buy with Protection"
       class={purchasable ? "block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" : "hidden rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"}
-    >
-      Buy with Protection
-    </a>
+    />
     <p
       id="listing-unavailable"
       class={purchasable ? "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}

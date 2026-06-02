@@ -10,8 +10,9 @@
 // flow (src/lib/state/*), wrapped in convex/model.ts.
 
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { requireAuthenticatedAppUser, requirePhoneVerifiedAppUser } from "./identity";
 import {
   applyBuyerConfirm,
   applyComplete,
@@ -38,6 +39,28 @@ const issueReasonCode = v.union(
   v.literal("cannot_access_ticket"),
 );
 const actorRole = v.union(v.literal("buyer"), v.literal("seller"));
+
+async function requireBuyerForOrder(ctx: MutationCtx, orderKey: string) {
+  const orderDoc = await ctx.db
+    .query("orders")
+    .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+    .unique();
+  if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+  const user = await requireAuthenticatedAppUser(ctx);
+  if (user.appUserId !== orderDoc.buyerId) throw new Error("BUYER_ACTOR_REQUIRED");
+  return orderDoc;
+}
+
+async function requireSellerForOrder(ctx: MutationCtx, orderKey: string) {
+  const orderDoc = await ctx.db
+    .query("orders")
+    .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+    .unique();
+  if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+  const user = await requireAuthenticatedAppUser(ctx);
+  if (user.appUserId !== orderDoc.sellerId) throw new Error("SELLER_ACTOR_REQUIRED");
+  return orderDoc;
+}
 
 async function validatePersistedCheckout(
   ctx: MutationCtx,
@@ -84,6 +107,33 @@ async function validatePersistedCheckout(
     now: new Date().toISOString(),
   });
   if (!validation.ok) throw new Error(`CHECKOUT_BLOCKED:${validation.blockers.join(",")}`);
+}
+
+async function collectSellerOrders(ctx: QueryCtx, sellerId: string) {
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_seller", (q) => q.eq("sellerId", sellerId))
+    .collect();
+  const result = [];
+  for (const orderDoc of orders) {
+    if (orderDoc.state === "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_paid") {
+      continue;
+    }
+    const listingDoc = await ctx.db
+      .query("listings")
+      .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))
+      .unique();
+    const transferDoc = await ctx.db
+      .query("transfer_tasks")
+      .withIndex("by_key", (q) => q.eq("transferTaskKey", orderDoc.transferTaskId))
+      .unique();
+    result.push({
+      order: orderDocToMock(orderDoc),
+      listing: listingDoc ? listingDocToMock(listingDoc) : null,
+      transferTask: transferDoc ? transferDocToMock(transferDoc) : null,
+    });
+  }
+  return result;
 }
 
 // ---- Queries ----
@@ -219,30 +269,36 @@ export const getSellerOrders = query({
   args: { sellerId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const sellerId = args.sellerId ?? "seller_demo_1";
-    const orders = await ctx.db
+    return await collectSellerOrders(ctx, sellerId);
+  },
+});
+
+export const getBuyerOrderForCurrentUser = query({
+  args: { orderKey: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await requireAuthenticatedAppUser(ctx);
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const orderDoc = await ctx.db
       .query("orders")
-      .withIndex("by_seller", (q) => q.eq("sellerId", sellerId))
-      .collect();
-    const result = [];
-    for (const orderDoc of orders) {
-      if (orderDoc.state === "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_paid") {
-        continue;
-      }
-      const listingDoc = await ctx.db
-        .query("listings")
-        .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))
-        .unique();
-      const transferDoc = await ctx.db
-        .query("transfer_tasks")
-        .withIndex("by_key", (q) => q.eq("transferTaskKey", orderDoc.transferTaskId))
-        .unique();
-      result.push({
-        order: orderDocToMock(orderDoc),
-        listing: listingDoc ? listingDocToMock(listingDoc) : null,
-        transferTask: transferDoc ? transferDocToMock(transferDoc) : null,
-      });
-    }
-    return result;
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc || orderDoc.buyerId !== user.appUserId) return null;
+    const transferDoc = await ctx.db
+      .query("transfer_tasks")
+      .withIndex("by_key", (q) => q.eq("transferTaskKey", orderDoc.transferTaskId))
+      .unique();
+    return {
+      order: orderDocToMock(orderDoc),
+      transferTask: transferDoc ? transferDocToMock(transferDoc) : null,
+    };
+  },
+});
+
+export const getSellerOrdersForCurrentUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuthenticatedAppUser(ctx);
+    return await collectSellerOrders(ctx, user.appUserId);
   },
 });
 
@@ -267,6 +323,52 @@ export const mockCheckout = mutation({
   },
 });
 
+export const mockCheckoutForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+    buyerEligibilityAcknowledged: v.optional(v.boolean()),
+    totalShownToBuyer: v.optional(v.number()),
+  },
+  returns: v.object({ state: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const user = await requirePhoneVerifiedAppUser(ctx);
+    await validatePersistedCheckout(ctx, {
+      orderKey,
+      buyerEligibilityAcknowledged: args.buyerEligibilityAcknowledged,
+      totalShownToBuyer: args.totalShownToBuyer,
+    });
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+    await ctx.db.patch(orderDoc._id, { buyerId: user.appUserId });
+    const order = await applyMockPay(ctx, orderKey);
+    return { state: order.state };
+  },
+});
+
+export const claimDemoSellerOrderForCurrentUser = mutation({
+  args: { orderKey: v.optional(v.string()) },
+  returns: v.object({ sellerId: v.string() }),
+  handler: async (ctx, args) => {
+    const user = await requirePhoneVerifiedAppUser(ctx);
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+    if (orderDoc.sellerId === user.appUserId) return { sellerId: user.appUserId };
+    if (orderDoc.state !== "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_unpaid") {
+      throw new Error("SELLER_CLAIM_CLOSED");
+    }
+    await ctx.db.patch(orderDoc._id, { sellerId: user.appUserId });
+    return { sellerId: user.appUserId };
+  },
+});
+
 export const sellerSubmitTransfer = mutation({
   args: {
     orderKey: v.optional(v.string()),
@@ -283,12 +385,39 @@ export const sellerSubmitTransfer = mutation({
   },
 });
 
+export const sellerSubmitTransferForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+  },
+  returns: v.object({ state: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await requireSellerForOrder(ctx, orderKey);
+    const order = await applySellerSubmit(ctx, orderKey, {
+      submittedAt: args.submittedAt,
+    });
+    return { state: order.state };
+  },
+});
+
 export const buyerConfirmTransfer = mutation({
   args: { orderKey: v.optional(v.string()), actorRole: v.optional(actorRole) },
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
     if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
     const order = await applyBuyerConfirm(ctx, args.orderKey ?? DEMO_ORDER_KEY);
+    return { state: order.state };
+  },
+});
+
+export const buyerConfirmTransferForCurrentUser = mutation({
+  args: { orderKey: v.optional(v.string()) },
+  returns: v.object({ state: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await requireBuyerForOrder(ctx, orderKey);
+    const order = await applyBuyerConfirm(ctx, orderKey);
     return { state: order.state };
   },
 });
@@ -311,6 +440,23 @@ export const buyerReportIssue = mutation({
       args.reasonCode,
       evidenceItems,
     );
+    return { orderState: order.state, issueState: issue.state };
+  },
+});
+
+export const buyerReportIssueForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+    reasonCode: issueReasonCode,
+    evidenceText: v.optional(v.string()),
+  },
+  returns: v.object({ orderState: v.string(), issueState: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await requireBuyerForOrder(ctx, orderKey);
+    const text = args.evidenceText?.trim();
+    const evidenceItems = text ? [text] : [];
+    const { order, issue } = await applyReportIssue(ctx, orderKey, args.reasonCode, evidenceItems);
     return { orderState: order.state, issueState: issue.state };
   },
 });
@@ -352,6 +498,48 @@ export const advanceTimeline = mutation({
       }
       case "dispute_window_open": {
         if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
+        const order = await applyComplete(ctx, orderKey, new Date().toISOString());
+        return { state: order.state, action: "complete_after_window" };
+      }
+      default:
+        return { state: orderDoc.state, action: "none" };
+    }
+  },
+});
+
+export const advanceTimelineForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+  },
+  returns: v.object({ state: v.string(), action: v.string() }),
+  handler: async (ctx, args) => {
+    await requireAuthenticatedAppUser(ctx);
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+
+    switch (orderDoc.state) {
+      case "checkout_pending": {
+        throw new Error("USE_MOCK_CHECKOUT");
+      }
+      case "transfer_pending": {
+        throw new Error("SELLER_TRANSFER_MUTATION_REQUIRED");
+      }
+      case "transfer_submitted": {
+        await requireBuyerForOrder(ctx, orderKey);
+        const order = await applyBuyerConfirm(ctx, orderKey);
+        return { state: order.state, action: "buyer_confirm_received" };
+      }
+      case "buyer_confirmed": {
+        await requireBuyerForOrder(ctx, orderKey);
+        const order = await applyOpenProtectionWindow(ctx, orderKey);
+        return { state: order.state, action: "open_protection_window" };
+      }
+      case "dispute_window_open": {
+        await requireBuyerForOrder(ctx, orderKey);
         const order = await applyComplete(ctx, orderKey, new Date().toISOString());
         return { state: order.state, action: "complete_after_window" };
       }
