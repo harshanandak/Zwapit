@@ -29,7 +29,17 @@ import AppShell from "../../components/AppShell.astro";
 <script>
   const params = new URLSearchParams(window.location.search);
   const next = params.get("next");
-  const target = next && next.startsWith("/app/") ? next : "/app/home";
+  let target = "/app/home";
+  if (next) {
+    try {
+      const normalized = new URL(next, window.location.origin);
+      if (normalized.origin === window.location.origin && normalized.pathname.startsWith("/app/")) {
+        target = `${normalized.pathname}${normalized.search}${normalized.hash}`;
+      }
+    } catch {
+      target = "/app/home";
+    }
+  }
   const link = document.getElementById("auth-intent-next");
   const label = document.getElementById("auth-intent-label");
   const copy = document.getElementById("auth-intent-copy");

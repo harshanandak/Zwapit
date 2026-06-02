@@ -163,6 +163,28 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Fresh CodeRabbit follow-up comments after commit `026b316`:
+  - `convex/orders.ts`: `mockCheckoutForCurrentUser` incorrectly patched both `buyerId` and `sellerId` to the authenticated buyer.
+  - `convex/orders.ts`: `advanceTimelineForCurrentUser` read and branched on order state before requiring an authenticated app user.
+  - `src/lib/convex/dataAdapter.ts`: seller-scoped transfer submission refreshed through the buyer order read.
+  - `src/pages/app/me.astro`: `next` checked the raw query value before URL normalization.
+- Fix:
+  - `mockCheckoutForCurrentUser` now rebinds only `buyerId`, preserving the existing seller boundary.
+  - `advanceTimelineForCurrentUser` calls `requireAuthenticatedAppUser(ctx)` before order lookup/state branching.
+  - `runAdvanceTimeline` tracks the seller-scoped guarded transfer path and refreshes through `getSellerOrders` for that path.
+  - `/app/me` normalizes `next` with the URL API and enforces same-origin `/app/` pathname before assigning the continuation link.
+- Focused verification after these fixes:
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts src/lib/auth/__tests__/authAdapter.test.ts convex/__tests__/identity.test.ts`: 16 pass, 0 fail, 46 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+- Full verification after these fixes:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.
 
 ## `/review` Follow-Up Evidence
 

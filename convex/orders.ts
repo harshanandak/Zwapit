@@ -310,7 +310,7 @@ export const mockCheckoutForCurrentUser = mutation({
       .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
       .unique();
     if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
-    await ctx.db.patch(orderDoc._id, { buyerId: user.appUserId, sellerId: user.appUserId });
+    await ctx.db.patch(orderDoc._id, { buyerId: user.appUserId });
     const order = await applyMockPay(ctx, orderKey);
     return { state: order.state };
   },
@@ -460,6 +460,7 @@ export const advanceTimelineForCurrentUser = mutation({
   },
   returns: v.object({ state: v.string(), action: v.string() }),
   handler: async (ctx, args) => {
+    await requireAuthenticatedAppUser(ctx);
     const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
     const orderDoc = await ctx.db
       .query("orders")

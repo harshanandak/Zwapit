@@ -165,9 +165,11 @@ export async function runAdvanceTimeline(
   }
   try {
     const useGuardedMutations = isClerkAuthConfigured();
+    const usedSellerScopedMutation =
+      useGuardedMutations && options.actorRole === "seller" && state.order.state === "transfer_pending";
     await syncCurrentUserForGuardedPath(client);
     const advanced = useGuardedMutations
-      ? state.order.state === "transfer_pending"
+      ? usedSellerScopedMutation
         ? await client.mutation(functionRefs.sellerSubmitTransferForCurrentUser, {
             submittedAt: options.submittedAt,
           })
@@ -181,10 +183,12 @@ export async function runAdvanceTimeline(
             submittedAt: options.submittedAt,
             actorRole: options.actorRole,
           });
-    const res = await client.query(functionRefs.getBuyerOrder, {});
+    const sellerRows = usedSellerScopedMutation ? await client.query(functionRefs.getSellerOrders, {}) : null;
+    const sellerRes = Array.isArray(sellerRows) ? sellerRows[0] : null;
+    const buyerRes = usedSellerScopedMutation ? null : await client.query(functionRefs.getBuyerOrder, {});
     const result = {
-      order: (res?.order ?? state.order) as MockOrder,
-      transferTask: res?.transferTask ?? state.transferTask,
+      order: ((sellerRes?.order ?? buyerRes?.order) ?? state.order) as MockOrder,
+      transferTask: (sellerRes?.transferTask ?? buyerRes?.transferTask) ?? state.transferTask,
       action: advanced?.action ?? "none",
       terminal: (advanced?.action ?? "none") === "none",
     };
