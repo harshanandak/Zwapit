@@ -27,7 +27,7 @@ import AppShell from "../../components/AppShell.astro";
 </AppShell>
 
 <script>
-  import { getConvexClient } from "../../lib/convex/client";
+  import { getConvexClient, refreshConvexAuthTokenOnNextRequest } from "../../lib/convex/client";
   import { functionRefs } from "../../lib/convex/functionRefs";
 
   const params = new URLSearchParams(window.location.search);
@@ -99,6 +99,7 @@ import AppShell from "../../components/AppShell.astro";
     const client = await getConvexClient();
     if (!client) return "unknown";
     try {
+      refreshConvexAuthTokenOnNextRequest();
       await client.mutation(functionRefs.syncAppUserFromProvider, {});
       const requirement = (await client.query(functionRefs.getPhoneVerificationRequirement, {})) as
         | { status?: "verified" | "required" }

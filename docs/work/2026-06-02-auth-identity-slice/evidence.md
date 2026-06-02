@@ -377,3 +377,16 @@ Fresh verification:
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
   - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+- Eighth review follow-up found a still-valid stale-token gap:
+  - Clerk can keep session token claims cached briefly after a user updates profile/phone state, so the account-step phone check could sync stale `phone_number_verified: false`.
+- Fix: `src/lib/convex/client.ts` now supports a one-shot `skipCache: true` token request, and `/app/me` uses it before syncing the current user for the phone-verification gate.
+- Fresh verification after eighth review fix:
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.

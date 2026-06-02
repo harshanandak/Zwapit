@@ -12,6 +12,7 @@ import { getConvexUrl } from "./env";
 
 let clientPromise: Promise<ConvexClient | null> | null = null;
 let clerkPromise: Promise<ClerkRuntime | null> | null = null;
+let forceFreshTokenOnce = false;
 
 const CLERK_SCRIPT_ID = "zwapit-clerk-js";
 const CLERK_JS_URL = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js";
@@ -19,7 +20,7 @@ const CLERK_JS_URL = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/c
 type ClerkRuntime = {
   load?: () => Promise<void>;
   session?: {
-    getToken: (options: { template: "convex" }) => Promise<string | null>;
+    getToken: (options: { template: "convex"; skipCache?: boolean }) => Promise<string | null>;
   } | null;
 };
 
@@ -69,9 +70,15 @@ function configureClientAuth(client: ConvexClient): ConvexClient {
   if (!isClerkAuthConfigured()) return client;
   client.setAuth(async () => {
     const clerk = getBrowserClerk() ?? (await loadBrowserClerk());
-    return (await clerk?.session?.getToken({ template: "convex" })) ?? null;
+    const skipCache = forceFreshTokenOnce;
+    forceFreshTokenOnce = false;
+    return (await clerk?.session?.getToken({ template: "convex", skipCache })) ?? null;
   });
   return client;
+}
+
+export function refreshConvexAuthTokenOnNextRequest(): void {
+  forceFreshTokenOnce = true;
 }
 
 export function getConvexClient(): Promise<ConvexClient | null> {
