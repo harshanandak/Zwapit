@@ -35,6 +35,9 @@ jobs:
       - name: Type check
         run: bun run check
 
+      - name: Convex type check
+        run: bunx tsc --project convex/tsconfig.json --noEmit
+
   build:
     name: Build
     runs-on: ubuntu-latest

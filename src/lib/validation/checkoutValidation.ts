@@ -8,7 +8,8 @@ export type CheckoutBlocker =
   | "TOTAL_NOT_SHOWN"
   | "RULE_NOT_PURCHASABLE"
   | "SELLER_PAYOUT_NOT_READY"
-  | "SELLER_PAYOUT_ACCOUNT_MISMATCH";
+  | "SELLER_PAYOUT_ACCOUNT_MISMATCH"
+  | "PERSISTENCE_WRITE_FAILED";
 
 export interface CheckoutValidationInput {
   listing: MockListing;

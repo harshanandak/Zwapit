@@ -136,6 +136,7 @@ export interface TimelineActionResult {
 
 export interface TimelineActionOptions {
   submittedAt?: string;
+  actorRole?: "buyer" | "seller";
 }
 
 // connectTimelineActions: apply the next valid transition for the current order

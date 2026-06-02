@@ -1,7 +1,10 @@
 # Data Model
 
 Source: ChatGPT shared conversation, extracted 2026-05-28.
-Status: Baseline planning decision, not yet implemented.
+Status: Baseline planning decision. PR #5 implements the first Convex
+persistence slice for users/auth identities, mocked seller payment readiness,
+source rules, listings, orders, transfer tasks, issues, and audit logs. Broader
+v1 concepts remain planning-only.
 
 ## V1 Convex Table Concepts
 

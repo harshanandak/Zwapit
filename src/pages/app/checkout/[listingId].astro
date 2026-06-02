@@ -7,13 +7,13 @@ import {
   protectionLabel,
   transferModeLabel,
 } from "../../../components/buyer/format";
-import { createMockFixture } from "../../../lib/mock/fixtures";
+import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 export function getStaticPaths() {
   return [{ params: { listingId: "listing_bms_event_1" } }];
 }
 
-const { listing, sourceRule } = createMockFixture();
+const { listing, sourceRule, purchasable } = await loadListingFlowView();
 const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
 ---
 
@@ -57,6 +57,10 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
         {formatDateTime(listing.transferDeadlineAt)}
       </p>
       <p class="mt-1 text-xs text-muted-foreground">
+        <span class="font-medium text-foreground">Protected until</span>
+        {formatDateTime(listing.protectionDeadlineAt)}
+      </p>
+      <p class="mt-1 text-xs text-muted-foreground">
         Checkout is blocked if the listing isn't live or the transfer deadline has passed — you
         won't be charged.
       </p>
@@ -70,10 +74,16 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
     <a
       id="pay-button"
       href="/app/tickets"
-      class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+      class={purchasable ? "block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" : "hidden rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"}
     >
       {payLabel}
     </a>
+    <p
+      id="checkout-unavailable"
+      class={purchasable ? "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
+    >
+      This listing is no longer available.
+    </p>
     <p id="checkout-warning" class="text-center text-xs text-destructive"></p>
     <p class="text-center text-xs text-muted-foreground">
       Mock checkout for this slice — no real payment is taken.
@@ -83,24 +93,53 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
 
 <script>
   import { createMockFixture } from "../../../lib/mock/fixtures";
-  import { connectMockCheckoutFlow, saveDemoState } from "../../../lib/flow/mockFlow";
+  import { saveDemoState } from "../../../lib/flow/mockFlow";
+  import { loadListingFlowView, runMockCheckout } from "../../../lib/convex/dataAdapter";
 
   // Mock pay: validate checkout, transition checkout_pending -> transfer_pending,
-  // persist the order locally, then show it in My Tickets. No real payment.
-  const payButton = document.getElementById("pay-button");
+  // persist the order (Convex when configured, local otherwise), then show it in
+  // My Tickets. No real payment. The Convex write is awaited BEFORE navigating so
+  // a later direct load of the order page reveals the paid timeline from Convex.
+  let checkoutInFlight = false;
+  const payButton = document.getElementById("pay-button") as HTMLAnchorElement | null;
   const eligibilityAck = document.getElementById("eligibility-ack") as HTMLInputElement | null;
-  payButton?.addEventListener("click", (event) => {
-    event.preventDefault();
-    const { order, transferTask } = createMockFixture();
-    const result = connectMockCheckoutFlow(order, {
-      buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
+  void loadListingFlowView()
+    .then(({ purchasable }) => {
+      document.getElementById("pay-button")?.classList.toggle("hidden", !purchasable);
+      document.getElementById("checkout-unavailable")?.classList.toggle("hidden", purchasable);
+    })
+    .catch(() => {
+      // Keep the static fallback state.
     });
-    if (!result.ok) {
-      const warning = document.getElementById("checkout-warning");
-      if (warning) warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;
-      return;
+
+  payButton?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (checkoutInFlight) return;
+    checkoutInFlight = true;
+    payButton.setAttribute("aria-disabled", "true");
+    payButton.classList.add("pointer-events-none", "opacity-70");
+    const warning = document.getElementById("checkout-warning");
+    if (warning) warning.textContent = "";
+    const { order, transferTask } = createMockFixture();
+    // runMockCheckout runs the same local validation/mock-pay. With Convex
+    // configured, a rejected persistence write surfaces as a blocker.
+    try {
+      const result = await runMockCheckout(order, {
+        buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
+      });
+      if (!result.ok) {
+        if (warning) warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;
+        return;
+      }
+      // Keep the local demo timeline working (and as the offline fallback).
+      saveDemoState({ order: result.order, transferTask });
+      window.location.href = "/app/tickets";
+    } catch {
+      if (warning) warning.textContent = "Checkout could not be completed right now. Please try again.";
+    } finally {
+      checkoutInFlight = false;
+      payButton.removeAttribute("aria-disabled");
+      payButton.classList.remove("pointer-events-none", "opacity-70");
     }
-    saveDemoState({ order: result.order, transferTask });
-    window.location.href = "/app/tickets";
   });
 </script>

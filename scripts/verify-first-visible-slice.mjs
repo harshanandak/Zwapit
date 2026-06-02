@@ -44,17 +44,26 @@ const allowedTask10Paths = new Set([
 ]);
 
 const allowedFirstSlicePaths = [
+  ".beads/team-map.jsonl",
   ".coderabbit.yaml",
+  ".gitignore",
+  "CHANGELOG.md",
+  "README.md",
   "bun.lock",
   "package.json",
+  "src/env.d.ts",
+  "tsconfig.json",
   "wrangler.jsonc",
+  "docs/DATA_MODEL.md",
   "docs/deploy/cloudflare-workers.md",
+  /^convex\//,
+  /^docs\/work\//,
   /^\.github\/workflows\//,
   /^scripts\//,
   /^tests\//,
   /^src\/components\//,
   /^src\/layouts\//,
-  /^src\/lib\/(auth|flow|mock|rules|state|types|validation)/,
+  /^src\/lib\/(auth|convex|flow|mock|rules|state|types|validation)/,
   /^src\/pages\/(admin|app|index\.astro)/,
   /^src\/styles\//,
 ];
@@ -337,13 +346,13 @@ export async function verifyNoScopeDrift() {
   const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const deps = { ...(packageJson.dependencies ?? {}), ...(packageJson.devDependencies ?? {}) };
   for (const depName of Object.keys(deps)) {
-    if (/clerk|razorpay|convex|stripe|supabase|neon|postgres/i.test(depName)) {
+    if (/clerk|razorpay|stripe|supabase|neon|postgres/i.test(depName)) {
       failures.push(`real integration dependency present: ${depName}`);
     }
   }
 
   const sourceFiles = walkFiles(join(root, "src"), (path) => /\.(astro|ts|tsx|js|jsx|mjs)$/.test(path));
-  const realIntegrationImport = /^\s*import\s+.*?from\s+["'][^"']*(clerk|razorpay|convex|stripe|supabase|neon|postgres)[^"']*["']/im;
+  const realIntegrationImport = /^\s*import\s+.*?from\s+["'][^"']*(clerk|razorpay|stripe|supabase|neon|postgres)[^"']*["']/im;
   for (const file of sourceFiles) {
     const source = readFileSync(file, "utf8");
     if (realIntegrationImport.test(source)) {
