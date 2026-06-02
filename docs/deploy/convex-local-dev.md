@@ -21,14 +21,18 @@ CONVEX_DEPLOYMENT=dev:savory-cow-440
 `PUBLIC_CONVEX_URL` is required for the Astro browser bundle to use Convex. When
 it is absent, the app intentionally falls back to the local mock flow.
 
-`CONVEX_DEPLOYMENT` points Convex CLI commands at the existing dev deployment.
+`CONVEX_DEPLOYMENT` points the listed `convex dev` and `convex run` commands at
+the existing dev deployment. Do not use `convex deploy` for this local-dev flow:
+`convex deploy` is for production deployment unless separate deploy-key or
+preview-deploy configuration is intentionally provided.
+
 Do not commit deploy keys, auth tokens, or other secrets.
 
 ## Verification
 
 From the repository root:
 
-```powershell
+```sh
 bunx convex dev --once --env-file .env.local
 bunx convex run seed:seedDemoFixture --env-file .env.local
 bun run check
@@ -36,11 +40,13 @@ bunx tsc --project convex/tsconfig.json --noEmit
 bun test
 bun run build
 bun scripts/verify-first-visible-slice.mjs
+bun scripts/e2e-buyer.mjs
+bun scripts/e2e-seller.mjs
 ```
 
 For local browser smoke, start Astro with `.env.local` present:
 
-```powershell
+```sh
 bun run dev
 ```
 
