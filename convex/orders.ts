@@ -360,6 +360,10 @@ export const claimDemoSellerOrderForCurrentUser = mutation({
       .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
       .unique();
     if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+    if (orderDoc.sellerId === user.appUserId) return { sellerId: user.appUserId };
+    if (orderDoc.state !== "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_unpaid") {
+      throw new Error("SELLER_CLAIM_CLOSED");
+    }
     await ctx.db.patch(orderDoc._id, { sellerId: user.appUserId });
     return { sellerId: user.appUserId };
   },

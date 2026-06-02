@@ -43,11 +43,64 @@ import AppShell from "../../components/AppShell.astro";
   const link = document.getElementById("auth-intent-next");
   const label = document.getElementById("auth-intent-label");
   const copy = document.getElementById("auth-intent-copy");
-  const hasClerkKey = Boolean(import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+  const clerkPublishableKey = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+  const hasClerkKey = Boolean(clerkPublishableKey);
+  const clerkScriptId = "zwapit-clerk-js";
+  const clerkScriptUrl = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js";
+
+  type ClerkRuntime = {
+    load?: () => Promise<void>;
+    openSignIn?: (options: { afterSignInUrl: string; afterSignUpUrl: string; redirectUrl: string }) => Promise<void>;
+    user?: unknown;
+  };
+
+  function getClerk(): ClerkRuntime | null {
+    return (window as Window & { Clerk?: ClerkRuntime }).Clerk ?? null;
+  }
+
+  function loadClerk(): Promise<ClerkRuntime | null> {
+    if (!clerkPublishableKey) return Promise.resolve(null);
+    const existingClerk = getClerk();
+    if (existingClerk) return Promise.resolve(existingClerk);
+    return new Promise((resolve) => {
+      const existingScript = document.getElementById(clerkScriptId) as HTMLScriptElement | null;
+      const script = existingScript ?? document.createElement("script");
+      script.id = clerkScriptId;
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      script.dataset.clerkPublishableKey = clerkPublishableKey;
+      script.src = clerkScriptUrl;
+
+      const finish = async () => {
+        const clerk = getClerk();
+        try {
+          await clerk?.load?.();
+        } catch {
+          resolve(null);
+          return;
+        }
+        resolve(clerk ?? null);
+      };
+
+      script.addEventListener("load", () => void finish(), { once: true });
+      script.addEventListener("error", () => resolve(null), { once: true });
+      if (!existingScript) document.head.append(script);
+    });
+  }
 
   if (link instanceof HTMLAnchorElement) {
     link.href = target;
-    link.textContent = hasClerkKey ? "Continue after account step" : "Continue demo";
+    link.textContent = hasClerkKey ? "Sign in to continue" : "Continue demo";
+    link.addEventListener("click", async (event) => {
+      if (!hasClerkKey) return;
+      event.preventDefault();
+      const clerk = await loadClerk();
+      if (clerk?.user) {
+        window.location.href = target;
+        return;
+      }
+      await clerk?.openSignIn?.({ afterSignInUrl: target, afterSignUpUrl: target, redirectUrl: target });
+    });
   }
   if (label) label.textContent = hasClerkKey ? "Account step required" : "Demo account ready";
   if (copy) {

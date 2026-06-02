@@ -50,6 +50,11 @@ async function claimCurrentUserSellerOrder(client: Awaited<ReturnType<typeof get
   await client.mutation(functionRefs.claimDemoSellerOrderForCurrentUser, {});
 }
 
+function createBaselineDemoState(): DemoState {
+  const fixture = createMockFixture();
+  return { order: fixture.order, transferTask: fixture.transferTask };
+}
+
 // ---- Reads ----
 
 // Full demo fixture (same shape as createMockFixture()).
@@ -82,8 +87,10 @@ export async function loadBuyerOrderState(): Promise<DemoState> {
     if (res?.order && res?.transferTask) {
       return { order: res.order, transferTask: res.transferTask };
     }
+    if (isClerkAuthConfigured()) return createBaselineDemoState();
     return local;
   } catch {
+    if (isClerkAuthConfigured()) return createBaselineDemoState();
     return local;
   }
 }

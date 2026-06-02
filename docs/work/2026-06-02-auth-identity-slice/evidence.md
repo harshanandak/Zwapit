@@ -243,6 +243,26 @@ Fresh verification:
   - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
+- Fresh Codex follow-up comments after commit `d0b290e`:
+  - `src/pages/app/me.astro`: Clerk-configured gated CTAs still resumed directly without opening a sign-in step.
+  - `src/lib/convex/dataAdapter.ts`: Clerk-denied current-user buyer reads fell back to stale local paid demo state.
+  - `convex/orders.ts`: any phone-verified user could claim seller ownership after the order was paid.
+- Fix:
+  - `/app/me` now loads ClerkJS and opens Clerk sign-in before resuming the requested `/app/` target when a Clerk key is configured.
+  - `loadBuyerOrderState` now returns a baseline unpaid demo state for Clerk-configured denied/error current-user reads instead of stale local paid state.
+  - `claimDemoSellerOrderForCurrentUser` now only patches seller ownership while the demo order is still `checkout_pending` and `mock_unpaid`, unless the current user already owns the seller side.
+- Focused verification after these fixes:
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts convex/__tests__/identity.test.ts src/lib/auth/__tests__/authAdapter.test.ts`: 16 pass, 0 fail, 46 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+- Full verification after these fixes:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bun run build`: 15 pages built.
+  - `bun audit`: no vulnerabilities found.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
 
 ## `/review` Follow-Up Evidence
 
