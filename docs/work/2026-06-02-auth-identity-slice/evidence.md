@@ -146,3 +146,18 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Second review thread found in `src/pages/app/listings/[listingId].astro`: buy/sell UI gates did not pass the phone-verification-required option.
+- Fix: every page-level `getAuthActionState("buy" | "sell", ...)` call now passes `{ requirePhoneVerified: true }`.
+- Regression: `src/lib/auth/__tests__/authAdapter.test.ts` covers the phone-required buy state as well as sell.
+- Fresh verification after second review fix:
+  - `bun test src/lib/auth/__tests__/authAdapter.test.ts`: 4 pass, 0 fail, 17 assertions.
+  - `rg -n "getAuthActionState\\(" src/pages`: all four page-level buy/sell gates include `{ requirePhoneVerified: true }`.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun test`: 59 pass, 0 fail, 187 assertions.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.

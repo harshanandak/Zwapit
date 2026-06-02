@@ -63,6 +63,12 @@ describe("auth adapter contract", () => {
     });
 
     expect(() => requirePhoneVerified(unverified)).toThrow("PHONE_VERIFICATION_REQUIRED");
+    expect(getAuthActionState("buy", "/app/checkout/listing_bms_event_1", unverified, { requirePhoneVerified: true })).toEqual({
+      action: "buy",
+      href: "/app/checkout/listing_bms_event_1",
+      reason: "PHONE_VERIFICATION_REQUIRED",
+      status: "phone_verification_required",
+    });
     expect(getAuthActionState("sell", "/app/sell/upload", unverified, { requirePhoneVerified: true })).toEqual({
       action: "sell",
       href: "/app/sell/upload",
@@ -71,4 +77,3 @@ describe("auth adapter contract", () => {
     });
   });
 });
-

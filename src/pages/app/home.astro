@@ -6,7 +6,7 @@ import { getAuthActionState } from "../../lib/auth/authAdapter";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
-const sellAction = getAuthActionState("sell", "/app/sell");
+const sellAction = getAuthActionState("sell", "/app/sell", undefined, { requirePhoneVerified: true });
 
 // First slice ships one fixture listing. Blocked / draft / under-review listings
 // are hidden from the marketplace; live and waitlist-only listings are shown.

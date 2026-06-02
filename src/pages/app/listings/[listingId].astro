@@ -15,7 +15,7 @@ export function getStaticPaths() {
 }
 
 const { listing, sourceRule, purchasable } = await loadListingFlowView();
-const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`);
+const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`, undefined, { requirePhoneVerified: true });
 ---
 
 <AppShell routeId="/app/listings/:listingId" title="Listing Detail" activeTab="home">

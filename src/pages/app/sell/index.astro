@@ -3,8 +3,8 @@ import AppShell from "../../../components/AppShell.astro";
 import AuthActionGate from "../../../components/AuthActionGate.astro";
 import { getAuthActionState } from "../../../lib/auth/authAdapter";
 
-const uploadAction = getAuthActionState("sell", "/app/sell/upload");
-const ordersAction = getAuthActionState("sell", "/app/sell/orders");
+const uploadAction = getAuthActionState("sell", "/app/sell/upload", undefined, { requirePhoneVerified: true });
+const ordersAction = getAuthActionState("sell", "/app/sell/orders", undefined, { requirePhoneVerified: true });
 ---
 
 <AppShell routeId="/app/sell" title="Sell" activeTab="sell">
