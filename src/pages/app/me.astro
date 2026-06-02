@@ -46,6 +46,7 @@ import AppShell from "../../components/AppShell.astro";
   const link = document.getElementById("auth-intent-next");
   const label = document.getElementById("auth-intent-label");
   const copy = document.getElementById("auth-intent-copy");
+  const accountStepTarget = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   const clerkPublishableKey = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   const hasClerkKey = Boolean(clerkPublishableKey);
   const clerkScriptId = "zwapit-clerk-js";
@@ -96,7 +97,7 @@ import AppShell from "../../components/AppShell.astro";
 
   async function getPhoneRequirementStatus(): Promise<PhoneRequirementStatus> {
     const client = await getConvexClient();
-    if (!client) return "verified";
+    if (!client) return "unknown";
     try {
       await client.mutation(functionRefs.syncAppUserFromProvider, {});
       const requirement = (await client.query(functionRefs.getPhoneVerificationRequirement, {})) as
@@ -133,7 +134,11 @@ import AppShell from "../../components/AppShell.astro";
         await clerk.openUserProfile?.();
         return;
       }
-      await clerk?.openSignIn?.({ afterSignInUrl: target, afterSignUpUrl: target, redirectUrl: target });
+      await clerk?.openSignIn?.({
+        afterSignInUrl: accountStepTarget,
+        afterSignUpUrl: accountStepTarget,
+        redirectUrl: accountStepTarget,
+      });
     });
   }
   if (label) label.textContent = hasClerkKey ? "Account step required" : "Demo account ready";

@@ -362,3 +362,18 @@ Fresh verification:
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
   - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+- Seventh review follow-up found two still-valid `/app/me` handoff gaps:
+  - Signed-out users returned directly to the saved protected target after Clerk sign-in, bypassing the page's phone gate.
+  - `getPhoneRequirementStatus()` returned `verified` when the Convex client was unavailable, which failed open.
+- Fix: Clerk sign-in/sign-up now returns to the account step URL first, and unavailable Convex phone-status checks return `unknown`; callers only resume the saved protected target when status is exactly `verified`.
+- Fresh verification after seventh review fix:
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun audit`: no vulnerabilities found.
+  - Initial parallel `bun test` run timed out one acceptance test while the standalone verifier was running; rerun sequentially passed.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
