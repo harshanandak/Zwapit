@@ -205,6 +205,26 @@ Fresh verification:
   - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
+- Fresh Codex/CodeRabbit follow-up comments after commit `43956d3`:
+  - `src/lib/convex/dataAdapter.ts`: Clerk-configured seller timeline still used a seeded `seller_demo_1` owner, so a signed-in seller could see the demo order but fail `SELLER_ACTOR_REQUIRED`.
+  - `src/lib/convex/dataAdapter.ts`: seller refresh used the first seller order row instead of matching the mutated order id.
+- Fix:
+  - `convex/orders.ts` now exposes `claimDemoSellerOrderForCurrentUser`, gated by `requirePhoneVerifiedAppUser`, to bind only the demo seller order to the current internal app user.
+  - `convex/orders.ts` now exposes `getSellerOrdersForCurrentUser` and shares seller-order collection logic with the existing demo read.
+  - `src/lib/convex/dataAdapter.ts` claims the demo seller order before current-user seller reads/submissions and refreshes the seller result by matching `state.order.id`.
+  - `src/lib/convex/functionRefs.ts` includes the new current-user seller read/claim function references.
+- Focused verification after these fixes:
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts convex/__tests__/identity.test.ts src/lib/auth/__tests__/authAdapter.test.ts`: 16 pass, 0 fail, 46 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+- Full verification after these fixes:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bun run build`: 15 pages built.
+  - `bun audit`: no vulnerabilities found.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
 
 ## `/review` Follow-Up Evidence
 

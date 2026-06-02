@@ -44,6 +44,12 @@ async function syncCurrentUserForGuardedPath(client: Awaited<ReturnType<typeof g
   await client.mutation(functionRefs.syncAppUserFromProvider, {});
 }
 
+async function claimCurrentUserSellerOrder(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
+  if (!client || !isClerkAuthConfigured()) return;
+  await syncCurrentUserForGuardedPath(client);
+  await client.mutation(functionRefs.claimDemoSellerOrderForCurrentUser, {});
+}
+
 // ---- Reads ----
 
 // Full demo fixture (same shape as createMockFixture()).
@@ -87,7 +93,11 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
   if (!client) return base;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    const rows = await client.query(functionRefs.getSellerOrders, {});
+    if (isClerkAuthConfigured()) await claimCurrentUserSellerOrder(client);
+    const rows = await client.query(
+      isClerkAuthConfigured() ? functionRefs.getSellerOrdersForCurrentUser : functionRefs.getSellerOrders,
+      {},
+    );
     const first = Array.isArray(rows) ? rows[0] : null;
     if (first?.order && first?.transferTask) {
       return {
@@ -168,23 +178,29 @@ export async function runAdvanceTimeline(
     const usedSellerScopedMutation =
       useGuardedMutations && options.actorRole === "seller" && state.order.state === "transfer_pending";
     await syncCurrentUserForGuardedPath(client);
-    const advanced = useGuardedMutations
-      ? usedSellerScopedMutation
-        ? await client.mutation(functionRefs.sellerSubmitTransferForCurrentUser, {
-            submittedAt: options.submittedAt,
-          })
-        : await client.mutation(functionRefs.advanceTimelineForCurrentUser, {})
-      : options.actorRole === "seller" && state.order.state === "transfer_pending"
-        ? await client.mutation(functionRefs.sellerSubmitTransfer, {
-            submittedAt: options.submittedAt,
-            actorRole: options.actorRole,
-          })
-        : await client.mutation(functionRefs.advanceTimeline, {
-            submittedAt: options.submittedAt,
-            actorRole: options.actorRole,
-          });
-    const sellerRows = usedSellerScopedMutation ? await client.query(functionRefs.getSellerOrders, {}) : null;
-    const sellerRes = Array.isArray(sellerRows) ? sellerRows[0] : null;
+    let advanced;
+    if (usedSellerScopedMutation) {
+      await claimCurrentUserSellerOrder(client);
+      advanced = await client.mutation(functionRefs.sellerSubmitTransferForCurrentUser, {
+        submittedAt: options.submittedAt,
+      });
+    } else if (useGuardedMutations) {
+      advanced = await client.mutation(functionRefs.advanceTimelineForCurrentUser, {});
+    } else if (options.actorRole === "seller" && state.order.state === "transfer_pending") {
+      advanced = await client.mutation(functionRefs.sellerSubmitTransfer, {
+        submittedAt: options.submittedAt,
+        actorRole: options.actorRole,
+      });
+    } else {
+      advanced = await client.mutation(functionRefs.advanceTimeline, {
+        submittedAt: options.submittedAt,
+        actorRole: options.actorRole,
+      });
+    }
+    const sellerRows = usedSellerScopedMutation ? await client.query(functionRefs.getSellerOrdersForCurrentUser, {}) : null;
+    const sellerRes = Array.isArray(sellerRows)
+      ? sellerRows.find((row) => row.order.id === state.order.id) ?? null
+      : null;
     const buyerRes = usedSellerScopedMutation ? null : await client.query(functionRefs.getBuyerOrder, {});
     const result = {
       order: ((sellerRes?.order ?? buyerRes?.order) ?? state.order) as MockOrder,

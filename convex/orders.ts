@@ -10,7 +10,7 @@
 // flow (src/lib/state/*), wrapped in convex/model.ts.
 
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAuthenticatedAppUser, requirePhoneVerifiedAppUser } from "./identity";
 import {
@@ -107,6 +107,33 @@ async function validatePersistedCheckout(
     now: new Date().toISOString(),
   });
   if (!validation.ok) throw new Error(`CHECKOUT_BLOCKED:${validation.blockers.join(",")}`);
+}
+
+async function collectSellerOrders(ctx: QueryCtx, sellerId: string) {
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_seller", (q) => q.eq("sellerId", sellerId))
+    .collect();
+  const result = [];
+  for (const orderDoc of orders) {
+    if (orderDoc.state === "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_paid") {
+      continue;
+    }
+    const listingDoc = await ctx.db
+      .query("listings")
+      .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))
+      .unique();
+    const transferDoc = await ctx.db
+      .query("transfer_tasks")
+      .withIndex("by_key", (q) => q.eq("transferTaskKey", orderDoc.transferTaskId))
+      .unique();
+    result.push({
+      order: orderDocToMock(orderDoc),
+      listing: listingDoc ? listingDocToMock(listingDoc) : null,
+      transferTask: transferDoc ? transferDocToMock(transferDoc) : null,
+    });
+  }
+  return result;
 }
 
 // ---- Queries ----
@@ -242,30 +269,15 @@ export const getSellerOrders = query({
   args: { sellerId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const sellerId = args.sellerId ?? "seller_demo_1";
-    const orders = await ctx.db
-      .query("orders")
-      .withIndex("by_seller", (q) => q.eq("sellerId", sellerId))
-      .collect();
-    const result = [];
-    for (const orderDoc of orders) {
-      if (orderDoc.state === "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_paid") {
-        continue;
-      }
-      const listingDoc = await ctx.db
-        .query("listings")
-        .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))
-        .unique();
-      const transferDoc = await ctx.db
-        .query("transfer_tasks")
-        .withIndex("by_key", (q) => q.eq("transferTaskKey", orderDoc.transferTaskId))
-        .unique();
-      result.push({
-        order: orderDocToMock(orderDoc),
-        listing: listingDoc ? listingDocToMock(listingDoc) : null,
-        transferTask: transferDoc ? transferDocToMock(transferDoc) : null,
-      });
-    }
-    return result;
+    return await collectSellerOrders(ctx, sellerId);
+  },
+});
+
+export const getSellerOrdersForCurrentUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAuthenticatedAppUser(ctx);
+    return await collectSellerOrders(ctx, user.appUserId);
   },
 });
 
@@ -313,6 +325,22 @@ export const mockCheckoutForCurrentUser = mutation({
     await ctx.db.patch(orderDoc._id, { buyerId: user.appUserId });
     const order = await applyMockPay(ctx, orderKey);
     return { state: order.state };
+  },
+});
+
+export const claimDemoSellerOrderForCurrentUser = mutation({
+  args: { orderKey: v.optional(v.string()) },
+  returns: v.object({ sellerId: v.string() }),
+  handler: async (ctx, args) => {
+    const user = await requirePhoneVerifiedAppUser(ctx);
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+    await ctx.db.patch(orderDoc._id, { sellerId: user.appUserId });
+    return { sellerId: user.appUserId };
   },
 });
 
