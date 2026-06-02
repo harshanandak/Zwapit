@@ -273,6 +273,27 @@ export const getSellerOrders = query({
   },
 });
 
+export const getBuyerOrderForCurrentUser = query({
+  args: { orderKey: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await requireAuthenticatedAppUser(ctx);
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    const orderDoc = await ctx.db
+      .query("orders")
+      .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+      .unique();
+    if (!orderDoc || orderDoc.buyerId !== user.appUserId) return null;
+    const transferDoc = await ctx.db
+      .query("transfer_tasks")
+      .withIndex("by_key", (q) => q.eq("transferTaskKey", orderDoc.transferTaskId))
+      .unique();
+    return {
+      order: orderDocToMock(orderDoc),
+      transferTask: transferDoc ? transferDocToMock(transferDoc) : null,
+    };
+  },
+});
+
 export const getSellerOrdersForCurrentUser = query({
   args: {},
   handler: async (ctx) => {

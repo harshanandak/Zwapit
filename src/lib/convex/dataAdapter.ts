@@ -74,7 +74,11 @@ export async function loadBuyerOrderState(): Promise<DemoState> {
   if (!client) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    const res = await client.query(functionRefs.getBuyerOrder, {});
+    if (isClerkAuthConfigured()) await syncCurrentUserForGuardedPath(client);
+    const res = await client.query(
+      isClerkAuthConfigured() ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
+      {},
+    );
     if (res?.order && res?.transferTask) {
       return { order: res.order, transferTask: res.transferTask };
     }
@@ -201,7 +205,12 @@ export async function runAdvanceTimeline(
     const sellerRes = Array.isArray(sellerRows)
       ? sellerRows.find((row) => row.order.id === state.order.id) ?? null
       : null;
-    const buyerRes = usedSellerScopedMutation ? null : await client.query(functionRefs.getBuyerOrder, {});
+    const buyerRes = usedSellerScopedMutation
+      ? null
+      : await client.query(
+          useGuardedMutations ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
+          {},
+        );
     const result = {
       order: ((sellerRes?.order ?? buyerRes?.order) ?? state.order) as MockOrder,
       transferTask: (sellerRes?.transferTask ?? buyerRes?.transferTask) ?? state.transferTask,
@@ -236,7 +245,10 @@ export async function runMockCheckout(
     } else {
       await client.mutation(functionRefs.mockCheckout, checkoutArgs);
     }
-    const res = await client.query(functionRefs.getBuyerOrder, {});
+    const res = await client.query(
+      isClerkAuthConfigured() ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
+      {},
+    );
     return { ok: true, blockers: [], order: (res?.order ?? local.order) as MockOrder };
   } catch {
     return { ok: false, blockers: ["PERSISTENCE_WRITE_FAILED"], order };

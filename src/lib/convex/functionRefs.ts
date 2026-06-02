@@ -9,6 +9,7 @@ export const functionRefs = {
   seedDemoFixture: makeFunctionReference<"mutation">("seed:seedDemoFixture"),
   getCurrentFixtureView: makeFunctionReference<"query">("orders:getCurrentFixtureView"),
   getBuyerOrder: makeFunctionReference<"query">("orders:getBuyerOrder"),
+  getBuyerOrderForCurrentUser: makeFunctionReference<"query">("orders:getBuyerOrderForCurrentUser"),
   getBuyerTickets: makeFunctionReference<"query">("orders:getBuyerTickets"),
   getSellerOrders: makeFunctionReference<"query">("orders:getSellerOrders"),
   getSellerOrdersForCurrentUser: makeFunctionReference<"query">("orders:getSellerOrdersForCurrentUser"),

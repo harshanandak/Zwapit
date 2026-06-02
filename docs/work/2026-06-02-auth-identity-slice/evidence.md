@@ -225,6 +225,24 @@ Fresh verification:
   - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
+- Fresh Codex follow-up comment after commit `0a768db`:
+  - `src/lib/convex/dataAdapter.ts`: Clerk-configured buyer order hydration still used the public `orders:getBuyerOrder` query after checkout, so another browser could read the claimed demo buyer order.
+- Fix:
+  - `convex/orders.ts` now exposes `getBuyerOrderForCurrentUser`, requiring an authenticated app user and returning `null` unless the persisted order buyer matches that internal app user.
+  - `src/lib/convex/dataAdapter.ts` uses `getBuyerOrderForCurrentUser` for Clerk-configured buyer load, checkout refresh, and buyer timeline refresh.
+  - `src/lib/convex/functionRefs.ts` includes the new current-user buyer read reference.
+- Focused verification after this fix:
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts convex/__tests__/identity.test.ts src/lib/auth/__tests__/authAdapter.test.ts`: 16 pass, 0 fail, 46 assertions.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+- Full verification after this fix:
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bun run build`: 15 pages built.
+  - `bun audit`: no vulnerabilities found.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
 
 ## `/review` Follow-Up Evidence
 
