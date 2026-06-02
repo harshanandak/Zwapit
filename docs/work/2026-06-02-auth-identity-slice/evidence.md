@@ -350,3 +350,15 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Sixth review thread found in `src/pages/app/me.astro`: a signed-in Clerk user with synced `users.phoneVerified: false` was immediately resumed to the saved `/app/...` target, where backend phone enforcement would fail without a visible verification step.
+- Fix: `/app/me` now syncs and queries the existing Convex phone-verification requirement before resuming. Verified users continue to the saved action; unverified or unknown-status signed-in users stay on the account step and open Clerk's user profile UI.
+- Fresh verification after sixth review fix:
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun run build`: 15 pages built.
+  - `bun test`: 63 pass, 0 fail, 204 assertions.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun audit`: no vulnerabilities found.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.

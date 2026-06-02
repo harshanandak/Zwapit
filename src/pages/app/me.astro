@@ -27,6 +27,9 @@ import AppShell from "../../components/AppShell.astro";
 </AppShell>
 
 <script>
+  import { getConvexClient } from "../../lib/convex/client";
+  import { functionRefs } from "../../lib/convex/functionRefs";
+
   const params = new URLSearchParams(window.location.search);
   const next = params.get("next");
   let target = "/app/home";
@@ -51,8 +54,11 @@ import AppShell from "../../components/AppShell.astro";
   type ClerkRuntime = {
     load?: () => Promise<void>;
     openSignIn?: (options: { afterSignInUrl: string; afterSignUpUrl: string; redirectUrl: string }) => Promise<void>;
+    openUserProfile?: () => Promise<void> | void;
     user?: unknown;
   };
+
+  type PhoneRequirementStatus = "verified" | "required" | "unknown";
 
   function getClerk(): ClerkRuntime | null {
     return (window as Window & { Clerk?: ClerkRuntime }).Clerk ?? null;
@@ -88,6 +94,28 @@ import AppShell from "../../components/AppShell.astro";
     });
   }
 
+  async function getPhoneRequirementStatus(): Promise<PhoneRequirementStatus> {
+    const client = await getConvexClient();
+    if (!client) return "verified";
+    try {
+      await client.mutation(functionRefs.syncAppUserFromProvider, {});
+      const requirement = (await client.query(functionRefs.getPhoneVerificationRequirement, {})) as
+        | { status?: "verified" | "required" }
+        | null;
+      return requirement?.status === "verified" ? "verified" : "required";
+    } catch {
+      return "unknown";
+    }
+  }
+
+  function keepOnAccountStep(): void {
+    if (link instanceof HTMLAnchorElement) link.textContent = "Verify phone to continue";
+    if (label) label.textContent = "Phone verification required";
+    if (copy) {
+      copy.textContent = "Verify your phone in your account, then return to the action you started.";
+    }
+  }
+
   if (link instanceof HTMLAnchorElement) {
     link.href = target;
     link.textContent = hasClerkKey ? "Sign in to continue" : "Continue demo";
@@ -96,7 +124,13 @@ import AppShell from "../../components/AppShell.astro";
       event.preventDefault();
       const clerk = await loadClerk();
       if (clerk?.user) {
-        window.location.href = target;
+        const phoneStatus = await getPhoneRequirementStatus();
+        if (phoneStatus === "verified") {
+          window.location.href = target;
+          return;
+        }
+        keepOnAccountStep();
+        await clerk.openUserProfile?.();
         return;
       }
       await clerk?.openSignIn?.({ afterSignInUrl: target, afterSignUpUrl: target, redirectUrl: target });
