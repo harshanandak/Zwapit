@@ -161,3 +161,16 @@ Fresh verification:
   - `bun scripts/e2e-buyer.mjs`: passed.
   - `bun scripts/e2e-seller.mjs`: passed.
   - `bun audit`: no vulnerabilities found.
+- Third review thread found in `convex/identity.ts`: Convex identity endpoint auth gates lacked direct tests.
+- Fix: added `convex/__tests__/identity.test.ts` with mocked Convex auth/db context coverage for unauthenticated gates, identity sync, current-user resolution, phone requirement status, unverified rejection, and verified action success.
+- Fresh verification after third review fix:
+  - `bun test convex/__tests__/identity.test.ts`: 3 pass, 0 fail, 12 assertions.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun test`: 62 pass, 0 fail, 199 assertions.
+  - `bun run build`: 15 pages built.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.
