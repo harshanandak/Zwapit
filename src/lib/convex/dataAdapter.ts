@@ -22,7 +22,6 @@ import {
   connectSellerOrderFlow,
   connectTimelineActions,
   loadDemoState,
-  NOW_BEFORE_DEADLINE,
   reportBuyerIssue,
   saveDemoState,
   type CheckoutFlowOptions,
@@ -123,7 +122,7 @@ export async function loadListingFlowView(): Promise<ListingFlowView> {
       sellerPaymentAccount,
       buyerEligibilityAcknowledged: true,
       totalShownToBuyer: listing.totalPayable,
-      now: NOW_BEFORE_DEADLINE,
+      now: new Date().toISOString(),
     });
 
     return {

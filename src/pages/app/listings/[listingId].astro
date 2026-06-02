@@ -78,19 +78,31 @@ const { listing, sourceRule, purchasable } = await loadListingFlowView();
       </div>
     </section>
 
-    {
-      purchasable ? (
-        <a
-          href={`/app/checkout/${listing.id}`}
-          class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
-        >
-          Buy with Protection
-        </a>
-      ) : (
-        <p class="rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground">
-          Not available
-        </p>
-      )
-    }
+    <a
+      id="buy-link"
+      href={`/app/checkout/${listing.id}`}
+      class={purchasable ? "block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" : "hidden rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"}
+    >
+      Buy with Protection
+    </a>
+    <p
+      id="listing-unavailable"
+      class={purchasable ? "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
+    >
+      Not available
+    </p>
   </div>
 </AppShell>
+
+<script>
+  import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
+
+  void loadListingFlowView()
+    .then(({ purchasable }) => {
+      document.getElementById("buy-link")?.classList.toggle("hidden", !purchasable);
+      document.getElementById("listing-unavailable")?.classList.toggle("hidden", purchasable);
+    })
+    .catch(() => {
+      // Keep the static fallback state.
+    });
+</script>

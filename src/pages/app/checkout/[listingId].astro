@@ -57,6 +57,10 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
         {formatDateTime(listing.transferDeadlineAt)}
       </p>
       <p class="mt-1 text-xs text-muted-foreground">
+        <span class="font-medium text-foreground">Protected until</span>
+        {formatDateTime(listing.protectionDeadlineAt)}
+      </p>
+      <p class="mt-1 text-xs text-muted-foreground">
         Checkout is blocked if the listing isn't live or the transfer deadline has passed — you
         won't be charged.
       </p>
@@ -67,21 +71,19 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
       <span>I understand the ticket rules and will carry any required ID or proof.</span>
     </label>
 
-    {
-      purchasable ? (
-        <a
-          id="pay-button"
-          href="/app/tickets"
-          class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
-        >
-          {payLabel}
-        </a>
-      ) : (
-        <p class="rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground">
-          This listing is no longer available.
-        </p>
-      )
-    }
+    <a
+      id="pay-button"
+      href="/app/tickets"
+      class={purchasable ? "block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" : "hidden rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"}
+    >
+      {payLabel}
+    </a>
+    <p
+      id="checkout-unavailable"
+      class={purchasable ? "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
+    >
+      This listing is no longer available.
+    </p>
     <p id="checkout-warning" class="text-center text-xs text-destructive"></p>
     <p class="text-center text-xs text-muted-foreground">
       Mock checkout for this slice — no real payment is taken.
@@ -92,7 +94,7 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
 <script>
   import { createMockFixture } from "../../../lib/mock/fixtures";
   import { saveDemoState } from "../../../lib/flow/mockFlow";
-  import { runMockCheckout } from "../../../lib/convex/dataAdapter";
+  import { loadListingFlowView, runMockCheckout } from "../../../lib/convex/dataAdapter";
 
   // Mock pay: validate checkout, transition checkout_pending -> transfer_pending,
   // persist the order (Convex when configured, local otherwise), then show it in
@@ -101,6 +103,15 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
   let checkoutInFlight = false;
   const payButton = document.getElementById("pay-button") as HTMLAnchorElement | null;
   const eligibilityAck = document.getElementById("eligibility-ack") as HTMLInputElement | null;
+  void loadListingFlowView()
+    .then(({ purchasable }) => {
+      document.getElementById("pay-button")?.classList.toggle("hidden", !purchasable);
+      document.getElementById("checkout-unavailable")?.classList.toggle("hidden", purchasable);
+    })
+    .catch(() => {
+      // Keep the static fallback state.
+    });
+
   payButton?.addEventListener("click", async (event) => {
     event.preventDefault();
     if (checkoutInFlight) return;
