@@ -107,3 +107,17 @@ Fresh verification:
 - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
 - `bun scripts/e2e-buyer.mjs`: passed.
 - `bun scripts/e2e-seller.mjs`: passed.
+
+## `/validate` Evidence
+
+- Branch freshness: `HEAD..origin/master` = 0.
+- `bun run check`: 0 errors, 0 warnings, 11 hints.
+- `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+- `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+- `bun test`: 58 pass, 0 fail, 183 assertions.
+- `bun run build`: 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: passed.
+- `bun scripts/e2e-seller.mjs`: passed.
+- `bun audit`: no vulnerabilities found.
+- Scope grep reviewed: Clerk/provider identity references are in auth boundary code/tests/docs; excluded Razorpay/payment/payout/KYC/admin/demand/category references are only hard-exclusion docs or existing guard text.
