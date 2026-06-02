@@ -10,6 +10,11 @@ export interface AuthSyncRecordInput {
   providerUserId: string;
 }
 
+export interface ProviderPhoneVerificationClaims {
+  phoneNumber?: string | null;
+  phoneNumberVerified?: boolean | null;
+}
+
 export interface AuthSyncRecord {
   appUser: MockUser;
   authIdentity: AuthIdentity;
@@ -23,6 +28,10 @@ export function appUserIdFromUserDocId(userDocId: string): string {
 export function selectVerificationMode(provider: AuthProvider, phoneVerified: boolean): UserVerification["verificationMode"] {
   if (provider === "mock_phone") return "mock";
   return phoneVerified ? "clerk_phone" : "unverified";
+}
+
+export function selectProviderPhoneVerified(claims: ProviderPhoneVerificationClaims): boolean {
+  return claims.phoneNumberVerified === true;
 }
 
 export function buildAuthSyncRecord(input: AuthSyncRecordInput): AuthSyncRecord {

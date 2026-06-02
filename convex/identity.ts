@@ -3,13 +3,14 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { appUserIdFromUserDocId, buildAuthSyncRecord } from "./authModel";
+import { appUserIdFromUserDocId, buildAuthSyncRecord, selectProviderPhoneVerified } from "./authModel";
 
 type ConvexAuthIdentity = {
   subject: string;
   name?: string;
   email?: string;
   phoneNumber?: string | null;
+  phoneNumberVerified?: boolean | null;
 };
 
 type AuthCtx = QueryCtx | MutationCtx;
@@ -21,7 +22,7 @@ function displayNameFromIdentity(identity: ConvexAuthIdentity): string {
 }
 
 function phoneVerifiedFromIdentity(identity: ConvexAuthIdentity): boolean {
-  return typeof identity.phoneNumber === "string" && identity.phoneNumber.trim().length > 0;
+  return selectProviderPhoneVerified(identity);
 }
 
 async function requireProviderIdentity(ctx: AuthCtx): Promise<ConvexAuthIdentity> {
@@ -166,4 +167,3 @@ export const requirePhoneVerifiedForAction = mutation({
     return { action: args.action, appUserId: user.appUserId, status: "verified" };
   },
 });
-

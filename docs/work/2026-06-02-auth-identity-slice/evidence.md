@@ -121,3 +121,28 @@ Fresh verification:
 - `bun scripts/e2e-seller.mjs`: passed.
 - `bun audit`: no vulnerabilities found.
 - Scope grep reviewed: Clerk/provider identity references are in auth boundary code/tests/docs; excluded Razorpay/payment/payout/KYC/admin/demand/category references are only hard-exclusion docs or existing guard text.
+
+## `/ship` Evidence
+
+- Branch pushed: `codex/zwapit-auth-identity-plan`.
+- Pull request created: `https://github.com/harshanandak/Zwapit/pull/7`.
+- PR title: `feat: add auth identity boundary`.
+- Beads issue: `zwapit-skf`.
+
+## `/review` Evidence
+
+- GitHub checks were fetched with `gh pr checks 7 --repo harshanandak/Zwapit`.
+- Review thread found in `convex/identity.ts`: phone verification incorrectly treated a non-empty phone number as verified.
+- Fix: `identity:syncAppUserFromProvider` now marks phone verified only when Convex auth identity includes `phoneNumberVerified === true`.
+- Regression: `convex/__tests__/authModel.test.ts` covers unverified phone-number claims.
+- Fresh verification after review fix:
+  - `bun test convex/__tests__/authModel.test.ts`: 5 pass, 0 fail, 17 assertions.
+  - `bunx convex codegen`: generated bindings and ran TypeScript successfully.
+  - `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+  - `bun run check`: 0 errors, 0 warnings, 11 hints.
+  - `bun test`: 59 pass, 0 fail, 186 assertions.
+  - `bun run build`: 15 pages built.
+  - `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+  - `bun scripts/e2e-buyer.mjs`: passed.
+  - `bun scripts/e2e-seller.mjs`: passed.
+  - `bun audit`: no vulnerabilities found.

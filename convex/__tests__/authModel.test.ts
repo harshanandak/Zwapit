@@ -4,6 +4,7 @@ import {
   appUserIdFromUserDocId,
   assertActorMatchesAppUser,
   buildAuthSyncRecord,
+  selectProviderPhoneVerified,
   selectVerificationMode,
 } from "../authModel";
 
@@ -38,6 +39,12 @@ describe("Convex auth identity model", () => {
     expect(selectVerificationMode("mock_phone", true)).toBe("mock");
   });
 
+  test("requires the provider verified-phone claim before marking phone verified", () => {
+    expect(selectProviderPhoneVerified({ phoneNumber: "+919999999999", phoneNumberVerified: false })).toBe(false);
+    expect(selectProviderPhoneVerified({ phoneNumber: "+919999999999" })).toBe(false);
+    expect(selectProviderPhoneVerified({ phoneNumber: "+919999999999", phoneNumberVerified: true })).toBe(true);
+  });
+
   test("rejects missing and mismatched actors before protected state changes", () => {
     expect(() => assertActorMatchesAppUser(null, "user_buyer_1", "BUYER_ACTOR_REQUIRED")).toThrow("AUTH_REQUIRED");
     expect(() => assertActorMatchesAppUser("user_seller_1", "user_buyer_1", "BUYER_ACTOR_REQUIRED")).toThrow(
@@ -46,4 +53,3 @@ describe("Convex auth identity model", () => {
     expect(assertActorMatchesAppUser("user_buyer_1", "user_buyer_1", "BUYER_ACTOR_REQUIRED")).toBe("user_buyer_1");
   });
 });
-
