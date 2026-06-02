@@ -6,13 +6,13 @@ import {
   protectionLabel,
   transferModeLabel,
 } from "../../../components/buyer/format";
-import { createMockFixture } from "../../../lib/mock/fixtures";
+import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 export function getStaticPaths() {
   return [{ params: { listingId: "listing_bms_event_1" } }];
 }
 
-const { listing, sourceRule } = createMockFixture();
+const { listing, sourceRule, purchasable } = await loadListingFlowView();
 ---
 
 <AppShell routeId="/app/listings/:listingId" title="Listing Detail" activeTab="home">
@@ -78,11 +78,19 @@ const { listing, sourceRule } = createMockFixture();
       </div>
     </section>
 
-    <a
-      href={`/app/checkout/${listing.id}`}
-      class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
-    >
-      Buy with Protection
-    </a>
+    {
+      purchasable ? (
+        <a
+          href={`/app/checkout/${listing.id}`}
+          class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+        >
+          Buy with Protection
+        </a>
+      ) : (
+        <p class="rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground">
+          Not available
+        </p>
+      )
+    }
   </div>
 </AppShell>

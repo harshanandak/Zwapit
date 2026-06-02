@@ -7,13 +7,13 @@ import {
   protectionLabel,
   transferModeLabel,
 } from "../../../components/buyer/format";
-import { createMockFixture } from "../../../lib/mock/fixtures";
+import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 export function getStaticPaths() {
   return [{ params: { listingId: "listing_bms_event_1" } }];
 }
 
-const { listing, sourceRule } = createMockFixture();
+const { listing, sourceRule, purchasable } = await loadListingFlowView();
 const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
 ---
 
@@ -67,13 +67,21 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
       <span>I understand the ticket rules and will carry any required ID or proof.</span>
     </label>
 
-    <a
-      id="pay-button"
-      href="/app/tickets"
-      class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
-    >
-      {payLabel}
-    </a>
+    {
+      purchasable ? (
+        <a
+          id="pay-button"
+          href="/app/tickets"
+          class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+        >
+          {payLabel}
+        </a>
+      ) : (
+        <p class="rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground">
+          This listing is no longer available.
+        </p>
+      )
+    }
     <p id="checkout-warning" class="text-center text-xs text-destructive"></p>
     <p class="text-center text-xs text-muted-foreground">
       Mock checkout for this slice — no real payment is taken.

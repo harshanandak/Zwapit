@@ -13,6 +13,7 @@ export const functionRefs = {
   getSellerOrders: makeFunctionReference<"query">("orders:getSellerOrders"),
   getHomeListings: makeFunctionReference<"query">("listings:getHomeListings"),
   getListingDetail: makeFunctionReference<"query">("listings:getListingDetail"),
+  getCheckoutView: makeFunctionReference<"query">("listings:getCheckoutView"),
   mockCheckout: makeFunctionReference<"mutation">("orders:mockCheckout"),
   sellerSubmitTransfer: makeFunctionReference<"mutation">("orders:sellerSubmitTransfer"),
   buyerConfirmTransfer: makeFunctionReference<"mutation">("orders:buyerConfirmTransfer"),

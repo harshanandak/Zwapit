@@ -22,6 +22,7 @@ import {
   connectSellerOrderFlow,
   connectTimelineActions,
   loadDemoState,
+  NOW_BEFORE_DEADLINE,
   reportBuyerIssue,
   saveDemoState,
   type CheckoutFlowOptions,
@@ -33,6 +34,8 @@ import {
   type TimelineActionResult,
 } from "../flow/mockFlow";
 import { createMockFixture } from "../mock/fixtures";
+import { evaluateSourceRule } from "../rules/evaluateRule";
+import { validateCheckout } from "../validation/checkoutValidation";
 import { getConvexClient } from "./client";
 import { functionRefs } from "./functionRefs";
 
@@ -89,11 +92,50 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
 }
 
 // Listing display + checkout readiness (same shape as connectMockListingFlow()).
-// Listing data is read-only here and identical whether sourced from the fixture
-// or from Convex (Convex is seeded from the same fixture), so this returns the
-// local computation directly.
 export async function loadListingFlowView(): Promise<ListingFlowView> {
-  return connectMockListingFlow();
+  const local = connectMockListingFlow();
+  const client = await getConvexClient();
+  if (!client) return local;
+  try {
+    await client.mutation(functionRefs.seedDemoFixture, {});
+    const res = await client.query(functionRefs.getCheckoutView, {});
+    if (!res?.listing || !res?.sourceRule || !res?.sellerPaymentAccount) return local;
+    const listing = res.listing;
+    const sourceRule = res.sourceRule;
+    const sellerPaymentAccount = res.sellerPaymentAccount;
+    const evaluation = evaluateSourceRule({
+      source: listing.source,
+      category: listing.category,
+      listingPrice: listing.listingPrice,
+      faceValue: listing.faceValue,
+      requiredFieldValues: {
+        title: listing.title,
+        eventOrTripStartAt: listing.eventOrTripStartAt,
+        venueOrRoute: listing.venueOrRoute,
+        quantity: listing.quantity,
+        transferDeadlineAt: listing.transferDeadlineAt,
+        sellerPromiseAccepted: true,
+      },
+    });
+    const checkout = validateCheckout({
+      listing,
+      sourceRule,
+      sellerPaymentAccount,
+      buyerEligibilityAcknowledged: true,
+      totalShownToBuyer: listing.totalPayable,
+      now: NOW_BEFORE_DEADLINE,
+    });
+
+    return {
+      listing,
+      sourceRule,
+      evaluation,
+      checkout,
+      purchasable: checkout.ok && evaluation.decision === "AUTO_APPROVE",
+    };
+  } catch {
+    return local;
+  }
 }
 
 // ---- Mutations (mock-visible flow only) ----

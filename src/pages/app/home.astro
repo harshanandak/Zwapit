@@ -1,9 +1,9 @@
 ---
 import AppShell from "../../components/AppShell.astro";
 import ListingCard from "../../components/buyer/ListingCard.astro";
-import { createMockFixture } from "../../lib/mock/fixtures";
+import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
-const { listing } = createMockFixture();
+const { listing } = await loadListingFlowView();
 
 // First slice ships one fixture listing. Blocked / draft / under-review listings
 // are hidden from the marketplace; live and waitlist-only listings are shown.
