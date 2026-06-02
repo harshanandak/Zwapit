@@ -70,14 +70,14 @@ export interface MockUser {
 
 export interface AuthIdentity {
   appUserId: string;
-  provider: "mock_phone";
+  provider: "mock_phone" | "clerk";
   providerUserId: string;
 }
 
 export interface UserVerification {
   appUserId: string;
   phoneVerified: boolean;
-  verificationMode: "mock";
+  verificationMode: "mock" | "clerk_phone" | "unverified";
 }
 
 export interface MockSellerPaymentAccount {

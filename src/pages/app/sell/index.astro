@@ -1,5 +1,10 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
+import AuthActionGate from "../../../components/AuthActionGate.astro";
+import { getAuthActionState } from "../../../lib/auth/authAdapter";
+
+const uploadAction = getAuthActionState("sell", "/app/sell/upload");
+const ordersAction = getAuthActionState("sell", "/app/sell/orders");
 ---
 
 <AppShell routeId="/app/sell" title="Sell" activeTab="sell">
@@ -11,12 +16,11 @@ import AppShell from "../../../components/AppShell.astro";
       </p>
     </div>
 
-    <a
-      href="/app/sell/upload"
+    <AuthActionGate
+      state={uploadAction}
+      label="Upload to Sell"
       class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
-    >
-      Upload to Sell
-    </a>
+    />
 
     <section class="rounded-xl border border-border bg-card p-4">
       <h3 class="text-sm font-semibold text-foreground">How selling works</h3>
@@ -29,12 +33,16 @@ import AppShell from "../../../components/AppShell.astro";
     </section>
 
     <a
-      href="/app/sell/orders"
+      href={ordersAction.status === "allowed" ? ordersAction.href : `/app/me?next=${encodeURIComponent(ordersAction.href)}`}
       class="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-sm"
+      data-auth-action={ordersAction.action}
+      data-auth-state={ordersAction.status}
     >
       <span>
-        <span class="font-semibold text-foreground">Orders</span>
-        <span class="block text-xs text-muted-foreground">Tickets people have bought from you</span>
+        <span class="font-semibold text-foreground">{ordersAction.status === "allowed" ? "Orders" : "Sign in to continue"}</span>
+        <span class="block text-xs text-muted-foreground">
+          {ordersAction.status === "allowed" ? "Tickets people have bought from you" : "Open your account to continue"}
+        </span>
       </span>
       <span aria-hidden="true" class="text-muted-foreground">›</span>
     </a>

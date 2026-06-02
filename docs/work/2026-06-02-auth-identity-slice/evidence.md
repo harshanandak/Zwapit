@@ -49,3 +49,61 @@ Issue: `zwapit-skf`
 - Codex completes Tasks 1-4 and writes Task 6 handoff evidence.
 - Claude starts Task 5 only after Task 6 evidence exists.
 - Codex runs Task 7 validation before ship.
+
+## Task 6 Backend Contract Handoff
+
+Codex backend contract is ready for UI auth states.
+
+Adapter shape:
+
+- `createMockAuthState()` preserves the local demo user.
+- `createSignedOutAuthState()` returns the signed-out gate state.
+- `createClerkAuthState(...)` normalizes Clerk provider subject into a separate `authIdentity.providerUserId`.
+- `getAuthActionState(action, href, state, options)` returns `allowed`, `sign_in_required`, or `phone_verification_required`.
+- `requireUser(...)` throws `AUTH_REQUIRED`.
+- `requirePhoneVerified(...)` throws `PHONE_VERIFICATION_REQUIRED`.
+
+Convex functions:
+
+- Clerk provider configuration proof boundary: no active `convex/auth.config.ts` is committed because no Clerk issuer domain exists in the local Convex dev deployment yet; adding that file before the Clerk app exists blocks `convex codegen` by requiring `CLERK_JWT_ISSUER_DOMAIN`.
+- `identity:syncAppUserFromProvider` syncs Clerk identity into `users`, `auth_identities`, and `user_verifications`.
+- `identity:getCurrentAppUser` returns the mapped app user or `null`.
+- `identity:getPhoneVerificationRequirement` returns the shape-only phone requirement.
+- `identity:requirePhoneVerifiedForAction` validates phone requirement without OTP/KYC.
+- `orders:sellerSubmitTransferForCurrentUser`, `orders:buyerConfirmTransferForCurrentUser`, and `orders:buyerReportIssueForCurrentUser` guard actor identity before using the existing state machine.
+
+Allowed UI handoff:
+
+- Buy and sell action gates may render the default allowed link from `getAuthActionState`.
+- Signed-out state should point users toward `/app/me?next=<target>`.
+- Phone-verification-required state should point users toward `/app/me?next=<target>`.
+- No checkout/payment/payout/KYC/admin/demand/category surfaces may be added.
+
+Handoff verification:
+
+- `bun test src/lib/auth/__tests__/authAdapter.test.ts convex/__tests__/authModel.test.ts`: 8 pass, 0 fail.
+- `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+
+## `/dev` Implementation Evidence
+
+Implemented:
+
+- Adapter states for mock, signed-out, Clerk-shaped authenticated, and phone-verification-required auth.
+- Convex identity model helpers that keep provider subjects separate from internal app ids.
+- Schema support for `clerk`, `clerk_phone`, and `unverified` identity/verification records.
+- `identity:*` Convex functions for app user sync, current app user lookup, and phone requirement shape.
+- Guarded current-user order mutations for seller transfer submission, buyer confirmation, and buyer issue reporting.
+- UI action gate component around existing buy/sell links while preserving default mock-visible behavior.
+
+Fresh verification:
+
+- RED evidence: `bun test src/lib/auth/__tests__/authAdapter.test.ts convex/__tests__/authModel.test.ts` failed before implementation with missing `createClerkAuthState` and missing `convex/authModel`.
+- GREEN evidence: `bun test src/lib/auth/__tests__/authAdapter.test.ts convex/__tests__/authModel.test.ts`: 8 pass, 0 fail, 30 assertions.
+- `bunx convex codegen`: passed after removing active `auth.config.ts` proof-boundary config.
+- `bunx tsc --project convex/tsconfig.json --noEmit`: passed.
+- `bun run check`: 0 errors, 0 warnings, 11 hints.
+- `bun run build`: 15 pages built.
+- `bun test`: 58 pass, 0 fail, 183 assertions.
+- `bun scripts/verify-first-visible-slice.mjs`: passed, checked 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: passed.
+- `bun scripts/e2e-seller.mjs`: passed.

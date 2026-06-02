@@ -12,6 +12,7 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { requireAuthenticatedAppUser } from "./identity";
 import {
   applyBuyerConfirm,
   applyComplete,
@@ -38,6 +39,28 @@ const issueReasonCode = v.union(
   v.literal("cannot_access_ticket"),
 );
 const actorRole = v.union(v.literal("buyer"), v.literal("seller"));
+
+async function requireBuyerForOrder(ctx: MutationCtx, orderKey: string) {
+  const orderDoc = await ctx.db
+    .query("orders")
+    .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+    .unique();
+  if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+  const user = await requireAuthenticatedAppUser(ctx);
+  if (user.appUserId !== orderDoc.buyerId) throw new Error("BUYER_ACTOR_REQUIRED");
+  return orderDoc;
+}
+
+async function requireSellerForOrder(ctx: MutationCtx, orderKey: string) {
+  const orderDoc = await ctx.db
+    .query("orders")
+    .withIndex("by_key", (q) => q.eq("orderKey", orderKey))
+    .unique();
+  if (!orderDoc) throw new Error("ORDER_NOT_FOUND");
+  const user = await requireAuthenticatedAppUser(ctx);
+  if (user.appUserId !== orderDoc.sellerId) throw new Error("SELLER_ACTOR_REQUIRED");
+  return orderDoc;
+}
 
 async function validatePersistedCheckout(
   ctx: MutationCtx,
@@ -283,12 +306,39 @@ export const sellerSubmitTransfer = mutation({
   },
 });
 
+export const sellerSubmitTransferForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+  },
+  returns: v.object({ state: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await requireSellerForOrder(ctx, orderKey);
+    const order = await applySellerSubmit(ctx, orderKey, {
+      submittedAt: args.submittedAt,
+    });
+    return { state: order.state };
+  },
+});
+
 export const buyerConfirmTransfer = mutation({
   args: { orderKey: v.optional(v.string()), actorRole: v.optional(actorRole) },
   returns: v.object({ state: v.string() }),
   handler: async (ctx, args) => {
     if (args.actorRole !== "buyer") throw new Error("BUYER_ACTOR_REQUIRED");
     const order = await applyBuyerConfirm(ctx, args.orderKey ?? DEMO_ORDER_KEY);
+    return { state: order.state };
+  },
+});
+
+export const buyerConfirmTransferForCurrentUser = mutation({
+  args: { orderKey: v.optional(v.string()) },
+  returns: v.object({ state: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await requireBuyerForOrder(ctx, orderKey);
+    const order = await applyBuyerConfirm(ctx, orderKey);
     return { state: order.state };
   },
 });
@@ -311,6 +361,23 @@ export const buyerReportIssue = mutation({
       args.reasonCode,
       evidenceItems,
     );
+    return { orderState: order.state, issueState: issue.state };
+  },
+});
+
+export const buyerReportIssueForCurrentUser = mutation({
+  args: {
+    orderKey: v.optional(v.string()),
+    reasonCode: issueReasonCode,
+    evidenceText: v.optional(v.string()),
+  },
+  returns: v.object({ orderState: v.string(), issueState: v.string() }),
+  handler: async (ctx, args) => {
+    const orderKey = args.orderKey ?? DEMO_ORDER_KEY;
+    await requireBuyerForOrder(ctx, orderKey);
+    const text = args.evidenceText?.trim();
+    const evidenceItems = text ? [text] : [];
+    const { order, issue } = await applyReportIssue(ctx, orderKey, args.reasonCode, evidenceItems);
     return { orderState: order.state, issueState: issue.state };
   },
 });

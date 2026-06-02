@@ -19,4 +19,11 @@ export const functionRefs = {
   buyerConfirmTransfer: makeFunctionReference<"mutation">("orders:buyerConfirmTransfer"),
   buyerReportIssue: makeFunctionReference<"mutation">("orders:buyerReportIssue"),
   advanceTimeline: makeFunctionReference<"mutation">("orders:advanceTimeline"),
+  syncAppUserFromProvider: makeFunctionReference<"mutation">("identity:syncAppUserFromProvider"),
+  getCurrentAppUser: makeFunctionReference<"query">("identity:getCurrentAppUser"),
+  getPhoneVerificationRequirement: makeFunctionReference<"query">("identity:getPhoneVerificationRequirement"),
+  requirePhoneVerifiedForAction: makeFunctionReference<"mutation">("identity:requirePhoneVerifiedForAction"),
+  sellerSubmitTransferForCurrentUser: makeFunctionReference<"mutation">("orders:sellerSubmitTransferForCurrentUser"),
+  buyerConfirmTransferForCurrentUser: makeFunctionReference<"mutation">("orders:buyerConfirmTransferForCurrentUser"),
+  buyerReportIssueForCurrentUser: makeFunctionReference<"mutation">("orders:buyerReportIssueForCurrentUser"),
 } as const;
