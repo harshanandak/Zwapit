@@ -49,9 +49,12 @@ const visible = catalogue.filter(
 
   void loadListingFlowView()
     .then(({ listing }) => {
+      const listingCard = document.getElementById("home-listing-card");
+      const emptyState = document.getElementById("home-empty-state");
       const shouldShow = listing.state === "live" || listing.state === "waitlist_only";
-      document.getElementById("home-listing-card")?.classList.toggle("hidden", !shouldShow);
-      document.getElementById("home-empty-state")?.classList.toggle("hidden", shouldShow);
+      const hasRenderedCard = (listingCard?.children.length ?? 0) > 0;
+      listingCard?.classList.toggle("hidden", !shouldShow || !hasRenderedCard);
+      emptyState?.classList.toggle("hidden", shouldShow && hasRenderedCard);
     })
     .catch(() => {
       // Keep the static fallback state.

@@ -225,6 +225,9 @@ export const getSellerOrders = query({
       .collect();
     const result = [];
     for (const orderDoc of orders) {
+      if (orderDoc.state === "checkout_pending" || orderDoc.mockPaymentStatus !== "mock_paid") {
+        continue;
+      }
       const listingDoc = await ctx.db
         .query("listings")
         .withIndex("by_key", (q) => q.eq("listingKey", orderDoc.listingId))

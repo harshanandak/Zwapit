@@ -75,14 +75,21 @@ export async function loadBuyerOrderState(): Promise<DemoState> {
 // Seller Orders view (same shape as connectSellerOrderFlow()), with the order +
 // transfer task overlaid from Convex when configured.
 export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
-  const base = connectSellerOrderFlow();
+  const state = loadDemoState();
+  const base = { ...connectSellerOrderFlow(), order: state.order, transferTask: state.transferTask };
   const client = await getConvexClient();
   if (!client) return base;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    const res = await client.query(functionRefs.getBuyerOrder, {});
-    if (res?.order && res?.transferTask) {
-      return { ...base, order: res.order, transferTask: res.transferTask };
+    const rows = await client.query(functionRefs.getSellerOrders, {});
+    const first = Array.isArray(rows) ? rows[0] : null;
+    if (first?.order && first?.transferTask) {
+      return {
+        ...base,
+        listing: first.listing ?? base.listing,
+        order: first.order,
+        transferTask: first.transferTask,
+      };
     }
     return base;
   } catch {

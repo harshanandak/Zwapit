@@ -75,36 +75,43 @@ const payoutReady = sellerPaymentAccount.status === "mock_ready";
 <script>
   import type { MockOrder, MockTransferTask } from "../../../lib/types";
   import { sellerStatusLabel } from "../../../components/seller/format";
-  import { loadDemoState } from "../../../lib/flow/mockFlow";
+  import { loadSellerOrderView } from "../../../lib/convex/dataAdapter";
   import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
 
   const emptyState = document.getElementById("seller-empty-state");
   const orderCard = document.getElementById("seller-order-card");
   const statusLabel = document.getElementById("seller-status-label");
-  const state = loadDemoState();
-  const order = state.order as MockOrder | null | undefined;
-  const transferTask = state.transferTask as MockTransferTask | null | undefined;
-  const hasValidOrder =
-    order !== null &&
-    typeof order === "object" &&
-    typeof order.id === "string" &&
-    typeof order.state === "string" &&
-    typeof order.mockPaymentStatus === "string";
-  const hasValidTransfer =
-    transferTask !== null &&
-    typeof transferTask === "object" &&
-    typeof transferTask.orderId === "string" &&
-    transferTask.orderId === order?.id;
-  const hasCompletedCheckout =
-    hasValidOrder && hasValidTransfer && order.mockPaymentStatus === "mock_paid" && order.state !== "checkout_pending";
 
-  if (hasCompletedCheckout) {
-    if (emptyState) emptyState.hidden = true;
-    if (orderCard) orderCard.hidden = false;
-    if (statusLabel) statusLabel.textContent = sellerStatusLabel(order.state);
-    mountTimelinePanel("seller-live", "seller");
-  } else {
-    if (emptyState) emptyState.hidden = false;
-    if (orderCard) orderCard.hidden = true;
+  function renderSellerOrder(order: MockOrder | null | undefined, transferTask: MockTransferTask | null | undefined): void {
+    const hasValidOrder =
+      order !== null &&
+      typeof order === "object" &&
+      typeof order.id === "string" &&
+      typeof order.state === "string" &&
+      typeof order.mockPaymentStatus === "string";
+    const hasValidTransfer =
+      transferTask !== null &&
+      typeof transferTask === "object" &&
+      typeof transferTask.orderId === "string" &&
+      transferTask.orderId === order?.id;
+    const hasCompletedCheckout =
+      hasValidOrder && hasValidTransfer && order.mockPaymentStatus === "mock_paid" && order.state !== "checkout_pending";
+
+    if (hasCompletedCheckout) {
+      if (emptyState) emptyState.hidden = true;
+      if (orderCard) orderCard.hidden = false;
+      if (statusLabel) statusLabel.textContent = sellerStatusLabel(order.state);
+      mountTimelinePanel("seller-live", "seller");
+    } else {
+      if (emptyState) emptyState.hidden = false;
+      if (orderCard) orderCard.hidden = true;
+    }
   }
+
+  void loadSellerOrderView()
+    .then(({ order, transferTask }) => renderSellerOrder(order, transferTask))
+    .catch(() => {
+      if (emptyState) emptyState.hidden = false;
+      if (orderCard) orderCard.hidden = true;
+    });
 </script>
