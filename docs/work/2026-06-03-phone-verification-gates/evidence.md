@@ -212,3 +212,61 @@ comment is recorded in
 (with the exact `bd comments add ... -f` command to apply it once the runtime is
 recovered). This `evidence.md` is the durable Task 6 handoff artifact Codex reads
 before Task 7.
+
+## Task 7 Validation - Codex
+
+Validation owner: Codex. Implementation for Tasks 1-6 remained Claude-owned.
+Codex made one validation-only fix after reproducing the known scanner failure.
+
+### Beads recovery
+
+- Recovered the local worktree Beads runtime by importing the branch export:
+  `bd init --reinit-local --prefix zwapit --from-jsonl --skip-agents --skip-hooks --non-interactive`.
+- Applied the handoff comment:
+  `bd comments add zwapit-12a -f docs/work/2026-06-03-phone-verification-gates/beads-handoff-zwapit-12a.md`.
+- Set metadata with `bd update zwapit-12a --set-metadata validation_owner=codex --set-metadata forge_stage=validate --set-metadata implementation_complete=true`.
+
+### Fresh validation results
+
+- `bun run check`: PASS. Exit 0. Result: 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun test`: initially failed only on `first visible slice has no forbidden scope drift`.
+  Exact reproduced failure: `out-of-scope first-slice branch change: .beads/issues.jsonl`.
+- `bun scripts/verify-first-visible-slice.mjs`: initially failed only on
+  `scope drift: out-of-scope first-slice branch change: .beads/issues.jsonl`.
+- `bun run build`: PASS. Exit 0. Result: 0 errors, 0 warnings, 15 pages built.
+- `bun scripts/e2e-buyer.mjs`: PASS. `Buyer e2e mock-path passed (Home -> Listing -> Checkout -> timeline -> completed).`
+- `bun scripts/e2e-seller.mjs`: PASS. `Seller e2e mock-path passed (validate -> auto-approve -> transfer -> payout waiting -> completed).`
+
+### Validation-only fix
+
+Changed exactly one validator file:
+
+- `scripts/verify-first-visible-slice.mjs`: added `.beads/issues.jsonl` to
+  `allowedFirstSlicePaths`.
+
+Reason this is validation-only: the plan commit `a88f063` intentionally added the
+Beads issue export `.beads/issues.jsonl`, and the first-slice scanner was still
+allowlisting only `.beads/team-map.jsonl`. No product behavior, auth gate logic,
+payment logic, UI flow, Convex data model, or Claude-owned implementation file was
+changed by Codex.
+
+### Final rerun after fix
+
+- `bun scripts/verify-first-visible-slice.mjs`: PASS. `First visible slice verification passed.`
+- `bun test`: PASS. 76 pass, 0 fail, across 12 files.
+- `bun run check`: PASS. Exit 0. Result: 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun run build`: PASS. Exit 0. Result: 15 pages built.
+- `bun scripts/e2e-buyer.mjs`: PASS.
+- `bun scripts/e2e-seller.mjs`: PASS.
+
+### Scope and provider-id checks
+
+- Scope search for `Razorpay`, real payments, payout setup, full KYC, admin
+  expansion, demand discovery, and category expansion found only negative comments:
+  `src/lib/auth/authAdapter.ts:153` and
+  `src/pages/app/checkout/[listingId].astro:117,134`.
+- Provider-id search confirmed provider subjects stay in `auth_identities.providerUserId`;
+  app data ownership uses internal `appUserId`, `buyerId`, or `sellerId`.
+- Verified guard references include `convex/identity.ts:128` for
+  `requirePhoneVerifiedAppUser`, `convex/orders.ts:335` for guarded checkout, and
+  `convex/orders.ts:356` for guarded seller claim.
