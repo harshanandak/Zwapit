@@ -152,7 +152,10 @@ describe("Convex identity endpoints", () => {
       appUserId: "user_internal_2",
       status: "verified",
     });
-    const synced = await handlerOf(syncAppUserFromProvider)(ctx, {});
+    const synced = (await handlerOf(syncAppUserFromProvider)(ctx, {})) as {
+      appUser: { phoneVerified: boolean };
+      verification: { verificationMode: string };
+    };
     expect(synced.appUser.phoneVerified).toBe(true);
     expect(synced.verification.verificationMode).toBe("mock");
     expect(tables.users[0].phoneVerified).toBe(true);

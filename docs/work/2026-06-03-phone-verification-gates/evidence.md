@@ -342,6 +342,28 @@ Validation after second review fixes:
 - `bun scripts/e2e-seller.mjs`: PASS. `Seller e2e mock-path passed (validate ->
   auto-approve -> transfer -> payout waiting -> completed).`
 
+## Review Follow-up 5 - PR #8
+
+Trigger: GitHub CI `Type check` failed on commit `9373250`.
+
+Failure:
+
+- `bunx tsc --project convex/tsconfig.json --noEmit` failed with
+  `convex/__tests__/identity.test.ts(156,12): error TS18046: 'synced' is of type 'unknown'`
+  and the same error on line 157.
+
+Fix applied:
+
+- `convex/__tests__/identity.test.ts`: cast the local `syncAppUserFromProvider`
+  test result to the expected app-user/verification shape before property access.
+  This is validation-only test typing, not product implementation.
+
+Validation after CI typecheck fix:
+
+- `bunx tsc --project convex/tsconfig.json --noEmit`: PASS. Exit 0.
+- Focused auth/identity tests: PASS. 23 pass, 0 fail.
+- `bun test`: PASS. 78 pass, 0 fail, across 12 files.
+
 ## Review Follow-up 4 - PR #8
 
 Reviewer: new unresolved GitHub review thread on `src/pages/app/sell/upload.astro`
