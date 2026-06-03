@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
+import {
+  createClerkAuthState,
+  createMockAuthState,
+  createSignedOutAuthState,
+  getAuthActionState,
+} from "../../auth/authAdapter";
 import { createMockFixture } from "../../mock/fixtures";
-import { validateBuyerConfirmation, validateCheckout } from "../checkoutValidation";
+import { validateBuyerCheckoutAccess, validateBuyerConfirmation, validateCheckout } from "../checkoutValidation";
+
+const CHECKOUT_HREF = "/app/checkout/listing_bms_event_1";
+function buyAction(state: Parameters<typeof getAuthActionState>[2]) {
+  return getAuthActionState("buy", CHECKOUT_HREF, state, { requirePhoneVerified: true });
+}
 
 describe("checkout validation blockers", () => {
   test("accepts live listing with visible totals and ready mock payout", () => {
@@ -93,6 +104,28 @@ describe("checkout validation blockers", () => {
     expect(invalidNow.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
     expect(invalidDeadline.ok).toBe(false);
     expect(invalidDeadline.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+  });
+
+  test("buyer checkout access allows a signed-in, phone-verified buyer", () => {
+    expect(validateBuyerCheckoutAccess(buyAction(createMockAuthState()))).toEqual({ ok: true, blockers: [] });
+  });
+
+  test("buyer checkout access blocks signed-out and phone-unverified buyers", () => {
+    expect(validateBuyerCheckoutAccess(buyAction(createSignedOutAuthState()))).toEqual({
+      ok: false,
+      blockers: ["AUTH_REQUIRED"],
+    });
+
+    const unverified = createClerkAuthState({
+      appUserId: "user_buyer_internal_1",
+      providerUserId: "user_2buyer_unverified",
+      displayName: "Unverified Buyer",
+      phoneVerified: false,
+    });
+    expect(validateBuyerCheckoutAccess(buyAction(unverified))).toEqual({
+      ok: false,
+      blockers: ["PHONE_VERIFICATION_REQUIRED"],
+    });
   });
 
   test("buyer confirmation blocks wrong order state", () => {

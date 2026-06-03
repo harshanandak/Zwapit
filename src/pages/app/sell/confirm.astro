@@ -63,11 +63,19 @@ const details = [
         Edit
       </a>
       <a
+        id="sell-continue"
         href="/app/sell/price"
         class="flex-1 rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+        data-sell-continue
       >
         Looks right
       </a>
     </div>
   </div>
 </AppShell>
+
+<script>
+  import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+
+  void gateProtectedActionLink("[data-sell-continue]");
+</script>

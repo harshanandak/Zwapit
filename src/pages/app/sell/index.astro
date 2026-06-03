@@ -6,6 +6,17 @@ import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/au
 const authState = createCurrentAuthState();
 const uploadAction = getAuthActionState("sell", "/app/sell/upload", authState, { requirePhoneVerified: true });
 const ordersAction = getAuthActionState("sell", "/app/sell/orders", authState, { requirePhoneVerified: true });
+
+const ordersHref =
+  ordersAction.status === "allowed" ? ordersAction.href : `/app/me?next=${encodeURIComponent(ordersAction.href)}`;
+const ordersTitle =
+  ordersAction.status === "allowed"
+    ? "Orders"
+    : ordersAction.status === "phone_verification_required"
+      ? "Verify phone to continue"
+      : "Sign in to continue";
+const ordersSubtitle =
+  ordersAction.status === "allowed" ? "Tickets people have bought from you" : "Open your account to continue";
 ---
 
 <AppShell routeId="/app/sell" title="Sell" activeTab="sell">
@@ -34,16 +45,14 @@ const ordersAction = getAuthActionState("sell", "/app/sell/orders", authState, {
     </section>
 
     <a
-      href={ordersAction.status === "allowed" ? ordersAction.href : `/app/me?next=${encodeURIComponent(ordersAction.href)}`}
+      href={ordersHref}
       class="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-sm"
       data-auth-action={ordersAction.action}
       data-auth-state={ordersAction.status}
     >
       <span>
-        <span class="font-semibold text-foreground">{ordersAction.status === "allowed" ? "Orders" : "Sign in to continue"}</span>
-        <span class="block text-xs text-muted-foreground">
-          {ordersAction.status === "allowed" ? "Tickets people have bought from you" : "Open your account to continue"}
-        </span>
+        <span class="font-semibold text-foreground">{ordersTitle}</span>
+        <span class="block text-xs text-muted-foreground">{ordersSubtitle}</span>
       </span>
       <span aria-hidden="true" class="text-muted-foreground">›</span>
     </a>

@@ -1,3 +1,4 @@
+import type { AuthActionState } from "../auth/authAdapter";
 import type { MockListing, SourceRule } from "../types";
 import { validationResult, type ValidationResult } from "./types";
 
@@ -35,4 +36,17 @@ export function validateSellerListing(
   }
 
   return validationResult(blockers);
+}
+
+// Access gate for the protected listing-submission action. Derived from the auth
+// adapter's action-gate contract so a signed-out or phone-unverified seller is
+// blocked before submission/progression — not only at the navigation CTA.
+export type SellerSubmissionAccessBlocker = "AUTH_REQUIRED" | "PHONE_VERIFICATION_REQUIRED";
+
+export function validateSellerSubmissionAccess(
+  action: AuthActionState,
+): ValidationResult<SellerSubmissionAccessBlocker> {
+  if (action.status === "sign_in_required") return validationResult(["AUTH_REQUIRED"]);
+  if (action.status === "phone_verification_required") return validationResult(["PHONE_VERIFICATION_REQUIRED"]);
+  return validationResult([]);
 }

@@ -25,7 +25,6 @@ import {
   reportBuyerIssue,
   saveDemoState,
   type CheckoutFlowOptions,
-  type CheckoutFlowResult,
   type DemoState,
   type ListingFlowView,
   type SellerOrderFlowView,
@@ -36,8 +35,55 @@ import { isClerkAuthConfigured } from "../auth/authAdapter";
 import { createMockFixture } from "../mock/fixtures";
 import { evaluateSourceRule } from "../rules/evaluateRule";
 import { validateCheckout } from "../validation/checkoutValidation";
-import { getConvexClient } from "./client";
+import { getConvexClient, refreshConvexAuthTokenOnNextRequest } from "./client";
 import { functionRefs } from "./functionRefs";
+
+// Client-side phone-verification gate status used by protected buy/sell screens.
+// Mirrors the me.astro check: the Convex client carries the Clerk session token,
+// so the verified-phone state comes from the identity boundary, never from a
+// client-supplied id. When Clerk auth is not configured (local demo), the mock
+// user is verified, so protected actions stay open and the mock flow is intact.
+export type PhoneGateStatus = "verified" | "required" | "signed_out" | "unknown";
+
+export function accountStepUrl(next: string): string {
+  return `/app/me?next=${encodeURIComponent(next)}`;
+}
+
+export async function resolvePhoneGateStatus(): Promise<PhoneGateStatus> {
+  if (!isClerkAuthConfigured()) return "verified";
+  const client = await getConvexClient();
+  if (!client) return "unknown";
+  try {
+    refreshConvexAuthTokenOnNextRequest();
+    await client.mutation(functionRefs.syncAppUserFromProvider, {});
+    const requirement = (await client.query(functionRefs.getPhoneVerificationRequirement, {})) as
+      | { status?: "verified" | "required" }
+      | null;
+    return requirement?.status === "verified" ? "verified" : "required";
+  } catch (error) {
+    return error instanceof Error && error.message.includes("AUTH_REQUIRED") ? "signed_out" : "unknown";
+  }
+}
+
+// Client helper: when the current user is signed-out or phone-unverified, rewrite
+// the matched protected-action link(s) to the account/verify step (preserving the
+// `next` intent) and relabel them. Returns the resolved gate status so callers can
+// suppress their own protected handlers. A no-op for verified/demo users, so the
+// mobile-first flow and mock demo are unchanged. Browser-only.
+export async function gateProtectedActionLink(selector: string, next?: string): Promise<PhoneGateStatus> {
+  if (typeof document === "undefined") return "unknown";
+  const status = await resolvePhoneGateStatus();
+  if (status === "verified" || status === "unknown") return status;
+  const intent = next ?? `${window.location.pathname}${window.location.search}`;
+  const label = status === "signed_out" ? "Sign in to continue" : "Verify phone to continue";
+  const authState = status === "signed_out" ? "sign_in_required" : "phone_verification_required";
+  document.querySelectorAll<HTMLElement>(selector).forEach((element) => {
+    if (element instanceof HTMLAnchorElement) element.href = accountStepUrl(intent);
+    element.dataset.authState = authState;
+    element.textContent = label;
+  });
+  return status;
+}
 
 async function syncCurrentUserForGuardedPath(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
   if (!client || !isClerkAuthConfigured()) return;
@@ -232,11 +278,21 @@ export async function runAdvanceTimeline(
   }
 }
 
+// Result of the guarded checkout execution. Widens CheckoutFlowResult's blockers
+// to also carry the phone-verification/auth gate reasons surfaced by the Convex
+// identity boundary, so the UI can show a clear message instead of an opaque
+// persistence failure.
+export interface GuardedCheckoutResult {
+  ok: boolean;
+  blockers: string[];
+  order: MockOrder;
+}
+
 // Validate + mock-pay checkout (same shape as connectMockCheckoutFlow()).
 export async function runMockCheckout(
   order: MockOrder,
   options: CheckoutFlowOptions = {},
-): Promise<CheckoutFlowResult> {
+): Promise<GuardedCheckoutResult> {
   // Validation stays local (pure); it produces the same blockers as today.
   const local = connectMockCheckoutFlow(order, options);
   const client = await getConvexClient();
@@ -258,7 +314,17 @@ export async function runMockCheckout(
       {},
     );
     return { ok: true, blockers: [], order: (res?.order ?? local.order) as MockOrder };
-  } catch {
+  } catch (error) {
+    // The guarded mutation rejects unverified/signed-out buyers at the identity
+    // boundary. Surface that as a clear gate blocker rather than an opaque write
+    // failure so the UI can route the buyer to phone verification.
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("PHONE_VERIFICATION_REQUIRED")) {
+      return { ok: false, blockers: ["PHONE_VERIFICATION_REQUIRED"], order };
+    }
+    if (message.includes("AUTH_REQUIRED")) {
+      return { ok: false, blockers: ["AUTH_REQUIRED"], order };
+    }
     return { ok: false, blockers: ["PERSISTENCE_WRITE_FAILED"], order };
   }
 }
