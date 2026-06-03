@@ -342,6 +342,39 @@ Validation after second review fixes:
 - `bun scripts/e2e-seller.mjs`: PASS. `Seller e2e mock-path passed (validate ->
   auto-approve -> transfer -> payout waiting -> completed).`
 
+## Review Follow-up 4 - PR #8
+
+Reviewer: new unresolved GitHub review thread on `src/pages/app/sell/upload.astro`
+plus local validation harness behavior.
+
+Additional fixes applied:
+
+- `src/pages/app/sell/upload.astro`, `src/pages/app/sell/price.astro`, and
+  `src/pages/app/sell/confirm.astro`: added a shared loading-window guard pattern
+  so protected sell-step links prevent navigation until `gateProtectedActionLink`
+  has resolved and rewritten the link when needed.
+- `tests/acceptance/firstVisibleSlice.test.ts`: changed the nested build
+  `spawnSync` call to `stdio: "ignore"` and kept the extended timeout. This is
+  validation-only: the build itself was passing, but capturing the full
+  PowerShell/Astro output made the nested build crawl and hit the hook timeout
+  locally.
+
+Validation after fourth review fixes:
+
+- Focused auth/identity tests: PASS. 23 pass, 0 fail.
+- `git diff --check`: PASS. Whitespace clean; Git reported CRLF conversion
+  warnings only.
+- `bun test`: PASS. 78 pass, 0 fail, across 12 files.
+- `bun run check`: PASS. Exit 0. Result: 0 errors, 0 warnings, 11 existing
+  CommonJS hints.
+- `bun run build`: PASS. Exit 0. Result: 0 errors, 0 warnings, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: PASS. `First visible slice
+  verification passed.`
+- `bun scripts/e2e-buyer.mjs`: PASS. `Buyer e2e mock-path passed (Home ->
+  Listing -> Checkout -> timeline -> completed).`
+- `bun scripts/e2e-seller.mjs`: PASS. `Seller e2e mock-path passed (validate ->
+  auto-approve -> transfer -> payout waiting -> completed).`
+
 Environment note: during review validation, one direct `bun run build` failed
 before code evaluation because Windows reported `There is not enough space on the
 disk` while Vite was writing `node_modules/.vite/deps_temp_*`. Generated Vite,

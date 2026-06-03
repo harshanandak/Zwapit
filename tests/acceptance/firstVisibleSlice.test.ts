@@ -12,10 +12,11 @@ describe("first visible slice acceptance verification", () => {
     const build = spawnSync("bun", ["run", "build"], {
       encoding: "utf8",
       shell: process.platform === "win32",
+      stdio: "ignore",
     });
 
-    expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
-  }, 180000);
+    expect(build.status, build.error?.message).toBe(0);
+  }, 420000);
 
   test("all contract routes render from the built output", () => {
     const result = verifyRouteCoverage();

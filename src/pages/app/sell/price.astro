@@ -67,5 +67,12 @@ const payout = listing.listingPrice;
 <script>
   import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
 
-  void gateProtectedActionLink("[data-sell-continue]");
+  const sellContinue = document.querySelector<HTMLAnchorElement>("[data-sell-continue]");
+  let phoneGateResolved = false;
+  sellContinue?.addEventListener("click", (event) => {
+    if (!phoneGateResolved) event.preventDefault();
+  });
+  void gateProtectedActionLink("[data-sell-continue]").then(() => {
+    phoneGateResolved = true;
+  });
 </script>
