@@ -347,3 +347,37 @@ before code evaluation because Windows reported `There is not enough space on th
 disk` while Vite was writing `node_modules/.vite/deps_temp_*`. Generated Vite,
 Astro, and `dist` caches inside this repo/worktree were removed, after which the
 same build command passed.
+
+## Review Follow-up 3 - PR #8
+
+Reviewer: unresolved GitHub review threads from CodeRabbit and automated Codex
+review.
+
+Additional fixes applied:
+
+- `convex/identity.ts`: removed caller-supplied `expectedCode` from the Convex
+  `verifyPhoneWithMockOtp` mutation args. The server-side mutation now evaluates
+  only against the module-owned mock OTP constant.
+- `convex/authModel.ts` and `convex/identity.ts`: allowed sync records to carry
+  the persisted verification mode so provider sync does not downgrade a
+  mock-verified app user back to unverified or relabel the source.
+- `src/pages/app/sell/promise.astro`: made the protected seller publish handler
+  fail closed while the async phone gate is still resolving.
+- `src/pages/app/checkout/[listingId].astro`: treated `unknown` phone gate status
+  as phone-verification-required for checkout UI gating.
+- `convex/__tests__/identity.test.ts`: added regressions for ignored forged
+  `expectedCode` fields and preserving mock verification across provider sync.
+
+Validation after third review fixes:
+
+- Focused auth/identity tests: PASS. 23 pass, 0 fail.
+- `bun run check`: PASS. Exit 0. Result: 0 errors, 0 warnings, 11 existing
+  CommonJS hints.
+- `bun test`: PASS. 78 pass, 0 fail, across 12 files.
+- `bun run build`: PASS. Exit 0. Result: 0 errors, 0 warnings, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: PASS. `First visible slice
+  verification passed.`
+- `bun scripts/e2e-buyer.mjs`: PASS. `Buyer e2e mock-path passed (Home ->
+  Listing -> Checkout -> timeline -> completed).`
+- `bun scripts/e2e-seller.mjs`: PASS. `Seller e2e mock-path passed (validate ->
+  auto-approve -> transfer -> payout waiting -> completed).`

@@ -8,7 +8,9 @@ Evaluator: Codex planning review
 Pass after Task 7 validation and PR review. Codex made validation/review-only
 fixes after Claude handoff: the first-slice scanner allowlist for the plan-commit
 Beads issue export, CodeRabbit-requested correctness/doc fixes, and acceptance
-test timeout adjustments needed for local build/verifier runtime.
+test timeout adjustments needed for local build/verifier runtime. A final review
+pass also resolved older automated review threads with narrow auth-gate and
+verification-source fixes.
 
 ## Ownership Review
 
@@ -23,7 +25,8 @@ Task 7 validation check: Codex did not implement Tasks 1-6. Codex first changed
 only `scripts/verify-first-visible-slice.mjs` after reproducing the scanner
 failure on `.beads/issues.jsonl`. During PR review, Codex then changed only the
 minimum files needed to address CodeRabbit feedback and make validation observe
-the already-passing build/verifier behavior on this machine.
+the already-passing build/verifier behavior on this machine. The final review
+pass changed only files implicated by unresolved GitHub review threads.
 
 ## Scope Review
 

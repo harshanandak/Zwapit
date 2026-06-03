@@ -177,8 +177,8 @@ const authStepHref = accountStepUrl(checkoutHref);
     }
 
     const status = await resolvePhoneGateStatus();
-    if (status === "signed_out" || status === "required") {
-      showAuthGate(status);
+    if (status !== "verified") {
+      showAuthGate(status === "signed_out" ? "signed_out" : "required");
       return;
     }
 

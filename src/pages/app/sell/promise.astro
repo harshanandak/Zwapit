@@ -72,12 +72,19 @@ const promises = [
   // Protected listing submission: a signed-out or phone-unverified seller is
   // routed to the account/verify step before publishing. Verified/demo sellers
   // keep the existing seller-promise gate and publish instantly.
-  let phoneGated = false;
+  let phoneGateResolved = false;
+  let phoneGated = true;
   void gateProtectedActionLink("#promise-continue").then((status) => {
-    phoneGated = status === "signed_out" || status === "required";
+    phoneGateResolved = true;
+    phoneGated = status !== "verified";
   });
 
   continueLink?.addEventListener("click", (event) => {
+    if (!phoneGateResolved) {
+      event.preventDefault();
+      if (warning) warning.textContent = "Checking phone verification...";
+      return;
+    }
     if (phoneGated) return; // link already points to the account/verify step
 
     const promises = Array.from(document.querySelectorAll<HTMLInputElement>("[data-seller-promise]"));

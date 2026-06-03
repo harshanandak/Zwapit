@@ -8,6 +8,7 @@ export interface AuthSyncRecordInput {
   phoneVerified: boolean;
   provider: AuthProvider;
   providerUserId: string;
+  verificationMode?: UserVerification["verificationMode"];
 }
 
 export interface ProviderPhoneVerificationClaims {
@@ -74,7 +75,7 @@ export function buildAuthSyncRecord(input: AuthSyncRecordInput): AuthSyncRecord 
     verification: {
       appUserId: input.appUserId,
       phoneVerified: input.phoneVerified,
-      verificationMode: selectVerificationMode(input.provider, input.phoneVerified),
+      verificationMode: input.verificationMode ?? selectVerificationMode(input.provider, input.phoneVerified),
     },
   };
 }

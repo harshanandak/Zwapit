@@ -152,6 +152,12 @@ describe("Convex identity endpoints", () => {
       appUserId: "user_internal_2",
       status: "verified",
     });
+    const synced = await handlerOf(syncAppUserFromProvider)(ctx, {});
+    expect(synced.appUser.phoneVerified).toBe(true);
+    expect(synced.verification.verificationMode).toBe("mock");
+    expect(tables.users[0].phoneVerified).toBe(true);
+    expect(tables.user_verifications[0].phoneVerified).toBe(true);
+    expect(tables.user_verifications[0].verificationMode).toBe("mock");
   });
 
   test("a wrong mocked OTP leaves the user unverified and still gated", async () => {
@@ -179,6 +185,13 @@ describe("Convex identity endpoints", () => {
     );
 
     expect(await handlerOf(verifyPhoneWithMockOtp)(ctx, { submittedCode: "111222" })).toEqual({
+      appUserId: "user_internal_3",
+      phoneVerified: false,
+      status: "rejected",
+      verificationMode: "unverified",
+    });
+    const forgedOtpArgs = { submittedCode: "111222", expectedCode: "111222" };
+    expect(await handlerOf(verifyPhoneWithMockOtp)(ctx, forgedOtpArgs)).toEqual({
       appUserId: "user_internal_3",
       phoneVerified: false,
       status: "rejected",

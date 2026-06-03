@@ -42,7 +42,7 @@ export async function syncIdentityToAppUser(
     .withIndex("by_provider_subject", (q) => q.eq("provider", PROVIDER).eq("providerUserId", providerUserId))
     .unique();
 
-  const phoneVerified = phoneVerifiedFromIdentity(identity);
+  const providerPhoneVerified = phoneVerifiedFromIdentity(identity);
   const displayName = displayNameFromIdentity(identity);
 
   if (existingIdentity) {
@@ -50,6 +50,18 @@ export async function syncIdentityToAppUser(
       .query("users")
       .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
       .unique();
+    const existingVerification = await ctx.db
+      .query("user_verifications")
+      .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
+      .unique();
+    const phoneVerified = providerPhoneVerified || existingUser?.phoneVerified === true || existingVerification?.phoneVerified === true;
+    const verificationMode = providerPhoneVerified
+      ? "clerk_phone"
+      : existingVerification?.phoneVerified === true
+        ? existingVerification.verificationMode
+        : phoneVerified
+          ? "mock"
+          : "unverified";
     if (existingUser) {
       await ctx.db.patch(existingUser._id, { displayName, phoneVerified });
     } else {
@@ -60,12 +72,6 @@ export async function syncIdentityToAppUser(
         role: "buyer_seller",
       });
     }
-
-    const existingVerification = await ctx.db
-      .query("user_verifications")
-      .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
-      .unique();
-    const verificationMode = phoneVerified ? "clerk_phone" : "unverified";
     if (existingVerification) {
       await ctx.db.patch(existingVerification._id, { phoneVerified, verificationMode });
     } else {
@@ -82,13 +88,14 @@ export async function syncIdentityToAppUser(
       phoneVerified,
       provider: PROVIDER,
       providerUserId,
+      verificationMode,
     });
   }
 
   const userDocId = await ctx.db.insert("users", {
     appUserId: "__pending__",
     displayName,
-    phoneVerified,
+    phoneVerified: providerPhoneVerified,
     role: "buyer_seller",
   });
   const appUserId = appUserIdFromUserDocId(userDocId);
@@ -96,11 +103,11 @@ export async function syncIdentityToAppUser(
   await ctx.db.insert("auth_identities", { appUserId, provider: PROVIDER, providerUserId });
   await ctx.db.insert("user_verifications", {
     appUserId,
-    phoneVerified,
-    verificationMode: phoneVerified ? "clerk_phone" : "unverified",
+    phoneVerified: providerPhoneVerified,
+    verificationMode: providerPhoneVerified ? "clerk_phone" : "unverified",
   });
 
-  return buildAuthSyncRecord({ appUserId, displayName, phoneVerified, provider: PROVIDER, providerUserId });
+  return buildAuthSyncRecord({ appUserId, displayName, phoneVerified: providerPhoneVerified, provider: PROVIDER, providerUserId });
 }
 
 export async function resolveCurrentAppUser(ctx: AuthCtx): Promise<Doc<"users"> | null> {
@@ -189,7 +196,7 @@ export const getPhoneVerificationRequirement = query({
 // provider claim (syncAppUserFromProvider); this is the mock arm of the same
 // provider-abstracted contract.
 export const verifyPhoneWithMockOtp = mutation({
-  args: { submittedCode: v.string(), expectedCode: v.optional(v.string()) },
+  args: { submittedCode: v.string() },
   returns: v.object({
     appUserId: v.string(),
     phoneVerified: v.boolean(),
@@ -198,7 +205,7 @@ export const verifyPhoneWithMockOtp = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireAuthenticatedAppUser(ctx);
-    const result = evaluateMockOtp({ submittedCode: args.submittedCode, expectedCode: args.expectedCode });
+    const result = evaluateMockOtp({ submittedCode: args.submittedCode });
 
     if (result.status !== "verified") {
       const existingVerification = await ctx.db
