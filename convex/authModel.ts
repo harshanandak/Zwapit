@@ -21,6 +21,28 @@ export interface AuthSyncRecord {
   verification: UserVerification;
 }
 
+// Mock-only OTP code for the provider-abstracted phone-verification path. There
+// is no real SMS provider in this slice; the Clerk provider claim remains the
+// live source of truth (see selectProviderPhoneVerified). This mock arm lets the
+// verified-phone transition be exercised behind the identity boundary.
+export const MOCK_OTP_CODE = "000000";
+
+export type MockOtpVerificationResult =
+  | { status: "verified"; verificationMode: "mock" }
+  | { status: "rejected"; reason: "INVALID_OTP" };
+
+export interface MockOtpInput {
+  submittedCode: string;
+  expectedCode?: string;
+}
+
+export function evaluateMockOtp(input: MockOtpInput): MockOtpVerificationResult {
+  const expected = input.expectedCode ?? MOCK_OTP_CODE;
+  return input.submittedCode === expected
+    ? { status: "verified", verificationMode: "mock" }
+    : { status: "rejected", reason: "INVALID_OTP" };
+}
+
 export function appUserIdFromUserDocId(userDocId: string): string {
   return `user_${userDocId}`;
 }

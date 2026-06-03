@@ -1,5 +1,5 @@
 import type { AuthIdentity, MockUser, UserVerification } from "../types";
-import { mockAuthIdentity, mockCurrentUser, mockUserVerification } from "./mockAuth";
+import { MOCK_OTP_CODE, mockAuthIdentity, mockCurrentUser, mockUserVerification } from "./mockAuth";
 
 export type AuthAction = "buy" | "sell";
 
@@ -148,4 +148,42 @@ export function getAuthActionState(
   }
 
   return { action, href, status: "allowed" };
+}
+
+// Provider-abstracted / mocked OTP result shape. Real SMS, Razorpay, KYC, payout,
+// and admin behavior are explicitly out of scope: a verified result only means an
+// app user's phone-verified state may flip to true through this mocked boundary.
+export type MockOtpVerificationResult =
+  | { status: "verified"; verificationMode: "mock" }
+  | { status: "rejected"; reason: "INVALID_OTP" };
+
+// Pure mock OTP check. Accepts only the mock code; never contacts a provider.
+export function evaluateMockOtp(submittedCode: string, expectedCode: string = MOCK_OTP_CODE): MockOtpVerificationResult {
+  return submittedCode === expectedCode
+    ? { status: "verified", verificationMode: "mock" }
+    : { status: "rejected", reason: "INVALID_OTP" };
+}
+
+// Verified-phone state transition. A signed-in but phone-unverified user becomes
+// phone-verified when the mock OTP is accepted; on rejection the state is
+// returned unchanged so the action stays gated. Signed-out users are rejected
+// before any verification, matching the action-gate contract.
+export function verifyPhoneWithMockOtp(
+  state: AuthState,
+  submittedCode: string,
+  expectedCode: string = MOCK_OTP_CODE,
+): { state: AuthState; result: MockOtpVerificationResult } {
+  requireUser(state);
+  const result = evaluateMockOtp(submittedCode, expectedCode);
+  if (result.status !== "verified" || state.status !== "authenticated") {
+    return { state, result };
+  }
+
+  const verifiedState: AuthState = {
+    status: "authenticated",
+    user: { ...state.user, phoneVerified: true },
+    authIdentity: state.authIdentity,
+    verification: { ...state.verification, phoneVerified: true, verificationMode: "mock" },
+  };
+  return { state: verifiedState, result };
 }

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  MOCK_OTP_CODE,
   appUserIdFromUserDocId,
   assertActorMatchesAppUser,
   buildAuthSyncRecord,
+  evaluateMockOtp,
   selectProviderPhoneVerified,
   selectVerificationMode,
 } from "../authModel";
@@ -43,6 +45,15 @@ describe("Convex auth identity model", () => {
     expect(selectProviderPhoneVerified({ phoneNumber: "+919999999999", phoneNumberVerified: false })).toBe(false);
     expect(selectProviderPhoneVerified({ phoneNumber: "+919999999999" })).toBe(false);
     expect(selectProviderPhoneVerified({ phoneNumber: "+919999999999", phoneNumberVerified: true })).toBe(true);
+  });
+
+  test("evaluates a mocked OTP without any real provider behavior", () => {
+    expect(evaluateMockOtp({ submittedCode: MOCK_OTP_CODE })).toEqual({ status: "verified", verificationMode: "mock" });
+    expect(evaluateMockOtp({ submittedCode: "123456" })).toEqual({ status: "rejected", reason: "INVALID_OTP" });
+    expect(evaluateMockOtp({ submittedCode: "abc", expectedCode: "abc" })).toEqual({
+      status: "verified",
+      verificationMode: "mock",
+    });
   });
 
   test("rejects missing and mismatched actors before protected state changes", () => {

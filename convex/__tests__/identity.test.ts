@@ -5,7 +5,9 @@ import {
   getPhoneVerificationRequirement,
   requirePhoneVerifiedForAction,
   syncAppUserFromProvider,
+  verifyPhoneWithMockOtp,
 } from "../identity";
+import { MOCK_OTP_CODE } from "../authModel";
 
 type TestRow = Record<string, unknown> & { _id: string };
 type TestTables = Record<"users" | "auth_identities" | "user_verifications", TestRow[]>;
@@ -93,6 +95,99 @@ describe("Convex identity endpoints", () => {
     await expectRejectsWithMessage(
       () => handlerOf(requirePhoneVerifiedForAction)(ctx, { action: "buy" }),
       "AUTH_REQUIRED",
+    );
+    await expectRejectsWithMessage(
+      () => handlerOf(verifyPhoneWithMockOtp)(ctx, { submittedCode: MOCK_OTP_CODE }),
+      "AUTH_REQUIRED",
+    );
+  });
+
+  test("mocked OTP verification flips the app user and verification records to verified", async () => {
+    const { ctx, tables } = createMockIdentityCtx(
+      { subject: "clerk_unverified_2" },
+      {
+        users: [
+          {
+            _id: "users_1",
+            appUserId: "user_internal_2",
+            displayName: "Unverified Buyer",
+            phoneVerified: false,
+            role: "buyer_seller",
+          },
+        ],
+        auth_identities: [
+          {
+            _id: "auth_identities_1",
+            appUserId: "user_internal_2",
+            provider: "clerk",
+            providerUserId: "clerk_unverified_2",
+          },
+        ],
+        user_verifications: [
+          {
+            _id: "user_verifications_1",
+            appUserId: "user_internal_2",
+            phoneVerified: false,
+            verificationMode: "unverified",
+          },
+        ],
+      },
+    );
+
+    expect(await handlerOf(verifyPhoneWithMockOtp)(ctx, { submittedCode: MOCK_OTP_CODE })).toEqual({
+      appUserId: "user_internal_2",
+      phoneVerified: true,
+      status: "verified",
+      verificationMode: "mock",
+    });
+    expect(tables.users[0].phoneVerified).toBe(true);
+    expect(tables.user_verifications[0].phoneVerified).toBe(true);
+    expect(tables.user_verifications[0].verificationMode).toBe("mock");
+    // Provider identity stays separate from the internal app user id.
+    expect(tables.auth_identities[0].providerUserId).toBe("clerk_unverified_2");
+    expect(tables.auth_identities[0].appUserId).not.toBe("clerk_unverified_2");
+    // The verified app user can now pass the protected action gate.
+    expect(await handlerOf(requirePhoneVerifiedForAction)(ctx, { action: "buy" })).toEqual({
+      action: "buy",
+      appUserId: "user_internal_2",
+      status: "verified",
+    });
+  });
+
+  test("a wrong mocked OTP leaves the user unverified and still gated", async () => {
+    const { ctx, tables } = createMockIdentityCtx(
+      { subject: "clerk_unverified_3" },
+      {
+        users: [
+          {
+            _id: "users_1",
+            appUserId: "user_internal_3",
+            displayName: "Unverified Buyer",
+            phoneVerified: false,
+            role: "buyer_seller",
+          },
+        ],
+        auth_identities: [
+          {
+            _id: "auth_identities_1",
+            appUserId: "user_internal_3",
+            provider: "clerk",
+            providerUserId: "clerk_unverified_3",
+          },
+        ],
+      },
+    );
+
+    expect(await handlerOf(verifyPhoneWithMockOtp)(ctx, { submittedCode: "111222" })).toEqual({
+      appUserId: "user_internal_3",
+      phoneVerified: false,
+      status: "rejected",
+      verificationMode: "unverified",
+    });
+    expect(tables.users[0].phoneVerified).toBe(false);
+    await expectRejectsWithMessage(
+      () => handlerOf(requirePhoneVerifiedForAction)(ctx, { action: "sell" }),
+      "PHONE_VERIFICATION_REQUIRED",
     );
   });
 
