@@ -25,6 +25,8 @@ export interface AuthSyncRecord {
 // is no real SMS provider in this slice; the Clerk provider claim remains the
 // live source of truth (see selectProviderPhoneVerified). This mock arm lets the
 // verified-phone transition be exercised behind the identity boundary.
+// Keep in sync with MOCK_OTP_CODE in src/lib/auth/mockAuth.ts; the duplicate
+// constant preserves the client/Convex boundary.
 export const MOCK_OTP_CODE = "000000";
 
 export type MockOtpVerificationResult =

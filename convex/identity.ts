@@ -194,7 +194,7 @@ export const verifyPhoneWithMockOtp = mutation({
     appUserId: v.string(),
     phoneVerified: v.boolean(),
     status: v.union(v.literal("verified"), v.literal("rejected")),
-    verificationMode: v.union(v.literal("mock"), v.literal("clerk_phone"), v.literal("unverified")),
+    verificationMode: v.union(v.literal("mock"), v.literal("unverified")),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuthenticatedAppUser(ctx);

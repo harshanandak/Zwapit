@@ -6,6 +6,8 @@ export const mockCurrentUserId = "user_demo_1";
 // is no real SMS provider in this slice; this constant stands in for the code a
 // real provider would deliver, so the verified-phone transition can be exercised
 // locally and in tests without sending anything.
+// Keep in sync with MOCK_OTP_CODE in convex/authModel.ts; the duplicate
+// constant preserves the client/Convex boundary.
 export const MOCK_OTP_CODE = "000000";
 
 export const mockCurrentUser: MockUser = {

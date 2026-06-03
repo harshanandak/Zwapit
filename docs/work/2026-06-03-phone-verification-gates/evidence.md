@@ -270,3 +270,34 @@ changed by Codex.
 - Verified guard references include `convex/identity.ts:128` for
   `requirePhoneVerifiedAppUser`, `convex/orders.ts:335` for guarded checkout, and
   `convex/orders.ts:356` for guarded seller claim.
+
+## Review Follow-up - PR #8
+
+Reviewer: CodeRabbit summary comment on PR #8.
+
+Fixes applied:
+
+- Added cross-reference comments beside duplicated `MOCK_OTP_CODE` constants in
+  `src/lib/auth/mockAuth.ts` and `convex/authModel.ts`; the duplication remains
+  intentional to preserve the client/Convex boundary.
+- Updated `gateProtectedActionLink` in `src/lib/convex/dataAdapter.ts` to fail
+  closed when Clerk is configured but Convex phone status resolves to `unknown`.
+  Unknown status now routes protected navigation to the account/phone step.
+- Replaced direct `element.textContent = label` in `gateProtectedActionLink` with
+  a text-node-preserving helper so future child markup is not discarded.
+- Narrowed `verifyPhoneWithMockOtp`'s Convex return validator to `mock` or
+  `unverified`, matching the mock-only mutation's actual return values.
+
+Validation after review fixes:
+
+- Focused auth/identity tests: PASS. 21 pass, 0 fail.
+- `bun run check`: PASS. 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun run build`: PASS. 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: PASS.
+- `bun scripts/e2e-buyer.mjs`: PASS.
+- `bun scripts/e2e-seller.mjs`: PASS.
+- `bun test`: PASS when rerun sequentially. 76 pass, 0 fail.
+
+Note: one earlier `bun test` run failed because `bun run build` was started in
+parallel and the acceptance test also invokes the build. The same full test suite
+passed when rerun sequentially after the standalone build completed.

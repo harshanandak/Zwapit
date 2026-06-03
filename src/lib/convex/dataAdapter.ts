@@ -65,6 +65,15 @@ export async function resolvePhoneGateStatus(): Promise<PhoneGateStatus> {
   }
 }
 
+function replaceVisibleText(element: HTMLElement, label: string): void {
+  const textNode = Array.from(element.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+  if (textNode) {
+    textNode.textContent = label;
+    return;
+  }
+  element.textContent = label;
+}
+
 // Client helper: when the current user is signed-out or phone-unverified, rewrite
 // the matched protected-action link(s) to the account/verify step (preserving the
 // `next` intent) and relabel them. Returns the resolved gate status so callers can
@@ -73,16 +82,20 @@ export async function resolvePhoneGateStatus(): Promise<PhoneGateStatus> {
 export async function gateProtectedActionLink(selector: string, next?: string): Promise<PhoneGateStatus> {
   if (typeof document === "undefined") return "unknown";
   const status = await resolvePhoneGateStatus();
-  if (status === "verified" || status === "unknown") return status;
+  if (status === "verified") return status;
+  // Clerk-configured builds fail closed when Convex verification status is
+  // unavailable. This keeps navigation-only sell progression behind the same
+  // phone-verification step as mutation-backed checkout paths.
+  const effectiveStatus: Exclude<PhoneGateStatus, "verified" | "unknown"> = status === "unknown" ? "required" : status;
   const intent = next ?? `${window.location.pathname}${window.location.search}`;
-  const label = status === "signed_out" ? "Sign in to continue" : "Verify phone to continue";
-  const authState = status === "signed_out" ? "sign_in_required" : "phone_verification_required";
+  const label = effectiveStatus === "signed_out" ? "Sign in to continue" : "Verify phone to continue";
+  const authState = effectiveStatus === "signed_out" ? "sign_in_required" : "phone_verification_required";
   document.querySelectorAll<HTMLElement>(selector).forEach((element) => {
     if (element instanceof HTMLAnchorElement) element.href = accountStepUrl(intent);
     element.dataset.authState = authState;
-    element.textContent = label;
+    replaceVisibleText(element, label);
   });
-  return status;
+  return effectiveStatus;
 }
 
 async function syncCurrentUserForGuardedPath(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
