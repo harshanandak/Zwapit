@@ -179,6 +179,22 @@ describe("mocked OTP phone verification transition", () => {
     expect(getAuthActionState("sell", "/app/sell/upload", state, { requirePhoneVerified: true }).status).toBe("allowed");
   });
 
+  test("mock OTP keeps an already verified Clerk phone source", () => {
+    const clerkVerified = createClerkAuthState({
+      appUserId: "user_convex_internal_5",
+      providerUserId: "user_2verified_phone",
+      displayName: "Verified Buyer",
+      phoneVerified: true,
+    });
+
+    const { state, result } = verifyPhoneWithMockOtp(clerkVerified, MOCK_OTP_CODE);
+
+    expect(result).toEqual({ status: "verified", verificationMode: "mock" });
+    if (state.status !== "authenticated") throw new Error("expected authenticated state");
+    expect(state.verification.phoneVerified).toBe(true);
+    expect(state.verification.verificationMode).toBe("clerk_phone");
+  });
+
   test("mock OTP verification requires a signed-in user", () => {
     expect(() => verifyPhoneWithMockOtp(createSignedOutAuthState(), MOCK_OTP_CODE)).toThrow("AUTH_REQUIRED");
   });

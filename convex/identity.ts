@@ -194,18 +194,22 @@ export const verifyPhoneWithMockOtp = mutation({
     appUserId: v.string(),
     phoneVerified: v.boolean(),
     status: v.union(v.literal("verified"), v.literal("rejected")),
-    verificationMode: v.union(v.literal("mock"), v.literal("unverified")),
+    verificationMode: v.union(v.literal("mock"), v.literal("clerk_phone"), v.literal("unverified")),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuthenticatedAppUser(ctx);
     const result = evaluateMockOtp({ submittedCode: args.submittedCode, expectedCode: args.expectedCode });
 
     if (result.status !== "verified") {
+      const existingVerification = await ctx.db
+        .query("user_verifications")
+        .withIndex("by_app_user_id", (q) => q.eq("appUserId", user.appUserId))
+        .unique();
       return {
         appUserId: user.appUserId,
         phoneVerified: user.phoneVerified,
         status: "rejected" as const,
-        verificationMode: user.phoneVerified ? ("mock" as const) : ("unverified" as const),
+        verificationMode: existingVerification?.verificationMode ?? ("unverified" as const),
       };
     }
 
@@ -214,13 +218,14 @@ export const verifyPhoneWithMockOtp = mutation({
       .query("user_verifications")
       .withIndex("by_app_user_id", (q) => q.eq("appUserId", user.appUserId))
       .unique();
+    const verificationMode = existingVerification?.phoneVerified === true ? existingVerification.verificationMode : ("mock" as const);
     if (existingVerification) {
-      await ctx.db.patch(existingVerification._id, { phoneVerified: true, verificationMode: "mock" });
+      await ctx.db.patch(existingVerification._id, { phoneVerified: true, verificationMode });
     } else {
       await ctx.db.insert("user_verifications", {
         appUserId: user.appUserId,
         phoneVerified: true,
-        verificationMode: "mock",
+        verificationMode,
       });
     }
 
@@ -228,7 +233,7 @@ export const verifyPhoneWithMockOtp = mutation({
       appUserId: user.appUserId,
       phoneVerified: true,
       status: "verified" as const,
-      verificationMode: "mock" as const,
+      verificationMode,
     };
   },
 });

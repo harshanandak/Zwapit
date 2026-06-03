@@ -90,7 +90,7 @@ const authStepHref = accountStepUrl(checkoutHref);
     </a>
     <div
       id="checkout-auth-gate"
-      class={buyAllowed ? "hidden rounded-xl border border-primary/40 bg-primary/10 p-4 text-center" : "rounded-xl border border-primary/40 bg-primary/10 p-4 text-center"}
+      class={purchasable && !buyAllowed ? "rounded-xl border border-primary/40 bg-primary/10 p-4 text-center" : "hidden rounded-xl border border-primary/40 bg-primary/10 p-4 text-center"}
     >
       <p class="text-sm font-semibold text-foreground">Verify your phone to buy with protection</p>
       <p class="mt-1 text-xs text-muted-foreground">
@@ -108,7 +108,7 @@ const authStepHref = accountStepUrl(checkoutHref);
     </div>
     <p
       id="checkout-unavailable"
-      class={!purchasable && buyAllowed ? "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
+      class={!purchasable ? "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
     >
       This listing is no longer available.
     </p>
@@ -142,6 +142,13 @@ const authStepHref = accountStepUrl(checkoutHref);
   const eligibilityAck = document.getElementById("eligibility-ack") as HTMLInputElement | null;
   const nextIntent = `${window.location.pathname}${window.location.search}`;
 
+  function showUnavailable(): void {
+    phoneGated = false;
+    payButton?.classList.add("hidden");
+    authGate?.classList.add("hidden");
+    unavailable?.classList.remove("hidden");
+  }
+
   function showAuthGate(status: "signed_out" | "required"): void {
     phoneGated = true;
     payButton?.classList.add("hidden");
@@ -154,22 +161,30 @@ const authStepHref = accountStepUrl(checkoutHref);
     authGate?.classList.remove("hidden");
   }
 
-  // Gate checkout execution by the verified-phone state, then fall back to the
-  // listing's purchasability. Verified/demo buyers keep the mock-pay flow.
+  // Listing availability wins first; purchasable listings then require a
+  // verified-phone state before mock checkout can execute.
   void (async () => {
+    let currentPurchasable = unavailable === null || unavailable.classList.contains("hidden");
+    try {
+      const listingView = await loadListingFlowView();
+      currentPurchasable = listingView.purchasable;
+    } catch {
+      // Keep the static fallback state.
+    }
+    if (!currentPurchasable) {
+      showUnavailable();
+      return;
+    }
+
     const status = await resolvePhoneGateStatus();
     if (status === "signed_out" || status === "required") {
       showAuthGate(status);
       return;
     }
+
     authGate?.classList.add("hidden");
-    try {
-      const { purchasable } = await loadListingFlowView();
-      payButton?.classList.toggle("hidden", !purchasable);
-      unavailable?.classList.toggle("hidden", purchasable);
-    } catch {
-      // Keep the static fallback state.
-    }
+    unavailable?.classList.add("hidden");
+    payButton?.classList.remove("hidden");
   })();
 
   payButton?.addEventListener("click", async (event) => {

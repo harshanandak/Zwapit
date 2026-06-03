@@ -191,6 +191,55 @@ describe("Convex identity endpoints", () => {
     );
   });
 
+  test("mock OTP preserves an existing Clerk phone verification mode", async () => {
+    const { ctx, tables } = createMockIdentityCtx(
+      { subject: "clerk_verified_phone" },
+      {
+        users: [
+          {
+            _id: "users_1",
+            appUserId: "user_internal_4",
+            displayName: "Verified Buyer",
+            phoneVerified: true,
+            role: "buyer_seller",
+          },
+        ],
+        auth_identities: [
+          {
+            _id: "auth_identities_1",
+            appUserId: "user_internal_4",
+            provider: "clerk",
+            providerUserId: "clerk_verified_phone",
+          },
+        ],
+        user_verifications: [
+          {
+            _id: "user_verifications_1",
+            appUserId: "user_internal_4",
+            phoneVerified: true,
+            verificationMode: "clerk_phone",
+          },
+        ],
+      },
+    );
+
+    expect(await handlerOf(verifyPhoneWithMockOtp)(ctx, { submittedCode: "111222" })).toEqual({
+      appUserId: "user_internal_4",
+      phoneVerified: true,
+      status: "rejected",
+      verificationMode: "clerk_phone",
+    });
+    expect(tables.user_verifications[0].verificationMode).toBe("clerk_phone");
+
+    expect(await handlerOf(verifyPhoneWithMockOtp)(ctx, { submittedCode: MOCK_OTP_CODE })).toEqual({
+      appUserId: "user_internal_4",
+      phoneVerified: true,
+      status: "verified",
+      verificationMode: "clerk_phone",
+    });
+    expect(tables.user_verifications[0].verificationMode).toBe("clerk_phone");
+  });
+
   test("syncs provider identity to an internal app user and resolves current user", async () => {
     const { ctx, tables } = createMockIdentityCtx({
       subject: "clerk_user_1",

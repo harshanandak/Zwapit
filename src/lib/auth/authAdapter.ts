@@ -183,7 +183,11 @@ export function verifyPhoneWithMockOtp(
     status: "authenticated",
     user: { ...state.user, phoneVerified: true },
     authIdentity: state.authIdentity,
-    verification: { ...state.verification, phoneVerified: true, verificationMode: "mock" },
+    verification: {
+      ...state.verification,
+      phoneVerified: true,
+      verificationMode: state.verification.phoneVerified ? state.verification.verificationMode : "mock",
+    },
   };
   return { state: verifiedState, result };
 }

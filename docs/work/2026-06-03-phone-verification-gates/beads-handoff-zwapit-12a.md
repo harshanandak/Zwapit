@@ -7,7 +7,7 @@
 > below is therefore recorded here and in `evidence.md` (the defined Task 6
 > handoff artifact). Apply it as a Beads comment once the runtime is recovered:
 >
-> ```
+> ```sh
 > bd comments add zwapit-12a -f docs/work/2026-06-03-phone-verification-gates/beads-handoff-zwapit-12a.md
 > ```
 > Then set stage metadata, e.g. `forge_stage=dev`/`implementation_complete=true`,

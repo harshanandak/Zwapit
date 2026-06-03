@@ -301,3 +301,49 @@ Validation after review fixes:
 Note: one earlier `bun test` run failed because `bun run build` was started in
 parallel and the acceptance test also invokes the build. The same full test suite
 passed when rerun sequentially after the standalone build completed.
+
+## Review Follow-up 2 - PR #8
+
+Reviewer: CodeRabbit second pass on PR #8 after commit `fac9ce2`.
+
+Fixes applied:
+
+- `convex/identity.ts`: preserved an existing `user_verifications.verificationMode`
+  on both rejected and accepted mock OTP attempts, so an already verified
+  `clerk_phone` user is not relabeled as `mock`.
+- `src/lib/auth/authAdapter.ts`: preserved an already verified adapter
+  `verification.verificationMode` when mock OTP is accepted.
+- `src/pages/app/checkout/[listingId].astro`: made listing unavailability win
+  before auth/phone gating, so unavailable listings show the unavailable state
+  instead of a sign-in/verify CTA.
+- `docs/work/2026-06-03-phone-verification-gates/beads-handoff-zwapit-12a.md`:
+  typed the fenced shell command block as `sh`.
+- `docs/work/2026-06-03-phone-verification-gates/tasks.md`: added short
+  `Design refs` lines under Tasks 1-7 without changing ownership or task text.
+- `tests/acceptance/firstVisibleSlice.test.ts`: increased only the acceptance
+  harness timeouts. This is validation-only: direct `bun run build` passed, but
+  the nested build exceeded Bun's 60s hook timeout after Vite re-optimization,
+  and the scope-drift verifier exceeded the 5s default once while the repo was
+  dirty from review edits.
+
+Validation after second review fixes:
+
+- Focused auth/identity tests: PASS. 17 pass, 0 fail.
+- `git diff --check`: PASS. Whitespace clean; Git reported CRLF conversion
+  warnings only.
+- `bun run check`: PASS. Exit 0. Result: 0 errors, 0 warnings, 11 existing
+  CommonJS hints.
+- `bun run build`: PASS. Exit 0. Result: 0 errors, 0 warnings, 15 pages built.
+- `bun test`: PASS. 78 pass, 0 fail, across 12 files.
+- `bun scripts/verify-first-visible-slice.mjs`: PASS. `First visible slice
+  verification passed.`
+- `bun scripts/e2e-buyer.mjs`: PASS. `Buyer e2e mock-path passed (Home ->
+  Listing -> Checkout -> timeline -> completed).`
+- `bun scripts/e2e-seller.mjs`: PASS. `Seller e2e mock-path passed (validate ->
+  auto-approve -> transfer -> payout waiting -> completed).`
+
+Environment note: during review validation, one direct `bun run build` failed
+before code evaluation because Windows reported `There is not enough space on the
+disk` while Vite was writing `node_modules/.vite/deps_temp_*`. Generated Vite,
+Astro, and `dist` caches inside this repo/worktree were removed, after which the
+same build command passed.

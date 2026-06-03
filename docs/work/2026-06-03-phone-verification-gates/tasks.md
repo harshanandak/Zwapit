@@ -31,6 +31,8 @@ Shared files requiring serial handoff:
 
 ## Task 1 - Claude - Adapter Phone Verification Contract
 
+Design refs: design.md#selected-approach, design.md#tdd-scenarios
+
 OWNS:
 - `src/lib/auth/authAdapter.ts`
 - `src/lib/auth/mockAuth.ts`
@@ -47,6 +49,8 @@ Acceptance:
 - Mock OTP verification does not introduce real SMS, Razorpay, KYC, payout, or admin behavior.
 
 ## Task 2 - Claude - Convex App User Verification State
+
+Design refs: design.md#selected-approach, design.md#owasp-review
 
 OWNS:
 - `convex/identity.ts`
@@ -65,6 +69,8 @@ Acceptance:
 - Provider ids are never used as listing, order, or app data owner ids.
 
 ## Task 3 - Claude - Protected Listing Submission Gate
+
+Design refs: design.md#selected-approach, design.md#tdd-scenarios
 
 OWNS:
 - `src/pages/app/sell/index.astro`
@@ -86,6 +92,8 @@ Acceptance:
 
 ## Task 4 - Claude - Protected Checkout Gate
 
+Design refs: design.md#selected-approach, design.md#owasp-review
+
 OWNS:
 - `src/pages/app/listings/[listingId].astro`
 - `src/pages/app/checkout/[listingId].astro`
@@ -103,6 +111,8 @@ Acceptance:
 - No real payment provider logic is added.
 
 ## Task 5 - Claude - Unverified User UI States
+
+Design refs: design.md#selected-approach, design.md#ambiguity-policy
 
 OWNS:
 - `src/components/AuthActionGate.astro`
@@ -122,6 +132,8 @@ Acceptance:
 
 ## Task 6 - Claude - Handoff Evidence For Codex
 
+Design refs: design.md#ownership-boundary, design.md#shared-files-requiring-serial-handoff
+
 OWNS:
 - `docs/work/2026-06-03-phone-verification-gates/evidence.md`
 - Beads comments on `zwapit-12a`
@@ -133,6 +145,8 @@ Required handoff:
 - State that implementation was Claude-owned and Codex has not implemented pre-handoff tasks.
 
 ## Task 7 - Codex - Post-Handoff Validation And Narrow Fixes Only
+
+Design refs: design.md#ownership-boundary, design.md#hard-stop
 
 OWNS:
 - `docs/work/2026-06-03-phone-verification-gates/evidence.md`
