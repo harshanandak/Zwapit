@@ -177,3 +177,16 @@ Tasks 1-6 (the scanner lives in `scripts/`, owned by the first-slice task / Task
 Implementation for Tasks 1-6 is Claude-owned. Codex has not implemented any
 pre-handoff task. Shared files were edited only by Claude in this slice. Codex may
 begin Task 7 validation (and validation-only narrow fixes) after this handoff.
+
+## Beads Handoff
+
+The worktree Beads/Dolt runtime would not connect during this session
+(`database "zwapit" not found` on the per-project Dolt server; `bd doctor --fix`,
+`bd dolt stop/start`, and `bd init --from-jsonl` did not materialize it, and this
+`bd 0.62.0` build lacks CGO and did not honor `--non-interactive`). The Beads
+comment could therefore not be written via `bd comments add`. The full handoff
+comment is recorded in
+`docs/work/2026-06-03-phone-verification-gates/beads-handoff-zwapit-12a.md`
+(with the exact `bd comments add ... -f` command to apply it once the runtime is
+recovered). This `evidence.md` is the durable Task 6 handoff artifact Codex reads
+before Task 7.
