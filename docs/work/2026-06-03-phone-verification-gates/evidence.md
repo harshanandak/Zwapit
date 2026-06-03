@@ -178,6 +178,28 @@ Implementation for Tasks 1-6 is Claude-owned. Codex has not implemented any
 pre-handoff task. Shared files were edited only by Claude in this slice. Codex may
 begin Task 7 validation (and validation-only narrow fixes) after this handoff.
 
+## Notes For Codex (non-blocking)
+
+- The new gating *logic* is unit-tested (`validateSellerSubmissionAccess`,
+  `validateBuyerCheckoutAccess`, mock-OTP transition). The new *client* gate
+  (`resolvePhoneGateStatus` / `gateProtectedActionLink`) only activates in
+  Clerk-configured builds, which none of the validators here exercise (all run
+  mock-verified). The demo/e2e flow is preserved; the server execution gate
+  (`requirePhoneVerifiedAppUser`) is pre-existing. So treat buy/sell as
+  gate-logic-tested, not runtime-verified-in-a-Clerk-build.
+- `src/pages/app/sell/promise.astro` was modified although Task 3's OWNS list
+  names only index/upload/confirm/price. It is the actual listing-submission
+  (publish) point, so gating it is required to satisfy "submission blocked when
+  signed-out or phone-unverified."
+- Listing vs checkout asymmetry: `checkout/[listingId].astro` client-upgrades the
+  gate, but `listings/[listingId].astro` relies on the frontmatter default
+  (`AuthActionGate`) only. In a Clerk build a verified user may see "Sign in to
+  continue" on the listing CTA until the `/app/me` hop. Functional; mild UX note.
+- Client-gate race: a very fast click on a sell step before
+  `resolvePhoneGateStatus()` resolves could navigate on the original href.
+  Order-mutation paths are backstopped by the Convex gate; listing "publish" is
+  navigation-only, so this is inherent to client-only gating.
+
 ## Beads Handoff
 
 The worktree Beads/Dolt runtime would not connect during this session
