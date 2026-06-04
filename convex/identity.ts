@@ -54,14 +54,10 @@ export async function syncIdentityToAppUser(
       .query("user_verifications")
       .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
       .unique();
-    const phoneVerified = providerPhoneVerified || existingUser?.phoneVerified === true || existingVerification?.phoneVerified === true;
-    const verificationMode = providerPhoneVerified
-      ? "clerk_phone"
-      : existingVerification?.phoneVerified === true
-        ? existingVerification.verificationMode
-        : phoneVerified
-          ? "mock"
-          : "unverified";
+    const hasMockVerification =
+      existingVerification?.phoneVerified === true && existingVerification.verificationMode === "mock";
+    const phoneVerified = providerPhoneVerified || hasMockVerification;
+    const verificationMode = providerPhoneVerified ? "clerk_phone" : hasMockVerification ? "mock" : "unverified";
     if (existingUser) {
       await ctx.db.patch(existingUser._id, { displayName, phoneVerified });
     } else {

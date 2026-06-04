@@ -364,6 +364,25 @@ Validation after CI typecheck fix:
 - Focused auth/identity tests: PASS. 23 pass, 0 fail.
 - `bun test`: PASS. 78 pass, 0 fail, across 12 files.
 
+## Review Follow-up 6 - PR #8
+
+Reviewer: final unresolved automated Codex review thread on `convex/identity.ts`.
+
+Fix applied:
+
+- `convex/identity.ts`: narrowed provider-sync preservation to mock verification
+  only. If Clerk no longer reports a verified phone, a stale persisted
+  `clerk_phone` verification is cleared back to `unverified`; persisted mock
+  verification remains preserved.
+- `convex/__tests__/identity.test.ts`: added a regression proving stale Clerk
+  phone verification is cleared when the provider claim is no longer verified.
+
+Validation after stale-Clerk fix:
+
+- `bunx tsc --project convex/tsconfig.json --noEmit`: PASS. Exit 0.
+- Focused auth/identity tests: PASS. 24 pass, 0 fail.
+- `bun test`: PASS. 79 pass, 0 fail, across 12 files.
+
 ## Review Follow-up 4 - PR #8
 
 Reviewer: new unresolved GitHub review thread on `src/pages/app/sell/upload.astro`

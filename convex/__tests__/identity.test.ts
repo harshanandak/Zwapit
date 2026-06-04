@@ -304,6 +304,63 @@ describe("Convex identity endpoints", () => {
     });
   });
 
+  test("sync clears stale Clerk phone verification when the provider claim is no longer verified", async () => {
+    const { ctx, tables } = createMockIdentityCtx(
+      { subject: "clerk_stale_phone", phoneNumberVerified: false },
+      {
+        users: [
+          {
+            _id: "users_1",
+            appUserId: "user_internal_stale",
+            displayName: "Stale Clerk Buyer",
+            phoneVerified: true,
+            role: "buyer_seller",
+          },
+        ],
+        auth_identities: [
+          {
+            _id: "auth_identities_1",
+            appUserId: "user_internal_stale",
+            provider: "clerk",
+            providerUserId: "clerk_stale_phone",
+          },
+        ],
+        user_verifications: [
+          {
+            _id: "user_verifications_1",
+            appUserId: "user_internal_stale",
+            phoneVerified: true,
+            verificationMode: "clerk_phone",
+          },
+        ],
+      },
+    );
+
+    const synced = await handlerOf(syncAppUserFromProvider)(ctx);
+
+    expect(synced).toEqual({
+      appUser: {
+        displayName: "Zwapit user",
+        id: "user_internal_stale",
+        phoneVerified: false,
+        role: "buyer_seller",
+      },
+      authIdentity: {
+        appUserId: "user_internal_stale",
+        provider: "clerk",
+        providerUserId: "clerk_stale_phone",
+      },
+      verification: {
+        appUserId: "user_internal_stale",
+        phoneVerified: false,
+        verificationMode: "unverified",
+      },
+    });
+    expect(tables.users[0].phoneVerified).toBe(false);
+    expect(tables.user_verifications[0].phoneVerified).toBe(false);
+    expect(tables.user_verifications[0].verificationMode).toBe("unverified");
+  });
+
   test("reports phone requirement and enforces verified phone actions", async () => {
     const { ctx } = createMockIdentityCtx(
       { subject: "clerk_unverified_1" },
