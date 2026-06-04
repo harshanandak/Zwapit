@@ -154,7 +154,79 @@ function reference, adapter helper, tests, and handoff evidence. Claude should
 not change the backend contract unless a UI integration defect is proven and
 handed back.
 
+## Claude Task 4 Dev Evidence
+
+Task 4 - Claude seller UI wiring (after Codex handoff).
+
+Claude-owned files changed (6, all in-scope; `StepNav.astro` needed no change):
+
+- `src/components/seller/format.ts`
+- `src/pages/app/sell/upload.astro`
+- `src/pages/app/sell/confirm.astro`
+- `src/pages/app/sell/price.astro`
+- `src/pages/app/sell/promise.astro`
+- `src/pages/app/sell/orders.astro`
+
+Implementation summary:
+
+- Upload-first UX kept; mock upload signal only (no real file read/storage/OCR/AI).
+- `buildSellerDraftFromListing` (pure) builds the first-slice `SellerListingDraft`
+  from the detected mock listing; deterministic `duplicateFingerprint`
+  (source|category|title|start|venue) so re-submits update, not duplicate.
+- Detected draft is embedded as inline JSON per step page and carried through
+  upload -> confirm -> price -> promise via `sessionStorage`
+  (`zwapit:seller-draft`); the Price step persists the chosen price onto it.
+- Promise step submits through `submitSellerListingDraft` (Codex adapter helper),
+  never importing `convex/_generated/api`.
+- `sellerSubmissionView` (pure) maps the result to friendly states, keyed on BOTH
+  `status` AND `listing.ruleDecision`: submitted (live), Waitlist Only, Under
+  review, Cannot List, signed-out, phone verification required, and
+  retry (PERSISTENCE_WRITE_FAILED / no-Convex `mock` fallback).
+- Delayed-login + phone gate preserved: `gateProtectedActionLink` still rewrites
+  the protected link for signed-out/unverified sellers; the verified path calls
+  `event.preventDefault()` synchronously before awaiting the submit.
+- Orders shows a strictly-additive, hidden-by-default "published" acknowledgement
+  banner from `zwapit:seller-published`; existing order-card logic untouched.
+
+Fresh validation (run from the worktree):
+
+- `bun run check`: 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun test`: 89 pass / 0 fail / 299 expects.
+- `bun run build`: passed; 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: passed; 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: passed (buyer e2e remains green).
+- `bun scripts/e2e-seller.mjs`: passed.
+
+Built-output spot check (`dist/app/sell`):
+
+- Detected-draft JSON embedded and valid (raw, not HTML-escaped) on upload,
+  confirm, price, promise; promise result panel present; orders banner present.
+- Build-grep contract strings preserved on promise ("Approved", "now live",
+  "Go to Orders"), price ("2,400"), confirm ("Detected details").
+
+Ownership note (test gap for Codex):
+
+- `scripts/e2e-seller.mjs` is NOT a Claude-owned file and CLAUDE.md assigns tests
+  to Codex, so Claude did not edit it. The Task-4 RED ("add seller e2e coverage")
+  is therefore deferred to Codex. Claude's testable surface is the pure
+  `sellerSubmissionView` mapping in the owned `format.ts`; Codex should add the
+  assertion for it (success/blocked/waitlist/review/auth/phone/retry) when
+  finalizing validation.
+- Note: `verifyNoScopeDrift` allows `scripts/` in its path allowlist, so the
+  slice verifier passing is not by itself proof of ownership scope; the manual
+  `git status` confirms only the 6 owned files changed.
+- Coverage caveat: the promise-step submit interaction itself (click ->
+  preventDefault -> validate -> `submitSellerListingDraft` -> `sellerSubmissionView`
+  -> navigate -> orders banner) is NOT exercised by any automated gate run here.
+  `verify-first-visible-slice` only greps server-rendered HTML; `e2e-seller.mjs`
+  drives the `mockFlow` lib layer, not the page client script; and the path was
+  not browser-tested. It is covered only by the Codex-owned seller e2e still to
+  be added. The "verified/demo seller works end-to-end" and "blocked/unverified
+  states visible" acceptance criteria are thus implemented and statically/lib
+  validated, but not yet verified through the live UI.
+
 ## Hard Stop
 
-Codex-owned `/dev` Tasks 1-3 are complete. Stop before Claude-owned Task 4 UI
-implementation unless the user explicitly asks to proceed differently.
+Claude-owned Task 4 UI wiring and validation are complete. Stop here; Codex does
+final validation/review (Task 5) after this handoff, including the seller e2e
+test coverage Claude could not own.

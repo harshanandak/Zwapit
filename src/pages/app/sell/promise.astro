@@ -1,14 +1,19 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
-import { ruleDecisionResult } from "../../../components/seller/format";
+import { buildSellerDraftFromListing, ruleDecisionResult } from "../../../components/seller/format";
 import { connectMockListingFlow, connectSellerOrderFlow } from "../../../lib/flow/mockFlow";
+import { createMockFixture } from "../../../lib/mock/fixtures";
 
 // Decision comes from the local rule engine (Task 6); the seller listing is
 // checked by the local validation (Task 8).
 const { evaluation } = connectMockListingFlow();
 const { listingValidation } = connectSellerOrderFlow();
 const result = ruleDecisionResult(evaluation.decision);
+
+// Fallback payload if the carried draft is missing (e.g. deep-link to Promise).
+const { listing } = createMockFixture();
+const detectedDraft = buildSellerDraftFromListing(listing);
 
 const promises = [
   "I'll transfer the ticket to the buyer before the deadline.",
@@ -57,27 +62,145 @@ const promises = [
       Go to Orders
     </a>
     <p id="promise-warning" class="text-center text-xs font-medium text-destructive"></p>
+
+    <section
+      id="promise-result"
+      class="rounded-xl border border-border bg-card p-4 text-center"
+      data-tone=""
+      hidden
+    >
+      <p id="promise-result-title" class="text-sm font-semibold text-foreground"></p>
+      <p id="promise-result-detail" class="mt-1 text-xs text-muted-foreground"></p>
+    </section>
+
     <p class="text-center text-xs text-muted-foreground">
       Mock flow for this slice — agreeing publishes instantly here.
     </p>
   </div>
+
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={JSON.stringify(detectedDraft)}
+  ></script>
 </AppShell>
 
 <script>
-  import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+  import {
+    accountStepUrl,
+    gateProtectedActionLink,
+    submitSellerListingDraft,
+  } from "../../../lib/convex/dataAdapter";
+  import {
+    SELLER_DRAFT_STORAGE_KEY,
+    SELLER_PUBLISHED_STORAGE_KEY,
+    sellerSubmissionView,
+    type SellerSubmissionView,
+  } from "../../../components/seller/format";
+  import type { SellerListingDraft } from "../../../lib/types";
 
   const continueLink = document.getElementById("promise-continue") as HTMLAnchorElement | null;
   const warning = document.getElementById("promise-warning");
+  const resultPanel = document.getElementById("promise-result");
+  const resultTitle = document.getElementById("promise-result-title");
+  const resultDetail = document.getElementById("promise-result-detail");
+
+  // Carried payload: the price set on the Price step, falling back to the detected
+  // draft embedded for direct navigation. Mock signal only — no real upload.
+  function readCarriedDraft(): SellerListingDraft | null {
+    try {
+      const stored = sessionStorage.getItem(SELLER_DRAFT_STORAGE_KEY);
+      if (stored) return JSON.parse(stored) as SellerListingDraft;
+    } catch {
+      // fall through to the embedded draft
+    }
+    try {
+      const node = document.getElementById("seller-detected-draft");
+      return node?.textContent ? (JSON.parse(node.textContent) as SellerListingDraft) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function showResult(view: SellerSubmissionView): void {
+    if (warning) warning.textContent = "";
+    if (resultTitle) resultTitle.textContent = view.title;
+    if (resultDetail) resultDetail.textContent = view.detail;
+    if (resultPanel) {
+      resultPanel.dataset.tone = view.tone;
+      resultPanel.hidden = false;
+    }
+  }
+
+  const RETRY_VIEW: SellerSubmissionView = {
+    kind: "retry",
+    tone: "error",
+    title: "Couldn't publish yet",
+    detail: "We couldn't save your listing just now. Please try again.",
+    ctaLabel: "Try again",
+    proceedToOrders: false,
+  };
 
   // Protected listing submission: a signed-out or phone-unverified seller is
   // routed to the account/verify step before publishing. Verified/demo sellers
-  // keep the existing seller-promise gate and publish instantly.
+  // keep the seller-promise gate and we submit through the adapter helper.
   let phoneGateResolved = false;
   let phoneGated = true;
+  let submitting = false;
+  // Once an outcome turns the button into a plain navigation (e.g. "Back to
+  // upload"), let the anchor's href take over instead of re-submitting.
+  let navigateAway = false;
+
   void gateProtectedActionLink("#promise-continue").then((status) => {
     phoneGateResolved = true;
     phoneGated = status !== "verified";
   });
+
+  async function publish(): Promise<void> {
+    const base = readCarriedDraft();
+    if (!base) {
+      showResult(RETRY_VIEW);
+      submitting = false;
+      if (continueLink) continueLink.textContent = RETRY_VIEW.ctaLabel;
+      return;
+    }
+
+    const draft: SellerListingDraft = { ...base, sellerPromiseAccepted: true };
+    if (continueLink) continueLink.textContent = "Publishing…";
+
+    let view: SellerSubmissionView;
+    try {
+      view = sellerSubmissionView(await submitSellerListingDraft(draft));
+    } catch {
+      view = RETRY_VIEW;
+    }
+    showResult(view);
+
+    if (view.kind === "signed_out" || view.kind === "phone_required") {
+      window.location.href = accountStepUrl(`${window.location.pathname}${window.location.search}`);
+      return;
+    }
+    if (view.proceedToOrders) {
+      try {
+        sessionStorage.setItem(
+          SELLER_PUBLISHED_STORAGE_KEY,
+          JSON.stringify({ kind: view.kind, title: view.title, detail: view.detail }),
+        );
+      } catch {
+        // Banner on Orders is best-effort; the listing is already submitted.
+      }
+      if (continueLink) continueLink.textContent = view.ctaLabel;
+      window.location.href = "/app/sell/orders";
+      return;
+    }
+
+    // Stay on the page for cannot-list / retry outcomes.
+    submitting = false;
+    if (continueLink) continueLink.textContent = view.ctaLabel;
+    if (view.kind === "cannot_list") {
+      continueLink?.setAttribute("href", "/app/sell/upload");
+      navigateAway = true;
+    } else {
+      navigateAway = false;
+    }
+  }
 
   continueLink?.addEventListener("click", (event) => {
     if (!phoneGateResolved) {
@@ -85,14 +208,21 @@ const promises = [
       if (warning) warning.textContent = "Checking phone verification...";
       return;
     }
-    if (phoneGated) return; // link already points to the account/verify step
+    if (phoneGated) return; // gate already points this link at the account/verify step
+    if (navigateAway) return; // outcome set an explicit destination — let the link navigate
+
+    // Verified/demo seller: we own the submit, so stop navigation BEFORE awaiting.
+    event.preventDefault();
+    if (submitting) return;
 
     const promises = Array.from(document.querySelectorAll<HTMLInputElement>("[data-seller-promise]"));
     const allAccepted = promises.length > 0 && promises.every((promise) => promise.checked);
-
     if (!allAccepted) {
-      event.preventDefault();
       if (warning) warning.textContent = "Accept the seller promise to continue.";
+      return;
     }
+
+    submitting = true;
+    void publish();
   });
 </script>

@@ -1,10 +1,11 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
-import { formatInr } from "../../../components/seller/format";
+import { buildSellerDraftFromListing, formatInr } from "../../../components/seller/format";
 import { createMockFixture } from "../../../lib/mock/fixtures";
 
 const { listing } = createMockFixture();
+const detectedDraft = buildSellerDraftFromListing(listing);
 
 // Seller receives the listing price; buyers pay the platform fee on top.
 const payout = listing.listingPrice;
@@ -62,14 +63,53 @@ const payout = listing.listingPrice;
       Continue
     </a>
   </div>
+
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={JSON.stringify(detectedDraft)}
+  ></script>
 </AppShell>
 
 <script>
   import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+  import { SELLER_DRAFT_STORAGE_KEY } from "../../../components/seller/format";
+  import type { SellerListingDraft } from "../../../lib/types";
+
+  const priceInput = document.querySelector<HTMLInputElement>('input[name="price"]');
+
+  function readCarriedDraft(): SellerListingDraft | null {
+    try {
+      const stored = sessionStorage.getItem(SELLER_DRAFT_STORAGE_KEY);
+      if (stored) return JSON.parse(stored) as SellerListingDraft;
+      const node = document.getElementById("seller-detected-draft");
+      return node?.textContent ? (JSON.parse(node.textContent) as SellerListingDraft) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Prefill the price input from the carried draft so a returning seller sees
+  // the price they already chose.
+  const carried = readCarriedDraft();
+  if (carried && priceInput) priceInput.value = String(carried.listingPrice);
+
+  // Persist the chosen price onto the carried draft so the promise step submits it.
+  function persistChosenPrice(): void {
+    const base = readCarriedDraft();
+    if (!base) return;
+    const entered = Number(priceInput?.value);
+    const listingPrice = Number.isFinite(entered) && entered > 0 ? entered : base.listingPrice;
+    try {
+      sessionStorage.setItem(SELLER_DRAFT_STORAGE_KEY, JSON.stringify({ ...base, listingPrice }));
+    } catch {
+      // Best-effort carry; the promise step falls back to the detected price.
+    }
+  }
+
+  priceInput?.addEventListener("change", persistChosenPrice);
 
   const sellContinue = document.querySelector<HTMLAnchorElement>("[data-sell-continue]");
   let phoneGateResolved = false;
   sellContinue?.addEventListener("click", (event) => {
+    persistChosenPrice();
     if (!phoneGateResolved) event.preventDefault();
   });
   void gateProtectedActionLink("[data-sell-continue]").then(() => {
