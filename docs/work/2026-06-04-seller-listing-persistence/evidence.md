@@ -74,7 +74,7 @@ Task 3 - Claude frontend handoff contract:
 
 - RED: `bun test src/lib/convex/__tests__/dataAdapter.test.ts` failed because
   `submitSellerListingDraft` was not exported from `src/lib/convex/dataAdapter.ts`.
-- GREEN: `31d529e feat(listings): add seller submission adapter handoff`.
+- GREEN: `2000446 feat(listings): add seller submission adapter handoff`.
 - Verification:
   - `bun test src/lib/convex/__tests__/dataAdapter.test.ts`: 10 pass / 0 fail.
   - `bun test convex/__tests__/listingSubmission.test.ts`: 8 pass / 0 fail.
