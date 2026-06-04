@@ -2,7 +2,7 @@
 
 Date: 2026-06-04
 Issue: zwapit-noq
-Stage: plan
+Stage: dev handoff after Codex Tasks 1-3
 
 ## Checks
 
@@ -14,10 +14,16 @@ Stage: plan
 - Codex validation occurs only after Claude handoff except Codex-owned backend tasks: PASS
 - Out-of-scope areas excluded: PASS
 - Hard stop after plan commit included: PASS
+- Codex did not edit Claude-owned seller route/component files during Tasks 1-3: PASS
+- Codex completed backend/shared handoff only: PASS
+- Fresh validation for Codex handoff recorded in evidence: PASS
 
 ## Ownership Review
 
-Codex has not been assigned Claude-owned seller UI implementation. The only Codex work before Claude handoff is backend contract, state/rule validation, tests, and adapter contract stabilization. Claude owns seller route and component implementation after the backend contract is ready.
+Codex has not taken Claude-owned seller UI implementation. Codex changes before
+Claude handoff are limited to backend contract, state/rule validation, tests,
+shared payload/result types, function reference, adapter contract, and work
+evidence. Claude owns seller route and component implementation next.
 
 ## Out Of Scope Review
 
@@ -25,4 +31,4 @@ The plan explicitly excludes Razorpay, real payments, payout setup, full KYC, ad
 
 ## Result
 
-PASS. The plan is ready for user approval to proceed to `/dev`.
+PASS. Codex-owned Tasks 1-3 are ready for Claude Task 4 handoff.

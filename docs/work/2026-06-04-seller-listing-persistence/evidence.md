@@ -125,6 +125,36 @@ Blockers surfaced to UI:
 No-Convex/default fallback returns `{ ok: true, blockers: [], status: "mock" }`
 with a local listing built from the draft.
 
+## Codex Handoff Validation
+
+Fresh commands after Codex-owned Tasks 1-3:
+
+- `bun test`: 89 pass / 0 fail / 299 expects.
+- `bun run check`: 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun run build`: passed; 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: passed; 15 contract routes checked.
+- `bun scripts/e2e-buyer.mjs`: passed.
+- `bun scripts/e2e-seller.mjs`: passed.
+
+Scope-drift search:
+
+- Command: `rg -n "Razorpay|real payments|payout setup|full KYC|admin expansion|demand discovery|category expansion|providerUserId|clerk_" convex src docs/work/2026-06-04-seller-listing-persistence -g "*.ts" -g "*.tsx" -g "*.astro" -g "*.md"`
+- Result: out-of-scope matches were limited to docs and pre-existing auth comments/tests; provider id matches were limited to auth identity boundary code/tests and explicit separation assertions.
+
+Provider-owner search:
+
+- Command: `rg -n "sellerId:.*provider|buyerId:.*provider|actorId:.*provider|listingKey:.*provider|providerUserId.*sellerId|providerUserId.*buyerId|providerUserId.*actorId|identity\.subject.*sellerId|identity\.subject.*buyerId|identity\.subject.*actorId" convex src -g "*.ts" -g "*.astro"`
+- Result: no matches.
+
+## Notes For Claude
+
+Claude should start with Task 4 in `tasks.md`. Codex has completed the backend
+mutation, rule/state handling, duplicate behavior, shared payload/result types,
+function reference, adapter helper, tests, and handoff evidence. Claude should
+not change the backend contract unless a UI integration defect is proven and
+handed back.
+
 ## Hard Stop
 
-Plan stage only. Do not begin implementation until the user explicitly asks for `/dev` or equivalent.
+Codex-owned `/dev` Tasks 1-3 are complete. Stop before Claude-owned Task 4 UI
+implementation unless the user explicitly asks to proceed differently.
