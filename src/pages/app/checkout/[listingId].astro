@@ -7,7 +7,8 @@ import {
   protectionLabel,
   transferModeLabel,
 } from "../../../components/buyer/format";
-import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
+import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/authAdapter";
+import { accountStepUrl, loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 export function getStaticPaths() {
   return [{ params: { listingId: "listing_bms_event_1" } }];
@@ -15,6 +16,15 @@ export function getStaticPaths() {
 
 const { listing, sourceRule, purchasable } = await loadListingFlowView();
 const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
+
+// Protected checkout execution gate. The frontmatter value is a build-time
+// fail-closed default; the per-user decision is refined client-side from the
+// Convex identity boundary, and the mock-pay mutation itself rejects unverified
+// buyers. Full price is always shown before payment regardless of gate state.
+const checkoutHref = `/app/checkout/${listing.id}`;
+const buyAction = getAuthActionState("buy", checkoutHref, createCurrentAuthState(), { requirePhoneVerified: true });
+const buyAllowed = buyAction.status === "allowed";
+const authStepHref = accountStepUrl(checkoutHref);
 ---
 
 <AppShell routeId="/app/checkout/:listingId" title="Buy with Protection" activeTab="home">
@@ -74,13 +84,31 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
     <a
       id="pay-button"
       href="/app/tickets"
-      class={purchasable ? "block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" : "hidden rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"}
+      class={purchasable && buyAllowed ? "block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" : "hidden rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"}
     >
       {payLabel}
     </a>
+    <div
+      id="checkout-auth-gate"
+      class={purchasable && !buyAllowed ? "rounded-xl border border-primary/40 bg-primary/10 p-4 text-center" : "hidden rounded-xl border border-primary/40 bg-primary/10 p-4 text-center"}
+    >
+      <p class="text-sm font-semibold text-foreground">Verify your phone to buy with protection</p>
+      <p class="mt-1 text-xs text-muted-foreground">
+        A verified phone keeps your protected payment safe. We'll bring you right back here.
+      </p>
+      <a
+        id="checkout-auth-link"
+        href={authStepHref}
+        class="mt-3 block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+        data-auth-action="buy"
+        data-auth-state={buyAction.status}
+      >
+        {buyAction.status === "sign_in_required" ? "Sign in to continue" : "Verify phone to continue"}
+      </a>
+    </div>
     <p
       id="checkout-unavailable"
-      class={purchasable ? "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
+      class={!purchasable ? "rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground" : "hidden rounded-xl border border-border bg-muted px-4 py-3 text-center text-sm font-semibold text-muted-foreground"}
     >
       This listing is no longer available.
     </p>
@@ -94,27 +122,74 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
 <script>
   import { createMockFixture } from "../../../lib/mock/fixtures";
   import { saveDemoState } from "../../../lib/flow/mockFlow";
-  import { loadListingFlowView, runMockCheckout } from "../../../lib/convex/dataAdapter";
+  import {
+    accountStepUrl,
+    loadListingFlowView,
+    resolvePhoneGateStatus,
+    runMockCheckout,
+  } from "../../../lib/convex/dataAdapter";
 
   // Mock pay: validate checkout, transition checkout_pending -> transfer_pending,
   // persist the order (Convex when configured, local otherwise), then show it in
   // My Tickets. No real payment. The Convex write is awaited BEFORE navigating so
   // a later direct load of the order page reveals the paid timeline from Convex.
   let checkoutInFlight = false;
+  let phoneGated = false;
   const payButton = document.getElementById("pay-button") as HTMLAnchorElement | null;
+  const authGate = document.getElementById("checkout-auth-gate");
+  const authLink = document.getElementById("checkout-auth-link") as HTMLAnchorElement | null;
+  const unavailable = document.getElementById("checkout-unavailable");
   const eligibilityAck = document.getElementById("eligibility-ack") as HTMLInputElement | null;
-  void loadListingFlowView()
-    .then(({ purchasable }) => {
-      document.getElementById("pay-button")?.classList.toggle("hidden", !purchasable);
-      document.getElementById("checkout-unavailable")?.classList.toggle("hidden", purchasable);
-    })
-    .catch(() => {
+  const nextIntent = `${window.location.pathname}${window.location.search}`;
+
+  function showUnavailable(): void {
+    phoneGated = false;
+    payButton?.classList.add("hidden");
+    authGate?.classList.add("hidden");
+    unavailable?.classList.remove("hidden");
+  }
+
+  function showAuthGate(status: "signed_out" | "required"): void {
+    phoneGated = true;
+    payButton?.classList.add("hidden");
+    unavailable?.classList.add("hidden");
+    if (authLink) {
+      authLink.href = accountStepUrl(nextIntent);
+      authLink.textContent = status === "signed_out" ? "Sign in to continue" : "Verify phone to continue";
+      authLink.dataset.authState = status === "signed_out" ? "sign_in_required" : "phone_verification_required";
+    }
+    authGate?.classList.remove("hidden");
+  }
+
+  // Listing availability wins first; purchasable listings then require a
+  // verified-phone state before mock checkout can execute.
+  void (async () => {
+    let currentPurchasable = unavailable === null || unavailable.classList.contains("hidden");
+    try {
+      const listingView = await loadListingFlowView();
+      currentPurchasable = listingView.purchasable;
+    } catch {
       // Keep the static fallback state.
-    });
+    }
+    if (!currentPurchasable) {
+      showUnavailable();
+      return;
+    }
+
+    const status = await resolvePhoneGateStatus();
+    if (status !== "verified") {
+      showAuthGate(status === "signed_out" ? "signed_out" : "required");
+      return;
+    }
+
+    authGate?.classList.add("hidden");
+    unavailable?.classList.add("hidden");
+    payButton?.classList.remove("hidden");
+  })();
 
   payButton?.addEventListener("click", async (event) => {
     event.preventDefault();
-    if (checkoutInFlight) return;
+    if (phoneGated || checkoutInFlight) return;
     checkoutInFlight = true;
     payButton.setAttribute("aria-disabled", "true");
     payButton.classList.add("pointer-events-none", "opacity-70");
@@ -122,13 +197,22 @@ const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
     if (warning) warning.textContent = "";
     const { order, transferTask } = createMockFixture();
     // runMockCheckout runs the same local validation/mock-pay. With Convex
-    // configured, a rejected persistence write surfaces as a blocker.
+    // configured, a rejected persistence write or identity-gate rejection
+    // surfaces as a blocker.
     try {
       const result = await runMockCheckout(order, {
         buyerEligibilityAcknowledged: eligibilityAck?.checked === true,
       });
       if (!result.ok) {
-        if (warning) warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;
+        if (result.blockers.includes("PHONE_VERIFICATION_REQUIRED")) {
+          showAuthGate("required");
+          if (warning) warning.textContent = "Verify your phone to complete checkout.";
+        } else if (result.blockers.includes("AUTH_REQUIRED")) {
+          showAuthGate("signed_out");
+          if (warning) warning.textContent = "Sign in to complete checkout.";
+        } else if (warning) {
+          warning.textContent = `Checkout is blocked: ${result.blockers.join(", ")}`;
+        }
         return;
       }
       // Keep the local demo timeline working (and as the offline fallback).

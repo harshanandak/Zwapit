@@ -3,15 +3,18 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   createClerkAuthState,
   createCurrentAuthState,
+  createMockAuthState,
   createSignedOutAuthState,
+  evaluateMockOtp,
   getAuthActionState,
   getCurrentUser,
   isClerkAuthConfigured,
   requirePhoneVerified,
   requireUser,
   syncUserToConvex,
+  verifyPhoneWithMockOtp,
 } from "../authAdapter";
-import { mockCurrentUserId } from "../mockAuth";
+import { MOCK_OTP_CODE, mockCurrentUserId } from "../mockAuth";
 
 const ORIGINAL_PUBLIC_CLERK_PUBLISHABLE_KEY = process.env.PUBLIC_CLERK_PUBLISHABLE_KEY;
 const ORIGINAL_VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -113,5 +116,86 @@ describe("auth adapter contract", () => {
       reason: "PHONE_VERIFICATION_REQUIRED",
       status: "phone_verification_required",
     });
+  });
+});
+
+describe("mocked OTP phone verification transition", () => {
+  test("a signed-in verified user can already reach protected buy and sell actions", () => {
+    const verified = createMockAuthState();
+
+    expect(getAuthActionState("buy", "/app/checkout/listing_bms_event_1", verified, { requirePhoneVerified: true }).status).toBe(
+      "allowed",
+    );
+    expect(getAuthActionState("sell", "/app/sell/upload", verified, { requirePhoneVerified: true }).status).toBe("allowed");
+  });
+
+  test("evaluateMockOtp only accepts the mock code and stays provider-abstracted", () => {
+    expect(evaluateMockOtp(MOCK_OTP_CODE)).toEqual({ status: "verified", verificationMode: "mock" });
+    expect(evaluateMockOtp("999111")).toEqual({ status: "rejected", reason: "INVALID_OTP" });
+  });
+
+  test("a wrong mock OTP leaves an unverified user still phone-verification-required for buy and sell", () => {
+    const unverified = createClerkAuthState({
+      appUserId: "user_convex_internal_3",
+      providerUserId: "user_2unverified_otp",
+      displayName: "Unverified Buyer",
+      phoneVerified: false,
+    });
+
+    const { state, result } = verifyPhoneWithMockOtp(unverified, "000001");
+
+    expect(result.status).toBe("rejected");
+    expect(state).toBe(unverified);
+    expect(getAuthActionState("buy", "/app/checkout/listing_bms_event_1", state, { requirePhoneVerified: true }).status).toBe(
+      "phone_verification_required",
+    );
+    expect(getAuthActionState("sell", "/app/sell/upload", state, { requirePhoneVerified: true }).status).toBe(
+      "phone_verification_required",
+    );
+  });
+
+  test("a correct mock OTP transitions an unverified user to verified for buy and sell without real SMS/KYC", () => {
+    const unverified = createClerkAuthState({
+      appUserId: "user_convex_internal_4",
+      providerUserId: "user_2unverified_otp_ok",
+      displayName: "Unverified Buyer",
+      phoneVerified: false,
+    });
+
+    const { state, result } = verifyPhoneWithMockOtp(unverified, MOCK_OTP_CODE);
+
+    expect(result).toEqual({ status: "verified", verificationMode: "mock" });
+    if (state.status !== "authenticated") throw new Error("expected authenticated state");
+    expect(state.user.id).toBe("user_convex_internal_4");
+    expect(state.user.phoneVerified).toBe(true);
+    expect(state.verification.phoneVerified).toBe(true);
+    expect(state.verification.verificationMode).toBe("mock");
+    // Provider id stays separate from the app user id after verification.
+    expect(state.authIdentity.providerUserId).toBe("user_2unverified_otp_ok");
+    expect(state.authIdentity.providerUserId).not.toBe(state.user.id);
+    expect(getAuthActionState("buy", "/app/checkout/listing_bms_event_1", state, { requirePhoneVerified: true }).status).toBe(
+      "allowed",
+    );
+    expect(getAuthActionState("sell", "/app/sell/upload", state, { requirePhoneVerified: true }).status).toBe("allowed");
+  });
+
+  test("mock OTP keeps an already verified Clerk phone source", () => {
+    const clerkVerified = createClerkAuthState({
+      appUserId: "user_convex_internal_5",
+      providerUserId: "user_2verified_phone",
+      displayName: "Verified Buyer",
+      phoneVerified: true,
+    });
+
+    const { state, result } = verifyPhoneWithMockOtp(clerkVerified, MOCK_OTP_CODE);
+
+    expect(result).toEqual({ status: "verified", verificationMode: "mock" });
+    if (state.status !== "authenticated") throw new Error("expected authenticated state");
+    expect(state.verification.phoneVerified).toBe(true);
+    expect(state.verification.verificationMode).toBe("clerk_phone");
+  });
+
+  test("mock OTP verification requires a signed-in user", () => {
+    expect(() => verifyPhoneWithMockOtp(createSignedOutAuthState(), MOCK_OTP_CODE)).toThrow("AUTH_REQUIRED");
   });
 });

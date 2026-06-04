@@ -64,10 +64,29 @@ const promises = [
 </AppShell>
 
 <script>
+  import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+
   const continueLink = document.getElementById("promise-continue") as HTMLAnchorElement | null;
   const warning = document.getElementById("promise-warning");
 
+  // Protected listing submission: a signed-out or phone-unverified seller is
+  // routed to the account/verify step before publishing. Verified/demo sellers
+  // keep the existing seller-promise gate and publish instantly.
+  let phoneGateResolved = false;
+  let phoneGated = true;
+  void gateProtectedActionLink("#promise-continue").then((status) => {
+    phoneGateResolved = true;
+    phoneGated = status !== "verified";
+  });
+
   continueLink?.addEventListener("click", (event) => {
+    if (!phoneGateResolved) {
+      event.preventDefault();
+      if (warning) warning.textContent = "Checking phone verification...";
+      return;
+    }
+    if (phoneGated) return; // link already points to the account/verify step
+
     const promises = Array.from(document.querySelectorAll<HTMLInputElement>("[data-seller-promise]"));
     const allAccepted = promises.length > 0 && promises.every((promise) => promise.checked);
 

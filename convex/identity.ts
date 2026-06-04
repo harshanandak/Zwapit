@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { appUserIdFromUserDocId, buildAuthSyncRecord, selectProviderPhoneVerified } from "./authModel";
+import { appUserIdFromUserDocId, buildAuthSyncRecord, evaluateMockOtp, selectProviderPhoneVerified } from "./authModel";
 
 type ConvexAuthIdentity = {
   subject: string;
@@ -42,7 +42,7 @@ export async function syncIdentityToAppUser(
     .withIndex("by_provider_subject", (q) => q.eq("provider", PROVIDER).eq("providerUserId", providerUserId))
     .unique();
 
-  const phoneVerified = phoneVerifiedFromIdentity(identity);
+  const providerPhoneVerified = phoneVerifiedFromIdentity(identity);
   const displayName = displayNameFromIdentity(identity);
 
   if (existingIdentity) {
@@ -50,6 +50,14 @@ export async function syncIdentityToAppUser(
       .query("users")
       .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
       .unique();
+    const existingVerification = await ctx.db
+      .query("user_verifications")
+      .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
+      .unique();
+    const hasMockVerification =
+      existingVerification?.phoneVerified === true && existingVerification.verificationMode === "mock";
+    const phoneVerified = providerPhoneVerified || hasMockVerification;
+    const verificationMode = providerPhoneVerified ? "clerk_phone" : hasMockVerification ? "mock" : "unverified";
     if (existingUser) {
       await ctx.db.patch(existingUser._id, { displayName, phoneVerified });
     } else {
@@ -60,12 +68,6 @@ export async function syncIdentityToAppUser(
         role: "buyer_seller",
       });
     }
-
-    const existingVerification = await ctx.db
-      .query("user_verifications")
-      .withIndex("by_app_user_id", (q) => q.eq("appUserId", existingIdentity.appUserId))
-      .unique();
-    const verificationMode = phoneVerified ? "clerk_phone" : "unverified";
     if (existingVerification) {
       await ctx.db.patch(existingVerification._id, { phoneVerified, verificationMode });
     } else {
@@ -82,13 +84,14 @@ export async function syncIdentityToAppUser(
       phoneVerified,
       provider: PROVIDER,
       providerUserId,
+      verificationMode,
     });
   }
 
   const userDocId = await ctx.db.insert("users", {
     appUserId: "__pending__",
     displayName,
-    phoneVerified,
+    phoneVerified: providerPhoneVerified,
     role: "buyer_seller",
   });
   const appUserId = appUserIdFromUserDocId(userDocId);
@@ -96,11 +99,11 @@ export async function syncIdentityToAppUser(
   await ctx.db.insert("auth_identities", { appUserId, provider: PROVIDER, providerUserId });
   await ctx.db.insert("user_verifications", {
     appUserId,
-    phoneVerified,
-    verificationMode: phoneVerified ? "clerk_phone" : "unverified",
+    phoneVerified: providerPhoneVerified,
+    verificationMode: providerPhoneVerified ? "clerk_phone" : "unverified",
   });
 
-  return buildAuthSyncRecord({ appUserId, displayName, phoneVerified, provider: PROVIDER, providerUserId });
+  return buildAuthSyncRecord({ appUserId, displayName, phoneVerified: providerPhoneVerified, provider: PROVIDER, providerUserId });
 }
 
 export async function resolveCurrentAppUser(ctx: AuthCtx): Promise<Doc<"users"> | null> {
@@ -177,6 +180,63 @@ export const getPhoneVerificationRequirement = query({
       phoneVerified: user.phoneVerified,
       requiredFor: PHONE_REQUIRED_ACTIONS,
       status: user.phoneVerified ? ("verified" as const) : ("required" as const),
+    };
+  },
+});
+
+// Provider-abstracted / mocked OTP verification behind the identity boundary.
+// On an accepted mock OTP this flips the app user's `phoneVerified` and the
+// `user_verifications.phoneVerified` record to true (verificationMode "mock").
+// It never sends real SMS and never touches `auth_identities`, so provider ids
+// stay separate from app user ids. The live UI verifies through the Clerk
+// provider claim (syncAppUserFromProvider); this is the mock arm of the same
+// provider-abstracted contract.
+export const verifyPhoneWithMockOtp = mutation({
+  args: { submittedCode: v.string() },
+  returns: v.object({
+    appUserId: v.string(),
+    phoneVerified: v.boolean(),
+    status: v.union(v.literal("verified"), v.literal("rejected")),
+    verificationMode: v.union(v.literal("mock"), v.literal("clerk_phone"), v.literal("unverified")),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireAuthenticatedAppUser(ctx);
+    const result = evaluateMockOtp({ submittedCode: args.submittedCode });
+
+    if (result.status !== "verified") {
+      const existingVerification = await ctx.db
+        .query("user_verifications")
+        .withIndex("by_app_user_id", (q) => q.eq("appUserId", user.appUserId))
+        .unique();
+      return {
+        appUserId: user.appUserId,
+        phoneVerified: user.phoneVerified,
+        status: "rejected" as const,
+        verificationMode: existingVerification?.verificationMode ?? ("unverified" as const),
+      };
+    }
+
+    await ctx.db.patch(user._id, { phoneVerified: true });
+    const existingVerification = await ctx.db
+      .query("user_verifications")
+      .withIndex("by_app_user_id", (q) => q.eq("appUserId", user.appUserId))
+      .unique();
+    const verificationMode = existingVerification?.phoneVerified === true ? existingVerification.verificationMode : ("mock" as const);
+    if (existingVerification) {
+      await ctx.db.patch(existingVerification._id, { phoneVerified: true, verificationMode });
+    } else {
+      await ctx.db.insert("user_verifications", {
+        appUserId: user.appUserId,
+        phoneVerified: true,
+        verificationMode,
+      });
+    }
+
+    return {
+      appUserId: user.appUserId,
+      phoneVerified: true,
+      status: "verified" as const,
+      verificationMode,
     };
   },
 });

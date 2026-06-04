@@ -28,8 +28,10 @@ import StepNav from "../../../components/seller/StepNav.astro";
     </p>
 
     <a
+      id="sell-continue"
       href="/app/sell/confirm"
       class="block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm"
+      data-sell-continue
     >
       Continue
     </a>
@@ -38,3 +40,19 @@ import StepNav from "../../../components/seller/StepNav.astro";
     </p>
   </div>
 </AppShell>
+
+<script>
+  import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+
+  // Keep selling delayed-login: signed-out or phone-unverified sellers are routed
+  // to the account/verify step before they can progress. Verified/demo users are
+  // unaffected.
+  const sellContinue = document.querySelector<HTMLAnchorElement>("[data-sell-continue]");
+  let phoneGateResolved = false;
+  sellContinue?.addEventListener("click", (event) => {
+    if (!phoneGateResolved) event.preventDefault();
+  });
+  void gateProtectedActionLink("[data-sell-continue]").then(() => {
+    phoneGateResolved = true;
+  });
+</script>

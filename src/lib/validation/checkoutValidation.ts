@@ -1,3 +1,4 @@
+import type { AuthActionState } from "../auth/authAdapter";
 import type { MockListing, MockOrder, MockSellerPaymentAccount, SourceRule } from "../types";
 import { validationResult, type ValidationResult } from "./types";
 
@@ -46,4 +47,15 @@ export function validateCheckout(input: CheckoutValidationInput): ValidationResu
 
 export function validateBuyerConfirmation(order: MockOrder): ValidationResult<BuyerConfirmationBlocker> {
   return validationResult(order.state === "transfer_submitted" ? [] : ["ORDER_NOT_TRANSFER_SUBMITTED"]);
+}
+
+// Access gate for protected checkout execution. Derived from the auth adapter's
+// action-gate contract so a signed-out or phone-unverified buyer is blocked
+// before checkout execution (mock pay), not only at the listing-detail CTA.
+export type CheckoutAccessBlocker = "AUTH_REQUIRED" | "PHONE_VERIFICATION_REQUIRED";
+
+export function validateBuyerCheckoutAccess(action: AuthActionState): ValidationResult<CheckoutAccessBlocker> {
+  if (action.status === "sign_in_required") return validationResult(["AUTH_REQUIRED"]);
+  if (action.status === "phone_verification_required") return validationResult(["PHONE_VERIFICATION_REQUIRED"]);
+  return validationResult([]);
 }
