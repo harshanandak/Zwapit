@@ -119,6 +119,37 @@ function buildSubmittedListing(sellerId: string, draft: SellerListingDraft, sour
   };
 }
 
+function listingPatch(listing: MockListing) {
+  return {
+    sellerId: listing.sellerId,
+    sourceRuleId: listing.sourceRuleId,
+    sourceRuleVersion: listing.sourceRuleVersion,
+    category: listing.category,
+    source: listing.source,
+    sourceCategoryKey: listing.sourceCategoryKey,
+    title: listing.title,
+    venueOrRoute: listing.venueOrRoute,
+    eventOrTripStartAt: listing.eventOrTripStartAt,
+    quantity: listing.quantity,
+    faceValue: listing.faceValue,
+    listingPrice: listing.listingPrice,
+    platformFee: listing.platformFee,
+    gstOnFee: listing.gstOnFee,
+    totalPayable: listing.totalPayable,
+    transferMode: listing.transferMode,
+    transferDeadlineAt: listing.transferDeadlineAt,
+    protectionDeadlineAt: listing.protectionDeadlineAt,
+    state: listing.state,
+    ruleDecision: listing.ruleDecision,
+    duplicateFingerprint: listing.duplicateFingerprint,
+  };
+}
+
+function blockingValidationCodes(listing: MockListing, sourceRule: SourceRule): string[] {
+  const validation = validateSellerListing(listing, sourceRule);
+  return validation.blockers.filter((blocker) => blocker !== "RULE_BLOCKED");
+}
+
 export const getHomeListings = query({
   args: {},
   handler: async (ctx) => {
@@ -207,36 +238,24 @@ export const submitSellerListingForCurrentUser = mutation({
 
     const sourceRule = sourceRuleDocToMock(sourceRuleDoc);
     const listing = buildSubmittedListing(seller.appUserId, args.draft, sourceRule);
-    const validation = validateSellerListing(listing, sourceRule);
-    if (!validation.ok) {
-      throw new Error(`SELLER_LISTING_INVALID:${validation.blockers.join(",")}`);
+    const blockers = blockingValidationCodes(listing, sourceRule);
+    if (blockers.length > 0) {
+      throw new Error(`SELLER_LISTING_INVALID:${blockers.join(",")}`);
     }
 
-    await ctx.db.insert("listings", {
-      listingKey: listing.id,
-      sellerId: listing.sellerId,
-      sourceRuleId: listing.sourceRuleId,
-      sourceRuleVersion: listing.sourceRuleVersion,
-      category: listing.category,
-      source: listing.source,
-      sourceCategoryKey: listing.sourceCategoryKey,
-      title: listing.title,
-      venueOrRoute: listing.venueOrRoute,
-      eventOrTripStartAt: listing.eventOrTripStartAt,
-      quantity: listing.quantity,
-      faceValue: listing.faceValue,
-      listingPrice: listing.listingPrice,
-      platformFee: listing.platformFee,
-      gstOnFee: listing.gstOnFee,
-      totalPayable: listing.totalPayable,
-      transferMode: listing.transferMode,
-      transferDeadlineAt: listing.transferDeadlineAt,
-      protectionDeadlineAt: listing.protectionDeadlineAt,
-      state: listing.state,
-      ruleDecision: listing.ruleDecision,
-      duplicateFingerprint: listing.duplicateFingerprint,
-    });
+    const sellerListings = await ctx.db
+      .query("listings")
+      .withIndex("by_seller", (q) => q.eq("sellerId", seller.appUserId))
+      .collect();
+    const duplicate = sellerListings.find(
+      (candidate) => candidate.duplicateFingerprint === listing.duplicateFingerprint,
+    );
+    if (duplicate) {
+      await ctx.db.patch(duplicate._id, listingPatch(listing));
+      return { listing, status: "updated" as const };
+    }
 
+    await ctx.db.insert("listings", { listingKey: listing.id, ...listingPatch(listing) });
     return { listing, status: "created" as const };
   },
 });

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { bookmyshowEventRule } from "../../src/lib/rules/sourceRules";
+import {
+  blockedWatcherRule,
+  bookmyshowEventRule,
+  districtMovieWaitlistRule,
+  otherPlatformEventReviewRule,
+} from "../../src/lib/rules/sourceRules";
 import { submitSellerListingForCurrentUser } from "../listings";
 
 type TestRow = Record<string, unknown> & { _id: string };
@@ -211,5 +216,85 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings).toHaveLength(1);
     expect(tables.listings[0].sellerId).toBe(VERIFIED_APP_USER_ID);
     expect(tables.listings[0].sellerId).not.toBe(VERIFIED_PROVIDER_ID);
+  });
+
+  test.each([
+    {
+      name: "AUTO_APPROVE",
+      rule: bookmyshowEventRule,
+      draft: firstSliceDraft(),
+      state: "live",
+    },
+    {
+      name: "AUTO_BLOCK",
+      rule: blockedWatcherRule,
+      draft: firstSliceDraft({
+        source: "manual_upload",
+        category: "watcher",
+        title: "Identity-bound watcher slot",
+      }),
+      state: "blocked",
+    },
+    {
+      name: "AUTO_WAITLIST",
+      rule: districtMovieWaitlistRule,
+      draft: firstSliceDraft({
+        source: "district",
+        category: "movie_ticket",
+        title: "District Movie Night",
+      }),
+      state: "waitlist_only",
+    },
+    {
+      name: "NEEDS_MANUAL_REVIEW",
+      rule: otherPlatformEventReviewRule,
+      draft: firstSliceDraft({
+        source: "other_platform",
+        category: "event_ticket",
+        title: "Other Platform Event",
+      }),
+      state: "under_review",
+    },
+  ])("persists $name submissions as $state", async ({ rule, draft, state }) => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow(rule)],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, { draft })) as {
+      listing: { state: string; ruleDecision: string; sourceRuleId: string };
+    };
+
+    expect(result.listing.state).toBe(state);
+    expect(result.listing.ruleDecision).toBe(rule.decision);
+    expect(result.listing.sourceRuleId).toBe(rule.id);
+    expect(tables.listings[0].state).toBe(state);
+  });
+
+  test("updates the seller's existing duplicate listing instead of creating another row", async () => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow()],
+      },
+    );
+
+    const first = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({ listingPrice: 2200 }),
+    })) as { listing: { id: string; listingPrice: number }; status: string };
+    const second = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({ listingPrice: 2300 }),
+    })) as { listing: { id: string; listingPrice: number }; status: string };
+
+    expect(first.status).toBe("created");
+    expect(second.status).toBe("updated");
+    expect(second.listing.id).toBe(first.listing.id);
+    expect(second.listing.listingPrice).toBe(2300);
+    expect(tables.listings).toHaveLength(1);
+    expect(tables.listings[0].listingPrice).toBe(2300);
   });
 });
