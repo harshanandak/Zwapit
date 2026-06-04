@@ -47,6 +47,84 @@ Branch: feat/seller-listing-persistence
 - `docs/work/2026-06-04-seller-listing-persistence/evaluator-report.md`
 - `docs/work/2026-06-04-seller-listing-persistence/evidence.md`
 
+## Dev Evidence
+
+Task 1 - Backend submission contract:
+
+- RED: `bun test convex/__tests__/listingSubmission.test.ts` failed because
+  `submitSellerListingForCurrentUser` was not exported from `convex/listings.ts`.
+- GREEN: `97e0490 feat(listings): add verified seller submission mutation`.
+- Verification:
+  - `bun test convex/__tests__/listingSubmission.test.ts`: 3 pass / 0 fail.
+  - `bun test src/lib/validation/__tests__/sellerValidation.test.ts`: 6 pass / 0 fail.
+  - `bun run check`: 0 errors, 0 warnings, 11 existing CommonJS hints.
+
+Task 2 - Rule, state, and duplicate behavior:
+
+- RED: focused listing submission tests failed because `AUTO_BLOCK` raised
+  `SELLER_LISTING_INVALID:RULE_BLOCKED` and duplicate same-seller submissions
+  returned `created` instead of `updated`.
+- GREEN: `162c585 feat(listings): persist seller rule outcomes deterministically`.
+- Verification:
+  - `bun test convex/__tests__/listingSubmission.test.ts`: 8 pass / 0 fail.
+  - `bun test src/lib/validation/__tests__/sellerValidation.test.ts`: 6 pass / 0 fail.
+  - `bun run check`: 0 errors, 0 warnings, 11 existing CommonJS hints.
+
+Task 3 - Claude frontend handoff contract:
+
+- RED: `bun test src/lib/convex/__tests__/dataAdapter.test.ts` failed because
+  `submitSellerListingDraft` was not exported from `src/lib/convex/dataAdapter.ts`.
+- GREEN: `31d529e feat(listings): add seller submission adapter handoff`.
+- Verification:
+  - `bun test src/lib/convex/__tests__/dataAdapter.test.ts`: 10 pass / 0 fail.
+  - `bun test convex/__tests__/listingSubmission.test.ts`: 8 pass / 0 fail.
+  - `bun run check`: 0 errors, 0 warnings, 11 existing CommonJS hints.
+
+### Claude Contract
+
+Claude-owned seller UI should import `submitSellerListingDraft` from
+`src/lib/convex/dataAdapter.ts`; do not import `convex/_generated/api`.
+
+Payload type: `SellerListingDraft` from `src/lib/types.ts`.
+
+```ts
+{
+  source: "bookmyshow" | "district" | "bus_operator" | "other_platform" | "manual_upload";
+  category: "event_ticket" | "movie_ticket" | "bus_travel" | "watcher" | "future_category";
+  title: string;
+  venueOrRoute: string;
+  eventOrTripStartAt: string;
+  quantity: number;
+  faceValue: number;
+  listingPrice: number;
+  transferDeadlineAt: string;
+  protectionDeadlineAt: string;
+  sellerPromiseAccepted: boolean;
+  duplicateFingerprint: string;
+}
+```
+
+Result type: `SellerListingSubmissionResult` from `src/lib/types.ts`.
+
+```ts
+{
+  ok: boolean;
+  blockers: string[];
+  listing: MockListing;
+  status: "created" | "updated" | "mock" | "blocked";
+}
+```
+
+Blockers surfaced to UI:
+
+- `AUTH_REQUIRED`
+- `PHONE_VERIFICATION_REQUIRED`
+- seller validation reason codes from `SELLER_LISTING_INVALID:*`
+- `PERSISTENCE_WRITE_FAILED`
+
+No-Convex/default fallback returns `{ ok: true, blockers: [], status: "mock" }`
+with a local listing built from the draft.
+
 ## Hard Stop
 
 Plan stage only. Do not begin implementation until the user explicitly asks for `/dev` or equivalent.

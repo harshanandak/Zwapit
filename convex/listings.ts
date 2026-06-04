@@ -13,7 +13,7 @@ import { requirePhoneVerifiedAppUser } from "./identity";
 import { calculateCheckoutTotal } from "../src/lib/mock/pricing";
 import { evaluateSourceRule } from "../src/lib/rules/evaluateRule";
 import { validateSellerListing } from "../src/lib/validation/sellerValidation";
-import type { ListingState, MockListing, SourceRule } from "../src/lib/types";
+import type { ListingState, MockListing, SellerListingDraft, SourceRule } from "../src/lib/types";
 
 const DEMO_LISTING_KEY = "listing_bms_event_1";
 
@@ -43,21 +43,6 @@ const sellerListingDraft = v.object({
   sellerPromiseAccepted: v.boolean(),
   duplicateFingerprint: v.string(),
 });
-
-type SellerListingDraft = {
-  source: SourceRule["source"];
-  category: SourceRule["category"];
-  title: string;
-  venueOrRoute: string;
-  eventOrTripStartAt: string;
-  quantity: number;
-  faceValue: number;
-  listingPrice: number;
-  transferDeadlineAt: string;
-  protectionDeadlineAt: string;
-  sellerPromiseAccepted: boolean;
-  duplicateFingerprint: string;
-};
 
 function listingStateForDecision(decision: MockListing["ruleDecision"]): ListingState {
   if (decision === "AUTO_APPROVE") return "live";
