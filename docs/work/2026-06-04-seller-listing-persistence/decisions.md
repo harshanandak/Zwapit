@@ -23,3 +23,7 @@ Reason: Real upload/OCR is explicitly outside current v1 scope and not needed to
 Decision: `listings.sellerId` must be derived from the current app user id returned by the identity boundary.
 
 Reason: Provider ids must remain separate in `auth_identities`; app data owner ids must not use Clerk/provider ids.
+
+# Dev Decisions
+
+No `/dev` spec gaps recorded yet.
