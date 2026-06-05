@@ -2,7 +2,7 @@
 
 Issue: zwapit-noq
 Branch: feat/seller-listing-persistence
-Stage: dev handoff after Claude Task 4 (UI wiring)
+Stage: validate after Codex Task 5
 
 ## Summary
 
@@ -67,18 +67,36 @@ rule; ready for Codex review / commit.
 
 ## Open item for Codex (Task 5)
 
-- Seller e2e/test coverage for the new submit path: `scripts/e2e-seller.mjs` is
-  not Claude-owned and CLAUDE.md assigns tests to Codex, so Claude deferred the
-  Task-4 RED test. The pure, testable surface is `sellerSubmissionView` in
-  `src/components/seller/format.ts`; add assertions covering submitted / waitlist /
-  review / cannot-list / auth / phone / retry outcomes.
-- Coverage caveat: the promise-step submit interaction (click -> preventDefault ->
-  validate -> `submitSellerListingDraft` -> `sellerSubmissionView` -> navigate ->
-  orders banner) is not exercised by any gate run here (e2e-seller drives the lib
-  layer, slice verifier only greps server HTML) and was not browser-tested; it
-  needs the Codex-owned seller e2e to be truly verified end-to-end.
+- CLOSED: Codex added unit coverage at
+  `src/components/seller/__tests__/format.test.ts` for submitted / waitlist /
+  review / cannot-list / auth / phone / retry outcomes, including
+  `ok:true` + `AUTO_BLOCK` -> cannot_list and no-Convex `status:"mock"` ->
+  retry.
+- CLOSED with validation-only fix: the new test exposed that `status:"mock"` was
+  incorrectly mapped to submitted. Codex changed only
+  `src/components/seller/format.ts` so no-Convex fallback stays retry and does
+  not proceed to Orders.
+- ACCEPTED CAVEAT: the promise-step browser click interaction remains untested
+  by the current automated gates. Codex did not add a browser harness or
+  dependency during this validation-only slice.
+
+## Codex Task 5 Validation
+
+- `bun run check`: passed; 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun test`: passed; 92 pass / 0 fail / 307 expects.
+- `bun run build`: passed; 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: passed; 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: passed.
+- `bun scripts/e2e-seller.mjs`: passed.
+- Scope-drift search: only out-of-scope docs plus one pre-existing auth comment
+  excluding real SMS/Razorpay/KYC/payout/provider behavior.
+- Provider-owner search: no matches for provider ids used as listing/order/app
+  owner ids.
+- Ownership review: Claude Task 4 did not touch backend/shared files; Codex
+  changes after handoff were limited to test coverage, docs/evidence, Beads
+  handoff text, and the validation-only mapper fix.
 
 ## Next
 
-Codex runs Task 5 final validation/review and adds the deferred seller e2e
-coverage. No backend contract change was needed during UI wiring.
+Commit the Task 5 validation evidence/fix locally on `feat/seller-listing-persistence`.
+Do not push unless the user asks.

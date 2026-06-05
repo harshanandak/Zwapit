@@ -230,3 +230,70 @@ Ownership note (test gap for Codex):
 Claude-owned Task 4 UI wiring and validation are complete. Stop here; Codex does
 final validation/review (Task 5) after this handoff, including the seller e2e
 test coverage Claude could not own.
+
+## Codex Task 5 Validation Evidence
+
+Date: 2026-06-05
+
+Task 5 - Codex validation after Claude handoff.
+
+Ownership confirmation:
+
+- `git diff --name-only 972188b..HEAD`: Claude Task 4 changed only the two work
+  docs plus the six Claude-owned seller UI files:
+  `src/components/seller/format.ts`,
+  `src/pages/app/sell/upload.astro`,
+  `src/pages/app/sell/confirm.astro`,
+  `src/pages/app/sell/price.astro`,
+  `src/pages/app/sell/promise.astro`, and
+  `src/pages/app/sell/orders.astro`.
+- No backend, shared adapter, shared type, schema, Convex, package, or routing
+  files were changed by Claude after Codex handoff.
+
+Deferred test coverage:
+
+- Added Codex-owned unit coverage at
+  `src/components/seller/__tests__/format.test.ts`.
+- Covered `sellerSubmissionView` outcomes for submitted, waitlist_only,
+  under_review, cannot_list, signed_out, phone_required, retry on
+  `PERSISTENCE_WRITE_FAILED`, and retry on no-Convex `status: "mock"`.
+- RED: `bun test src/components/seller/__tests__/format.test.ts` failed because
+  `status: "mock"` returned `kind: "submitted"` / `proceedToOrders: true`
+  instead of retry / `proceedToOrders: false`.
+- Validation-only fix: changed only
+  `src/components/seller/format.ts` so `sellerSubmissionView` maps
+  `result.status === "mock"` to retry before persisted success outcomes. This is
+  not new feature implementation; it corrects the no-Convex fallback state that
+  Claude had already documented as a Task 4 friendly UI state.
+- GREEN: `bun test src/components/seller/__tests__/format.test.ts`: 3 pass /
+  0 fail / 8 expects.
+
+Coverage caveat decision:
+
+- Accepted remaining browser-coverage caveat for this validation stage. The new
+  Codex test proves the pure mapping surface and closes the deferred RED. The
+  promise-step browser click path itself is still not exercised by the existing
+  gates; no browser harness or dependency was added because that would expand
+  this validation-only slice.
+
+Fresh validation from the feature worktree:
+
+- `bun run check`: passed; 0 errors, 0 warnings, 11 existing CommonJS hints.
+- `bun test`: 92 pass / 0 fail / 307 expects.
+- `bun run build`: passed; 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: passed; 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: passed.
+- `bun scripts/e2e-seller.mjs`: passed.
+
+Scope-drift search:
+
+- Command: `rg -n "Razorpay|real payments|payout setup|full KYC|admin expansion|demand discovery|category expansion" convex src docs/work/2026-06-04-seller-listing-persistence package.json bun.lock -g "*.ts" -g "*.tsx" -g "*.astro" -g "*.md" -g "package.json" -g "bun.lock"`
+- Result: matches were limited to out-of-scope docs and one pre-existing auth
+  comment that explicitly says real SMS, Razorpay, KYC, payout, and provider
+  verification stay out of the adapter.
+
+Provider-owner search:
+
+- Command: `rg -n "sellerId:.*provider|buyerId:.*provider|actorId:.*provider|listingKey:.*provider|providerUserId.*sellerId|providerUserId.*buyerId|providerUserId.*actorId|identity\.subject.*sellerId|identity\.subject.*buyerId|identity\.subject.*actorId" convex src -g "*.ts" -g "*.astro"`
+- Result: no matches. Provider ids remain separated from listing/order/app owner
+  ids.

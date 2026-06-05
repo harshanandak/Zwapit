@@ -163,7 +163,19 @@ export function sellerSubmissionView(result: SellerListingSubmissionResult): Sel
     };
   }
 
-  // Persisted (created/updated) or local mock success: outcome follows the rule.
+  // No Convex/default fallback means the listing was not actually persisted.
+  if (result.status === "mock") {
+    return {
+      kind: "retry",
+      tone: "error",
+      title: "Couldn't publish yet",
+      detail: "We couldn't save your listing just now. Please try again.",
+      ctaLabel: "Try again",
+      proceedToOrders: false,
+    };
+  }
+
+  // Persisted created/updated success: outcome follows the rule.
   if (result.ok) {
     switch (result.listing.ruleDecision) {
       case "AUTO_APPROVE":
