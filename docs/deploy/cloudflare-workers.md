@@ -9,6 +9,8 @@ This project deploys the static Astro build to Cloudflare Workers Static Assets.
 - Worker name: `zwapit`
 - workers.dev subdomain: `harshananda57`
 - Production URL: `https://zwapit.harshananda57.workers.dev`
+- Custom domain: `https://zwapitt.com`
+- Custom www domain: `https://www.zwapitt.com`
 - PR preview URL format: `https://pr-<number>-zwapit.harshananda57.workers.dev`
 
 ## Required GitHub Secret
@@ -18,6 +20,9 @@ Add this repository secret before relying on GitHub Actions deployments:
 - `CLOUDFLARE_API_TOKEN`
 
 The token needs permission to upload and deploy Workers for the account above.
+Because `wrangler.jsonc` declares Worker Routes for `zwapitt.com/*` and
+`www.zwapitt.com/*`, the token also needs zone-scoped `Workers Routes Write`
+permission so production deploys can create or update those route bindings.
 
 ## GitHub Actions
 
@@ -43,6 +48,10 @@ bunx wrangler versions upload --preview-alias pr-2 --tag pr-2
 ```
 
 Use `wrangler versions deploy` only when intentionally promoting a version to production traffic.
+
+`wrangler.jsonc` also declares Worker Routes for `zwapitt.com/*` and
+`www.zwapitt.com/*`. Routes are used instead of Worker Custom Domains because
+the hostnames already have DNS records in Cloudflare.
 
 ## Source References
 
