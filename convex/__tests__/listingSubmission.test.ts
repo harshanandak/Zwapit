@@ -281,6 +281,22 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings[0].ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
   });
 
+  test("it should reject fractional quantities before persisting a seller listing", async () => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow()],
+      },
+    );
+
+    await expectRejectsWithMessage(
+      () => handlerOf(submitSellerListingForCurrentUser)(ctx, { draft: firstSliceDraft({ quantity: 1.5 }) }),
+      "SELLER_LISTING_INVALID:INVALID_QUANTITY",
+    );
+    expect(tables.listings).toHaveLength(0);
+  });
+
   test.each([
     {
       name: "AUTO_APPROVE",

@@ -23,7 +23,7 @@ export function validateSellerListing(
   if (!listing.title.trim()) blockers.push("MISSING_TITLE");
   if (!listing.venueOrRoute.trim()) blockers.push("MISSING_VENUE_OR_ROUTE");
   if (!listing.eventOrTripStartAt) blockers.push("MISSING_EVENT_OR_TRIP_START");
-  if (listing.quantity < 1) blockers.push("INVALID_QUANTITY");
+  if (!Number.isSafeInteger(listing.quantity) || listing.quantity < 1) blockers.push("INVALID_QUANTITY");
   if (listing.faceValue <= 0) blockers.push("INVALID_FACE_VALUE");
   if (listing.listingPrice <= 0) blockers.push("INVALID_LISTING_PRICE");
   if (!listing.transferDeadlineAt) blockers.push("MISSING_TRANSFER_DEADLINE");

@@ -43,6 +43,14 @@ describe("seller listing validation blockers", () => {
     expect(result.blockers).toContain("INVALID_QUANTITY");
   });
 
+  test("it should block fractional listing quantities", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing({ ...fixture.listing, quantity: 1.5 }, fixture.sourceRule);
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("INVALID_QUANTITY");
+  });
+
   test("should block seller listing when the source rule is auto block", () => {
     const fixture = createMockFixture();
     const result = validateSellerListing(
