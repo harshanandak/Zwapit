@@ -92,7 +92,13 @@ export function ruleDecisionResult(decision: RuleDecision): {
 // item updates the seller's existing listing instead of creating duplicates.
 // Excludes price/quantity so editing the price still maps to the same listing.
 function sellerDuplicateFingerprint(listing: MockListing): string {
-  return [listing.source, listing.category, listing.title, listing.eventOrTripStartAt, listing.venueOrRoute].join("|");
+  return JSON.stringify([
+    listing.source,
+    listing.category,
+    listing.title,
+    listing.eventOrTripStartAt,
+    listing.venueOrRoute,
+  ]);
 }
 
 // Build the first-slice submission payload from the detected (mock) listing.
@@ -115,6 +121,15 @@ export function buildSellerDraftFromListing(
     sellerPromiseAccepted: overrides.sellerPromiseAccepted ?? false,
     duplicateFingerprint: sellerDuplicateFingerprint(listing),
   };
+}
+
+export function sellerDraftJsonScriptContent(draft: SellerListingDraft): string {
+  return JSON.stringify(draft)
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 }
 
 // Friendly UI state for a seller submission result. Keyed on BOTH the adapter
@@ -163,19 +178,7 @@ export function sellerSubmissionView(result: SellerListingSubmissionResult): Sel
     };
   }
 
-  // No Convex/default fallback means the listing was not actually persisted.
-  if (result.status === "mock") {
-    return {
-      kind: "retry",
-      tone: "error",
-      title: "Couldn't publish yet",
-      detail: "We couldn't save your listing just now. Please try again.",
-      ctaLabel: "Try again",
-      proceedToOrders: false,
-    };
-  }
-
-  // Persisted created/updated success: outcome follows the rule.
+  // Persisted created/updated success and local demo mock success both follow the rule.
   if (result.ok) {
     switch (result.listing.ruleDecision) {
       case "AUTO_APPROVE":

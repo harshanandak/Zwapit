@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { MockListing, RuleDecision, SellerListingSubmissionResult } from "../../../lib/types";
 import { createMockFixture } from "../../../lib/mock/fixtures";
-import { sellerSubmissionView } from "../format";
+import { buildSellerDraftFromListing, sellerDraftJsonScriptContent, sellerSubmissionView } from "../format";
 
 function listingWithRuleDecision(ruleDecision: RuleDecision): MockListing {
   const base = createMockFixture().listing;
@@ -35,7 +35,7 @@ function submissionResult(
 }
 
 describe("sellerSubmissionView", () => {
-  test("maps persisted seller listing rule outcomes to friendly UI states", () => {
+  test("it should map persisted seller listing rule outcomes to friendly UI states when rule decisions vary", () => {
     expect(sellerSubmissionView(submissionResult({ ruleDecision: "AUTO_APPROVE" }))).toMatchObject({
       kind: "submitted",
       tone: "success",
@@ -61,7 +61,7 @@ describe("sellerSubmissionView", () => {
     });
   });
 
-  test("prioritizes auth and phone blockers before listing outcomes", () => {
+  test("it should prioritize auth and phone blockers before listing outcomes when gate blockers are present", () => {
     expect(
       sellerSubmissionView(
         submissionResult({
@@ -91,7 +91,7 @@ describe("sellerSubmissionView", () => {
     });
   });
 
-  test("maps retryable persistence failures and no-Convex mock fallback to retry", () => {
+  test("it should map retryable persistence failures to retry when persistence writes fail", () => {
     expect(
       sellerSubmissionView(
         submissionResult({
@@ -107,6 +107,9 @@ describe("sellerSubmissionView", () => {
       proceedToOrders: false,
     });
 
+  });
+
+  test("it should keep the local demo flow moving when submission uses the mock fallback", () => {
     expect(
       sellerSubmissionView(
         submissionResult({
@@ -117,8 +120,47 @@ describe("sellerSubmissionView", () => {
         }),
       ),
     ).toMatchObject({
-      kind: "retry",
-      proceedToOrders: false,
+      kind: "submitted",
+      proceedToOrders: true,
     });
+  });
+});
+
+describe("seller draft formatting", () => {
+  test("it should build collision-safe duplicate fingerprints when listing fields contain separators", () => {
+    const base = createMockFixture().listing;
+    const first = buildSellerDraftFromListing({
+      ...base,
+      source: "bookmyshow",
+      category: "event_ticket",
+      title: "A|B",
+      eventOrTripStartAt: "C",
+      venueOrRoute: "D",
+    });
+    const second = buildSellerDraftFromListing({
+      ...base,
+      source: "bookmyshow",
+      category: "event_ticket",
+      title: "A",
+      eventOrTripStartAt: "B|C",
+      venueOrRoute: "D",
+    });
+
+    expect(first.duplicateFingerprint).not.toBe(second.duplicateFingerprint);
+    expect(JSON.parse(first.duplicateFingerprint)).toEqual(["bookmyshow", "event_ticket", "A|B", "C", "D"]);
+  });
+
+  test("it should escape script-breaking characters when serializing seller drafts for inline JSON", () => {
+    const draft = buildSellerDraftFromListing({
+      ...createMockFixture().listing,
+      title: "</script><img src=x onerror=alert(1)>",
+      venueOrRoute: "A & B",
+    });
+    const scriptContent = sellerDraftJsonScriptContent(draft);
+
+    expect(scriptContent).not.toContain("</script>");
+    expect(scriptContent).toContain("\\u003c/script\\u003e");
+    expect(scriptContent).toContain("\\u0026");
+    expect(JSON.parse(scriptContent)).toEqual(draft);
   });
 });

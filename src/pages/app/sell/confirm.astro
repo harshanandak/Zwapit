@@ -5,12 +5,14 @@ import {
   buildSellerDraftFromListing,
   formatDateTime,
   formatInr,
+  sellerDraftJsonScriptContent,
   transferModeLabel,
 } from "../../../components/seller/format";
 import { createMockFixture } from "../../../lib/mock/fixtures";
 
 const { listing } = createMockFixture();
 const detectedDraft = buildSellerDraftFromListing(listing);
+const detectedDraftJson = sellerDraftJsonScriptContent(detectedDraft);
 
 const sourceLabels: Record<string, string> = {
   bookmyshow: "BookMyShow",
@@ -79,7 +81,7 @@ const details = [
     </div>
   </div>
 
-  <script type="application/json" id="seller-detected-draft" is:inline set:html={JSON.stringify(detectedDraft)}
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={detectedDraftJson}
   ></script>
 </AppShell>
 

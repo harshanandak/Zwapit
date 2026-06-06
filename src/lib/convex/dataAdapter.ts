@@ -293,6 +293,8 @@ export async function submitSellerListingDraft(
   draft: SellerListingDraft,
 ): Promise<SellerListingSubmissionResult> {
   const localListing = localSubmittedListingFromDraft(draft);
+  if (!isClerkAuthConfigured()) return { ok: true, blockers: [], listing: localListing, status: "mock" };
+
   const client = await getConvexClient();
   if (!client) return { ok: true, blockers: [], listing: localListing, status: "mock" };
 
@@ -304,7 +306,7 @@ export async function submitSellerListingDraft(
       status: "created" | "updated";
     };
     return { ok: true, blockers: [], listing: result.listing, status: result.status };
-  } catch (error) {
+  } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("PHONE_VERIFICATION_REQUIRED")) {
       return { ok: false, blockers: ["PHONE_VERIFICATION_REQUIRED"], listing: localListing, status: "blocked" };

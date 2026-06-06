@@ -151,7 +151,8 @@ Files:
 
 RED:
 
-- Add or update seller e2e/smoke coverage showing the upload-first path reaches the protected submit action and handles success/failure UI states.
+- Claude does not own seller e2e/smoke coverage. Codex tracks that as a Task 5
+  validation follow-up.
 
 GREEN:
 
@@ -178,6 +179,11 @@ Files:
 - `docs/work/2026-06-04-seller-listing-persistence/evidence.md`
 - `docs/work/2026-06-04-seller-listing-persistence/evaluator-report.md`
 - Narrow source fixes only if validation proves they are required
+
+Codex-owned test expectation:
+
+- Seller e2e/smoke: upload-first path verifies protected submit action and
+  success/failure UI states.
 
 Run and record:
 

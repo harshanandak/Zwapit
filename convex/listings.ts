@@ -13,7 +13,7 @@ import { requirePhoneVerifiedAppUser } from "./identity";
 import { calculateCheckoutTotal } from "../src/lib/mock/pricing";
 import { evaluateSourceRule } from "../src/lib/rules/evaluateRule";
 import { validateSellerListing } from "../src/lib/validation/sellerValidation";
-import type { ListingState, MockListing, SellerListingDraft, SourceRule } from "../src/lib/types";
+import type { ListingState, MockListing, RuleDecision, SellerListingDraft, SourceRule } from "../src/lib/types";
 
 const DEMO_LISTING_KEY = "listing_bms_event_1";
 
@@ -51,35 +51,93 @@ function listingStateForDecision(decision: MockListing["ruleDecision"]): Listing
   return "under_review";
 }
 
-function stableListingKey(sellerId: string, duplicateFingerprint: string): string {
-  const normalized = duplicateFingerprint
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 72);
-  return `listing_${sellerId}_${normalized || "seller_upload"}`;
+function hasRequiredValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  return true;
 }
 
-function buildSubmittedListing(sellerId: string, draft: SellerListingDraft, sourceRule: SourceRule): MockListing {
-  const evaluation = evaluateSourceRule({
-    source: draft.source,
-    category: draft.category,
-    listingPrice: draft.listingPrice,
+function priceRuleRequiresReview(sourceRule: SourceRule, draft: SellerListingDraft): boolean {
+  if (sourceRule.priceRule.kind !== "manual_review_above_face_value") return false;
+  const maxMultiplier = sourceRule.priceRule.maxMultiplier ?? 1;
+  return draft.listingPrice > draft.faceValue * maxMultiplier;
+}
+
+function decisionForPersistedRule(sourceRule: SourceRule, draft: SellerListingDraft): RuleDecision {
+  if (sourceRule.decision === "AUTO_BLOCK" || sourceRule.decision === "AUTO_WAITLIST") {
+    return sourceRule.decision;
+  }
+
+  if (sourceRule.decision === "NEEDS_MANUAL_REVIEW") return "NEEDS_MANUAL_REVIEW";
+
+  const explicitRequiredValues: Record<string, unknown> = {
     faceValue: draft.faceValue,
-    requiredFieldValues: {
-      title: draft.title,
-      eventOrTripStartAt: draft.eventOrTripStartAt,
-      venueOrRoute: draft.venueOrRoute,
-      quantity: draft.quantity,
-      transferDeadlineAt: draft.transferDeadlineAt,
-      sellerPromiseAccepted: draft.sellerPromiseAccepted,
-    },
-  });
+    listingPrice: draft.listingPrice,
+  };
+  const draftRequiredValues: Record<string, unknown> = {
+    title: draft.title,
+    eventOrTripStartAt: draft.eventOrTripStartAt,
+    venueOrRoute: draft.venueOrRoute,
+    quantity: draft.quantity,
+    transferDeadlineAt: draft.transferDeadlineAt,
+    sellerPromiseAccepted: draft.sellerPromiseAccepted,
+  };
+  const requiredFields = [...new Set([...sourceRule.requiredFields, ...sourceRule.eligibilityFields])];
+  const hasMissingFields = requiredFields.some(
+    (field) => !hasRequiredValue(draftRequiredValues[field] ?? explicitRequiredValues[field]),
+  );
+
+  return hasMissingFields || sourceRule.manualReviewReasonCodes.length > 0 || priceRuleRequiresReview(sourceRule, draft)
+    ? "NEEDS_MANUAL_REVIEW"
+    : sourceRule.decision;
+}
+
+function normalizeFingerprint(duplicateFingerprint: string): string {
+  return (
+    duplicateFingerprint
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 72) || "seller_upload"
+  );
+}
+
+function stableListingKey(sellerId: string, duplicateFingerprint: string): string {
+  return `listing_${sellerId}_${normalizeFingerprint(duplicateFingerprint)}`;
+}
+
+function isTerminalListingState(state: ListingState): boolean {
+  return state === "sold" || state === "expired";
+}
+
+function uniqueListingKey(baseKey: string, sellerListings: Array<{ listingKey?: string }>): string {
+  const existingKeys = new Set(sellerListings.map((listing) => listing.listingKey));
+  if (!existingKeys.has(baseKey)) return baseKey;
+
+  let sequence = 2;
+  let candidate = `${baseKey}_${sequence}`;
+  while (existingKeys.has(candidate)) {
+    sequence += 1;
+    candidate = `${baseKey}_${sequence}`;
+  }
+  return candidate;
+}
+
+function buildSubmittedListing(
+  sellerId: string,
+  draft: SellerListingDraft,
+  sourceRule: SourceRule,
+  listingKey = stableListingKey(sellerId, draft.duplicateFingerprint),
+): MockListing {
+  const normalizedFingerprint = normalizeFingerprint(draft.duplicateFingerprint);
+  const ruleDecision = decisionForPersistedRule(sourceRule, draft);
   const checkoutTotal = calculateCheckoutTotal(draft.listingPrice);
 
   return {
-    id: stableListingKey(sellerId, draft.duplicateFingerprint),
+    id: listingKey,
     sellerId,
     sourceRuleId: sourceRule.id,
     sourceRuleVersion: sourceRule.version,
@@ -98,9 +156,9 @@ function buildSubmittedListing(sellerId: string, draft: SellerListingDraft, sour
     transferMode: sourceRule.transferMode,
     transferDeadlineAt: draft.transferDeadlineAt,
     protectionDeadlineAt: draft.protectionDeadlineAt,
-    state: listingStateForDecision(evaluation.decision),
-    ruleDecision: evaluation.decision,
-    duplicateFingerprint: draft.duplicateFingerprint,
+    state: listingStateForDecision(ruleDecision),
+    ruleDecision,
+    duplicateFingerprint: normalizedFingerprint,
   };
 }
 
@@ -201,7 +259,7 @@ export const submitSellerListingForCurrentUser = mutation({
   args: { draft: sellerListingDraft },
   handler: async (ctx, args) => {
     const seller = await requirePhoneVerifiedAppUser(ctx);
-    const evaluation = evaluateSourceRule({
+    const localEvaluation = evaluateSourceRule({
       source: args.draft.source,
       category: args.draft.category,
       listingPrice: args.draft.listingPrice,
@@ -217,7 +275,7 @@ export const submitSellerListingForCurrentUser = mutation({
     });
     const sourceRuleDoc = await ctx.db
       .query("source_rules")
-      .withIndex("by_key", (q) => q.eq("sourceRuleKey", evaluation.sourceRuleId))
+      .withIndex("by_key", (q) => q.eq("sourceRuleKey", localEvaluation.sourceRuleId))
       .unique();
     if (!sourceRuleDoc) throw new Error("SOURCE_RULE_NOT_FOUND");
 
@@ -232,15 +290,23 @@ export const submitSellerListingForCurrentUser = mutation({
       .query("listings")
       .withIndex("by_seller", (q) => q.eq("sellerId", seller.appUserId))
       .collect();
-    const duplicate = sellerListings.find(
-      (candidate) => candidate.duplicateFingerprint === listing.duplicateFingerprint,
-    );
-    if (duplicate) {
+    const duplicate = sellerListings.find((candidate) => {
+      return normalizeFingerprint(String(candidate.duplicateFingerprint)) === listing.duplicateFingerprint;
+    });
+    if (duplicate && !isTerminalListingState(duplicate.state as ListingState)) {
       await ctx.db.patch(duplicate._id, listingPatch(listing));
       return { listing, status: "updated" as const };
     }
 
-    await ctx.db.insert("listings", { listingKey: listing.id, ...listingPatch(listing) });
-    return { listing, status: "created" as const };
+    const createdListing = duplicate
+      ? buildSubmittedListing(
+          seller.appUserId,
+          args.draft,
+          sourceRule,
+          uniqueListingKey(listing.id, sellerListings),
+        )
+      : listing;
+    await ctx.db.insert("listings", { listingKey: createdListing.id, ...listingPatch(createdListing) });
+    return { listing: createdListing, status: "created" as const };
   },
 });

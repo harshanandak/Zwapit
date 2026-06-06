@@ -1,7 +1,7 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
-import { buildSellerDraftFromListing } from "../../../components/seller/format";
+import { buildSellerDraftFromListing, sellerDraftJsonScriptContent } from "../../../components/seller/format";
 import { createMockFixture } from "../../../lib/mock/fixtures";
 
 // Mock upload signal: the detected details come from the demo fixture — no real
@@ -9,6 +9,7 @@ import { createMockFixture } from "../../../lib/mock/fixtures";
 // the detected details carry through confirm -> price -> promise.
 const { listing } = createMockFixture();
 const detectedDraft = buildSellerDraftFromListing(listing);
+const detectedDraftJson = sellerDraftJsonScriptContent(detectedDraft);
 ---
 
 <AppShell routeId="/app/sell/upload" title="Upload to Sell" activeTab="sell">
@@ -48,7 +49,7 @@ const detectedDraft = buildSellerDraftFromListing(listing);
     </p>
   </div>
 
-  <script type="application/json" id="seller-detected-draft" is:inline set:html={JSON.stringify(detectedDraft)}
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={detectedDraftJson}
   ></script>
 </AppShell>
 

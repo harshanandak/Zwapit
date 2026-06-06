@@ -1,7 +1,11 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
-import { buildSellerDraftFromListing, ruleDecisionResult } from "../../../components/seller/format";
+import {
+  buildSellerDraftFromListing,
+  ruleDecisionResult,
+  sellerDraftJsonScriptContent,
+} from "../../../components/seller/format";
 import { connectMockListingFlow, connectSellerOrderFlow } from "../../../lib/flow/mockFlow";
 import { createMockFixture } from "../../../lib/mock/fixtures";
 
@@ -14,6 +18,7 @@ const result = ruleDecisionResult(evaluation.decision);
 // Fallback payload if the carried draft is missing (e.g. deep-link to Promise).
 const { listing } = createMockFixture();
 const detectedDraft = buildSellerDraftFromListing(listing);
+const detectedDraftJson = sellerDraftJsonScriptContent(detectedDraft);
 
 const promises = [
   "I'll transfer the ticket to the buyer before the deadline.",
@@ -78,7 +83,7 @@ const promises = [
     </p>
   </div>
 
-  <script type="application/json" id="seller-detected-draft" is:inline set:html={JSON.stringify(detectedDraft)}
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={detectedDraftJson}
   ></script>
 </AppShell>
 

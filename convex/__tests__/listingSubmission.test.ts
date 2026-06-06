@@ -274,6 +274,35 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings[0].state).toBe(state);
   });
 
+  test("it should apply the persisted source rule decision when it differs from bundled local rules", async () => {
+    const persistedBlockedRule = {
+      ...bookmyshowEventRule,
+      decision: "AUTO_BLOCK" as const,
+      internalStatus: "BLOCKED" as const,
+      priceRule: { kind: "blocked" as const },
+      protectionLevel: "cannot_list" as const,
+      blockedBehavior: "cannot_list" as const,
+    };
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow(persistedBlockedRule)],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft(),
+    })) as { listing: { state: string; ruleDecision: string; sourceRuleId: string }; status: string };
+
+    expect(result.status).toBe("created");
+    expect(result.listing.state).toBe("blocked");
+    expect(result.listing.ruleDecision).toBe("AUTO_BLOCK");
+    expect(result.listing.sourceRuleId).toBe(bookmyshowEventRule.id);
+    expect(tables.listings[0].state).toBe("blocked");
+    expect(tables.listings[0].ruleDecision).toBe("AUTO_BLOCK");
+  });
+
   test("updates the seller's existing duplicate listing instead of creating another row", async () => {
     const { ctx, tables } = createMockListingCtx(
       { subject: VERIFIED_PROVIDER_ID },
@@ -296,5 +325,82 @@ describe("seller listing submission mutation", () => {
     expect(second.listing.listingPrice).toBe(2300);
     expect(tables.listings).toHaveLength(1);
     expect(tables.listings[0].listingPrice).toBe(2300);
+  });
+
+  test("it should update an existing listing when duplicate fingerprints normalize to the same key", async () => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow()],
+      },
+    );
+
+    const first = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({ duplicateFingerprint: " Seller Upload:Arijit Singh Silver Pass " }),
+    })) as { listing: { id: string }; status: string };
+    const second = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({
+        duplicateFingerprint: "seller-upload arijit    singh silver pass",
+        listingPrice: 2300,
+      }),
+    })) as { listing: { id: string; listingPrice: number }; status: string };
+
+    expect(first.status).toBe("created");
+    expect(second.status).toBe("updated");
+    expect(second.listing.id).toBe(first.listing.id);
+    expect(second.listing.listingPrice).toBe(2300);
+    expect(tables.listings).toHaveLength(1);
+    expect(tables.listings[0].duplicateFingerprint).toBe("seller_upload_arijit_singh_silver_pass");
+    expect(tables.listings[0].listingPrice).toBe(2300);
+  });
+
+  test("it should create a new listing when a duplicate fingerprint matches a terminal listing", async () => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow()],
+        listings: [
+          {
+            _id: "listings_terminal_1",
+            listingKey: "listing_user_internal_seller_1_seller_upload_arijit_singh_silver_pass",
+            sellerId: VERIFIED_APP_USER_ID,
+            sourceRuleId: bookmyshowEventRule.id,
+            sourceRuleVersion: bookmyshowEventRule.version,
+            category: "event_ticket",
+            source: "bookmyshow",
+            sourceCategoryKey: bookmyshowEventRule.sourceCategoryKey,
+            title: "Arijit Singh Live - Silver Pass",
+            venueOrRoute: "Bengaluru Palace Grounds",
+            eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+            quantity: 1,
+            faceValue: 2400,
+            listingPrice: 2200,
+            platformFee: 10,
+            gstOnFee: 1.8,
+            totalPayable: 2211.8,
+            transferMode: bookmyshowEventRule.transferMode,
+            transferDeadlineAt: "2026-12-19T19:00:00+05:30",
+            protectionDeadlineAt: "2026-12-21T19:00:00+05:30",
+            state: "sold",
+            ruleDecision: "AUTO_APPROVE",
+            duplicateFingerprint: "seller_upload_arijit_singh_silver_pass",
+          },
+        ],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({ listingPrice: 2300 }),
+    })) as { listing: { id: string; listingPrice: number }; status: string };
+
+    expect(result.status).toBe("created");
+    expect(result.listing.listingPrice).toBe(2300);
+    expect(tables.listings).toHaveLength(2);
+    expect(tables.listings[0].state).toBe("sold");
+    expect(tables.listings[0].listingPrice).toBe(2200);
+    expect(tables.listings[1].listingKey).not.toBe(tables.listings[0].listingKey);
+    expect(tables.listings[1].listingPrice).toBe(2300);
   });
 });

@@ -66,3 +66,13 @@ PASS with accepted caveat. The pure submission-state mapping is now covered and
 the no-Convex fallback is fixed. The promise-step browser click path remains an
 accepted coverage caveat for this validation stage; no browser harness or new
 dependency was added.
+
+Follow-up issue:
+
+- `zwapit-1p0` - Promise-step browser click path coverage.
+- Owner: Codex validation.
+- Target stage: `/validate`.
+- Exit criteria: add seller e2e/smoke coverage proving the upload-first path
+  reaches the protected promise-step submit action, exercises
+  `submitSellerListingDraft` through the page click path, and verifies
+  success/failure UI states.
