@@ -15,7 +15,7 @@ if (!existsSync(workspace)) {
 }
 
 const result = spawnSync(
-  "xcodebuild",
+  "/usr/bin/xcodebuild",
   [
     "-workspace",
     workspace,
