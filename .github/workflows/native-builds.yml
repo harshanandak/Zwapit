@@ -23,7 +23,7 @@ jobs:
           bun-version: latest
 
       - name: Setup Java
-        uses: actions/setup-java@118bd42cc0a9ec562fc2e0d4d5f0d165e3812d6f
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
