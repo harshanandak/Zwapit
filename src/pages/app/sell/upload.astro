@@ -1,6 +1,15 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
+import { buildSellerDraftFromListing, sellerDraftJsonScriptContent } from "../../../components/seller/format";
+import { createMockFixture } from "../../../lib/mock/fixtures";
+
+// Mock upload signal: the detected details come from the demo fixture — no real
+// file reading, storage, OCR, or AI parsing in this slice. We seed this draft so
+// the detected details carry through confirm -> price -> promise.
+const { listing } = createMockFixture();
+const detectedDraft = buildSellerDraftFromListing(listing);
+const detectedDraftJson = sellerDraftJsonScriptContent(detectedDraft);
 ---
 
 <AppShell routeId="/app/sell/upload" title="Upload to Sell" activeTab="sell">
@@ -39,10 +48,27 @@ import StepNav from "../../../components/seller/StepNav.astro";
       Mock upload for this slice — real file reading is added later.
     </p>
   </div>
+
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={detectedDraftJson}
+  ></script>
 </AppShell>
 
 <script>
   import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+  import { SELLER_DRAFT_STORAGE_KEY } from "../../../components/seller/format";
+  import type { SellerListingDraft } from "../../../lib/types";
+
+  // Seed the detected draft so the rest of the flow carries the same details.
+  // Preserve an existing draft (e.g. a price the seller already set) on revisit.
+  try {
+    const node = document.getElementById("seller-detected-draft");
+    if (node?.textContent && !sessionStorage.getItem(SELLER_DRAFT_STORAGE_KEY)) {
+      const detected = JSON.parse(node.textContent) as SellerListingDraft;
+      sessionStorage.setItem(SELLER_DRAFT_STORAGE_KEY, JSON.stringify(detected));
+    }
+  } catch {
+    // sessionStorage unavailable — the later steps fall back to the embedded draft.
+  }
 
   // Keep selling delayed-login: signed-out or phone-unverified sellers are routed
   // to the account/verify step before they can progress. Verified/demo users are

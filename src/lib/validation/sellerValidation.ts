@@ -6,10 +6,13 @@ export type SellerListingBlocker =
   | "MISSING_TITLE"
   | "MISSING_VENUE_OR_ROUTE"
   | "MISSING_EVENT_OR_TRIP_START"
+  | "EVENT_OR_TRIP_ALREADY_STARTED"
   | "INVALID_QUANTITY"
   | "INVALID_FACE_VALUE"
   | "INVALID_LISTING_PRICE"
   | "MISSING_TRANSFER_DEADLINE"
+  | "TRANSFER_DEADLINE_EXPIRED"
+  | "TRANSFER_DEADLINE_AFTER_EVENT_START"
   | "MISSING_PROTECTION_DEADLINE"
   | "MISSING_SOURCE_RULE"
   | "RULE_BLOCKED";
@@ -22,12 +25,24 @@ export function validateSellerListing(
 
   if (!listing.title.trim()) blockers.push("MISSING_TITLE");
   if (!listing.venueOrRoute.trim()) blockers.push("MISSING_VENUE_OR_ROUTE");
-  if (!listing.eventOrTripStartAt) blockers.push("MISSING_EVENT_OR_TRIP_START");
-  if (listing.quantity < 1) blockers.push("INVALID_QUANTITY");
+  const eventStartMs = timestampMs(listing.eventOrTripStartAt);
+  const transferDeadlineMs = timestampMs(listing.transferDeadlineAt);
+  if (eventStartMs == null) {
+    blockers.push("MISSING_EVENT_OR_TRIP_START");
+  } else if (eventStartMs <= Date.now()) {
+    blockers.push("EVENT_OR_TRIP_ALREADY_STARTED");
+  }
+  if (!Number.isSafeInteger(listing.quantity) || listing.quantity < 1) blockers.push("INVALID_QUANTITY");
   if (listing.faceValue <= 0) blockers.push("INVALID_FACE_VALUE");
   if (listing.listingPrice <= 0) blockers.push("INVALID_LISTING_PRICE");
-  if (!listing.transferDeadlineAt) blockers.push("MISSING_TRANSFER_DEADLINE");
-  if (!listing.protectionDeadlineAt) blockers.push("MISSING_PROTECTION_DEADLINE");
+  if (transferDeadlineMs == null) {
+    blockers.push("MISSING_TRANSFER_DEADLINE");
+  } else if (transferDeadlineMs <= Date.now()) {
+    blockers.push("TRANSFER_DEADLINE_EXPIRED");
+  } else if (eventStartMs != null && transferDeadlineMs > eventStartMs) {
+    blockers.push("TRANSFER_DEADLINE_AFTER_EVENT_START");
+  }
+  if (timestampMs(listing.protectionDeadlineAt) == null) blockers.push("MISSING_PROTECTION_DEADLINE");
   if (listing.sourceRuleId !== sourceRule.id || listing.sourceRuleVersion !== sourceRule.version) {
     blockers.push("MISSING_SOURCE_RULE");
   }
@@ -36,6 +51,11 @@ export function validateSellerListing(
   }
 
   return validationResult(blockers);
+}
+
+function timestampMs(value: string): number | null {
+  const parsed = Date.parse(value);
+  return value.trim().length > 0 && Number.isFinite(parsed) ? parsed : null;
 }
 
 // Access gate for the protected listing-submission action. Derived from the auth

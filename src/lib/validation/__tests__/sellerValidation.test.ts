@@ -43,6 +43,49 @@ describe("seller listing validation blockers", () => {
     expect(result.blockers).toContain("INVALID_QUANTITY");
   });
 
+  test("it should block fractional listing quantities", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing({ ...fixture.listing, quantity: 1.5 }, fixture.sourceRule);
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("INVALID_QUANTITY");
+  });
+
+  test("it should block invalid listing timestamps", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing({ ...fixture.listing, eventOrTripStartAt: "not-a-date" }, fixture.sourceRule);
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("MISSING_EVENT_OR_TRIP_START");
+  });
+
+  test("it should block expired transfer deadlines", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing(
+      { ...fixture.listing, transferDeadlineAt: "2020-01-01T00:00:00+05:30" },
+      fixture.sourceRule,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+  });
+
+  test("it should block past event starts with edited future transfer deadlines", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing(
+      {
+        ...fixture.listing,
+        eventOrTripStartAt: "2020-01-02T00:00:00+05:30",
+        transferDeadlineAt: "2026-12-19T19:00:00+05:30",
+      },
+      fixture.sourceRule,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("EVENT_OR_TRIP_ALREADY_STARTED");
+    expect(result.blockers).toContain("TRANSFER_DEADLINE_AFTER_EVENT_START");
+  });
+
   test("should block seller listing when the source rule is auto block", () => {
     const fixture = createMockFixture();
     const result = validateSellerListing(

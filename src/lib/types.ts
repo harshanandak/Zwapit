@@ -140,6 +140,28 @@ export interface MockListing {
   duplicateFingerprint: string;
 }
 
+export interface SellerListingDraft {
+  source: SourceRule["source"];
+  category: SourceRule["category"];
+  title: string;
+  venueOrRoute: string;
+  eventOrTripStartAt: string;
+  quantity: number;
+  faceValue: number;
+  listingPrice: number;
+  transferDeadlineAt: string;
+  protectionDeadlineAt: string;
+  sellerPromiseAccepted: boolean;
+  duplicateFingerprint: string;
+}
+
+export interface SellerListingSubmissionResult {
+  ok: boolean;
+  blockers: string[];
+  listing: MockListing;
+  status: "created" | "updated" | "mock" | "blocked";
+}
+
 export interface MockOrder {
   id: string;
   buyerId: string;

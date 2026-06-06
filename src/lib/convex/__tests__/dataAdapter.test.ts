@@ -14,13 +14,25 @@ import {
   loadSellerOrderView,
   runAdvanceTimeline,
   runMockCheckout,
+  submitSellerListingDraft,
 } from "../dataAdapter";
+import { functionRefs } from "../functionRefs";
+import type { SellerListingDraft } from "../../types";
 
 const NOW_BEFORE_DEADLINE = "2026-05-29T12:00:00+05:30";
 const ORIGINAL_PUBLIC_CONVEX_URL = process.env.PUBLIC_CONVEX_URL;
 const ORIGINAL_VITE_CONVEX_URL = process.env.VITE_CONVEX_URL;
+const ORIGINAL_PUBLIC_CLERK_PUBLISHABLE_KEY = process.env.PUBLIC_CLERK_PUBLISHABLE_KEY;
+const ORIGINAL_VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-function restoreEnv(name: "PUBLIC_CONVEX_URL" | "VITE_CONVEX_URL", value: string | undefined): void {
+function restoreEnv(
+  name:
+    | "PUBLIC_CONVEX_URL"
+    | "VITE_CONVEX_URL"
+    | "PUBLIC_CLERK_PUBLISHABLE_KEY"
+    | "VITE_CLERK_PUBLISHABLE_KEY",
+  value: string | undefined,
+): void {
   if (value === undefined) {
     delete process.env[name];
     return;
@@ -31,12 +43,34 @@ function restoreEnv(name: "PUBLIC_CONVEX_URL" | "VITE_CONVEX_URL", value: string
 beforeEach(() => {
   delete process.env.PUBLIC_CONVEX_URL;
   delete process.env.VITE_CONVEX_URL;
+  delete process.env.PUBLIC_CLERK_PUBLISHABLE_KEY;
+  delete process.env.VITE_CLERK_PUBLISHABLE_KEY;
 });
 
 afterEach(() => {
   restoreEnv("PUBLIC_CONVEX_URL", ORIGINAL_PUBLIC_CONVEX_URL);
   restoreEnv("VITE_CONVEX_URL", ORIGINAL_VITE_CONVEX_URL);
+  restoreEnv("PUBLIC_CLERK_PUBLISHABLE_KEY", ORIGINAL_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  restoreEnv("VITE_CLERK_PUBLISHABLE_KEY", ORIGINAL_VITE_CLERK_PUBLISHABLE_KEY);
 });
+
+function sellerListingDraft(overrides: Partial<SellerListingDraft> = {}): SellerListingDraft {
+  return {
+    source: "bookmyshow",
+    category: "event_ticket",
+    title: "Arijit Singh Live - Silver Pass",
+    venueOrRoute: "Bengaluru Palace Grounds",
+    eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+    quantity: 1,
+    faceValue: 2400,
+    listingPrice: 2400,
+    transferDeadlineAt: "2026-12-19T19:00:00+05:30",
+    protectionDeadlineAt: "2026-12-21T19:00:00+05:30",
+    sellerPromiseAccepted: true,
+    duplicateFingerprint: "seller-upload:arijit-singh-silver-pass",
+    ...overrides,
+  };
+}
 
 // These tests run with Convex NOT configured (no PUBLIC_CONVEX_URL or
 // VITE_CONVEX_URL fallback), so the
@@ -62,6 +96,31 @@ describe("convex data adapter — fallback shape parity", () => {
 
   test("loadSellerOrderView() equals connectSellerOrderFlow()", async () => {
     expect(await loadSellerOrderView()).toEqual(connectSellerOrderFlow());
+  });
+});
+
+describe("convex data adapter - seller listing submission handoff", () => {
+  test("it should expose a generated-API-free function reference when seller listing submission is wired", () => {
+    expect(functionRefs.submitSellerListingForCurrentUser).toBeDefined();
+  });
+
+  test("it should preserve a local submitSellerListingDraft fallback result when Convex is not configured", async () => {
+    const result = await submitSellerListingDraft(sellerListingDraft());
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("mock");
+    expect(result.listing.sellerId).toBe(createMockFixture().user.id);
+    expect(result.listing.ruleDecision).toBe("AUTO_APPROVE");
+  });
+
+  test("it should preserve the local mock seller path when Convex is configured without Clerk", async () => {
+    process.env.PUBLIC_CONVEX_URL = "https://example.invalid";
+
+    const result = await submitSellerListingDraft(sellerListingDraft());
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("mock");
+    expect(result.blockers).toEqual([]);
   });
 });
 

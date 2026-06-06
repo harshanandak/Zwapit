@@ -1,10 +1,18 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
-import { formatDateTime, formatInr, transferModeLabel } from "../../../components/seller/format";
+import {
+  buildSellerDraftFromListing,
+  formatDateTime,
+  formatInr,
+  sellerDraftJsonScriptContent,
+  transferModeLabel,
+} from "../../../components/seller/format";
 import { createMockFixture } from "../../../lib/mock/fixtures";
 
 const { listing } = createMockFixture();
+const detectedDraft = buildSellerDraftFromListing(listing);
+const detectedDraftJson = sellerDraftJsonScriptContent(detectedDraft);
 
 const sourceLabels: Record<string, string> = {
   bookmyshow: "BookMyShow",
@@ -72,10 +80,26 @@ const details = [
       </a>
     </div>
   </div>
+
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={detectedDraftJson}
+  ></script>
 </AppShell>
 
 <script>
   import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+  import { SELLER_DRAFT_STORAGE_KEY } from "../../../components/seller/format";
+  import type { SellerListingDraft } from "../../../lib/types";
+
+  // Ensure the carried draft exists even if the seller deep-linked to Confirm.
+  try {
+    const node = document.getElementById("seller-detected-draft");
+    if (node?.textContent && !sessionStorage.getItem(SELLER_DRAFT_STORAGE_KEY)) {
+      const detected = JSON.parse(node.textContent) as SellerListingDraft;
+      sessionStorage.setItem(SELLER_DRAFT_STORAGE_KEY, JSON.stringify(detected));
+    }
+  } catch {
+    // sessionStorage unavailable — later steps fall back to the embedded draft.
+  }
 
   const sellContinue = document.querySelector<HTMLAnchorElement>("[data-sell-continue]");
   let phoneGateResolved = false;

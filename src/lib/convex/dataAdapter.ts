@@ -14,7 +14,10 @@
 import type {
   MockFixture,
   MockIssue,
+  MockListing,
   MockOrder,
+  SellerListingDraft,
+  SellerListingSubmissionResult,
 } from "../types";
 import {
   connectMockCheckoutFlow,
@@ -33,6 +36,7 @@ import {
 } from "../flow/mockFlow";
 import { isClerkAuthConfigured } from "../auth/authAdapter";
 import { createMockFixture } from "../mock/fixtures";
+import { calculateCheckoutTotal } from "../mock/pricing";
 import { evaluateSourceRule } from "../rules/evaluateRule";
 import { validateCheckout } from "../validation/checkoutValidation";
 import { getConvexClient, refreshConvexAuthTokenOnNextRequest } from "./client";
@@ -112,6 +116,58 @@ async function claimCurrentUserSellerOrder(client: Awaited<ReturnType<typeof get
 function createBaselineDemoState(): DemoState {
   const fixture = createMockFixture();
   return { order: fixture.order, transferTask: fixture.transferTask };
+}
+
+function listingStateForDecision(decision: MockListing["ruleDecision"]): MockListing["state"] {
+  if (decision === "AUTO_APPROVE") return "live";
+  if (decision === "AUTO_BLOCK") return "blocked";
+  if (decision === "AUTO_WAITLIST") return "waitlist_only";
+  return "under_review";
+}
+
+function localSubmittedListingFromDraft(draft: SellerListingDraft): MockListing {
+  const fixture = createMockFixture();
+  const evaluation = evaluateSourceRule({
+    source: draft.source,
+    category: draft.category,
+    listingPrice: draft.listingPrice,
+    faceValue: draft.faceValue,
+    requiredFieldValues: {
+      title: draft.title,
+      eventOrTripStartAt: draft.eventOrTripStartAt,
+      venueOrRoute: draft.venueOrRoute,
+      quantity: draft.quantity,
+      transferDeadlineAt: draft.transferDeadlineAt,
+      sellerPromiseAccepted: draft.sellerPromiseAccepted,
+    },
+  });
+  const total = calculateCheckoutTotal(draft.listingPrice);
+
+  return {
+    ...fixture.listing,
+    id: `listing_${fixture.user.id}_${draft.duplicateFingerprint.replace(/[^a-zA-Z0-9]+/g, "_")}`,
+    sellerId: fixture.user.id,
+    sourceRuleId: evaluation.sourceRuleId,
+    sourceRuleVersion: evaluation.sourceRuleVersion,
+    category: draft.category,
+    source: draft.source,
+    sourceCategoryKey: evaluation.rule.sourceCategoryKey,
+    title: draft.title,
+    venueOrRoute: draft.venueOrRoute,
+    eventOrTripStartAt: draft.eventOrTripStartAt,
+    quantity: draft.quantity,
+    faceValue: draft.faceValue,
+    listingPrice: draft.listingPrice,
+    platformFee: total.platformFee,
+    gstOnFee: total.gstOnPlatformFee,
+    totalPayable: total.totalPayable,
+    transferMode: evaluation.transferMode,
+    transferDeadlineAt: draft.transferDeadlineAt,
+    protectionDeadlineAt: draft.protectionDeadlineAt,
+    state: listingStateForDecision(evaluation.decision),
+    ruleDecision: evaluation.decision,
+    duplicateFingerprint: draft.duplicateFingerprint,
+  };
 }
 
 // ---- Reads ----
@@ -232,6 +288,44 @@ export async function loadListingFlowView(): Promise<ListingFlowView> {
 }
 
 // ---- Mutations (mock-visible flow only) ----
+
+export async function submitSellerListingDraft(
+  draft: SellerListingDraft,
+): Promise<SellerListingSubmissionResult> {
+  const localListing = localSubmittedListingFromDraft(draft);
+  if (!isClerkAuthConfigured()) return { ok: true, blockers: [], listing: localListing, status: "mock" };
+
+  const client = await getConvexClient();
+  if (!client) return { ok: true, blockers: [], listing: localListing, status: "mock" };
+
+  try {
+    await client.mutation(functionRefs.seedDemoFixture, {});
+    await syncCurrentUserForGuardedPath(client);
+    const result = (await client.mutation(functionRefs.submitSellerListingForCurrentUser, { draft })) as {
+      listing: MockListing;
+      status: "created" | "updated";
+    };
+    return { ok: true, blockers: [], listing: result.listing, status: result.status };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("PHONE_VERIFICATION_REQUIRED")) {
+      return { ok: false, blockers: ["PHONE_VERIFICATION_REQUIRED"], listing: localListing, status: "blocked" };
+    }
+    if (message.includes("AUTH_REQUIRED")) {
+      return { ok: false, blockers: ["AUTH_REQUIRED"], listing: localListing, status: "blocked" };
+    }
+    if (message.includes("SELLER_LISTING_INVALID:")) {
+      const [, codes = "SELLER_LISTING_INVALID"] = message.split("SELLER_LISTING_INVALID:");
+      return {
+        ok: false,
+        blockers: codes.split(",").filter(Boolean),
+        listing: localListing,
+        status: "blocked",
+      };
+    }
+    return { ok: false, blockers: ["PERSISTENCE_WRITE_FAILED"], listing: localListing, status: "blocked" };
+  }
+}
 
 // Advance the order's next valid transition (same shape as connectTimelineActions()).
 export async function runAdvanceTimeline(

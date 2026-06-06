@@ -11,6 +11,15 @@ const payoutReady = sellerPaymentAccount.status === "mock_ready";
 
 <AppShell routeId="/app/sell/orders" title="Orders" activeTab="sell">
   <div class="space-y-4">
+    <section
+      id="seller-published-banner"
+      class="rounded-xl border border-accent/40 bg-accent/10 p-4"
+      hidden
+    >
+      <p id="seller-published-title" class="text-sm font-semibold text-foreground"></p>
+      <p id="seller-published-detail" class="mt-1 text-xs text-muted-foreground"></p>
+    </section>
+
     <div
       class="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-sm"
     >
@@ -74,9 +83,26 @@ const payoutReady = sellerPaymentAccount.status === "mock_ready";
 
 <script>
   import type { MockOrder, MockTransferTask } from "../../../lib/types";
-  import { sellerStatusLabel } from "../../../components/seller/format";
+  import { sellerStatusLabel, SELLER_PUBLISHED_STORAGE_KEY } from "../../../components/seller/format";
   import { loadSellerOrderView } from "../../../lib/convex/dataAdapter";
   import { mountTimelinePanel } from "../../../lib/flow/timelinePanel.client";
+
+  // One-time acknowledgement of a listing just published on the promise step.
+  try {
+    const raw = sessionStorage.getItem(SELLER_PUBLISHED_STORAGE_KEY);
+    if (raw) {
+      const published = JSON.parse(raw) as { title?: string; detail?: string };
+      const banner = document.getElementById("seller-published-banner");
+      const title = document.getElementById("seller-published-title");
+      const detail = document.getElementById("seller-published-detail");
+      if (title) title.textContent = published.title ?? "Listing submitted";
+      if (detail) detail.textContent = published.detail ?? "";
+      if (banner) banner.hidden = false;
+      sessionStorage.removeItem(SELLER_PUBLISHED_STORAGE_KEY);
+    }
+  } catch {
+    // No banner if sessionStorage is unavailable — orders still load normally.
+  }
 
   const emptyState = document.getElementById("seller-empty-state");
   const orderCard = document.getElementById("seller-order-card");

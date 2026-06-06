@@ -1,13 +1,16 @@
 ---
 import AppShell from "../../../components/AppShell.astro";
 import StepNav from "../../../components/seller/StepNav.astro";
-import { formatInr } from "../../../components/seller/format";
+import {
+  buildSellerDraftFromListing,
+  formatInr,
+  sellerDraftJsonScriptContent,
+} from "../../../components/seller/format";
 import { createMockFixture } from "../../../lib/mock/fixtures";
 
 const { listing } = createMockFixture();
-
-// Seller receives the listing price; buyers pay the platform fee on top.
-const payout = listing.listingPrice;
+const detectedDraft = buildSellerDraftFromListing(listing);
+const detectedDraftJson = sellerDraftJsonScriptContent(detectedDraft);
 ---
 
 <AppShell routeId="/app/sell/price" title="Price" activeTab="sell">
@@ -45,7 +48,13 @@ const payout = listing.listingPrice;
       <h3 class="text-sm font-semibold text-foreground">Payout estimate</h3>
       <div class="mt-3 flex items-center justify-between text-sm">
         <span class="text-muted-foreground">You'll receive</span>
-        <span class="text-lg font-semibold text-foreground">{formatInr(payout)}</span>
+        <span
+          id="payout-estimate"
+          class="text-lg font-semibold text-foreground"
+          data-payout-estimate
+        >
+          {formatInr(listing.listingPrice)}
+        </span>
       </div>
       <p class="mt-2 text-xs text-muted-foreground">
         Buyers pay a ₹10 + GST platform fee on top of your price. Your payout is released after the
@@ -62,14 +71,75 @@ const payout = listing.listingPrice;
       Continue
     </a>
   </div>
+
+  <script type="application/json" id="seller-detected-draft" is:inline set:html={detectedDraftJson}
+  ></script>
 </AppShell>
 
 <script>
   import { gateProtectedActionLink } from "../../../lib/convex/dataAdapter";
+  import { SELLER_DRAFT_STORAGE_KEY } from "../../../components/seller/format";
+  import type { SellerListingDraft } from "../../../lib/types";
+
+  const priceInput = document.querySelector<HTMLInputElement>('input[name="price"]');
+  const payoutEstimate = document.querySelector<HTMLElement>("[data-payout-estimate]");
+
+  const formatInr = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  });
+
+  function validPriceOrFallback(value: string | undefined, fallback: number): number {
+    const entered = Number(value);
+    return Number.isFinite(entered) && entered > 0 ? entered : fallback;
+  }
+
+  function renderPayoutEstimate(price: number): void {
+    if (payoutEstimate) payoutEstimate.textContent = formatInr.format(price);
+  }
+
+  function readCarriedDraft(): SellerListingDraft | null {
+    try {
+      const stored = sessionStorage.getItem(SELLER_DRAFT_STORAGE_KEY);
+      if (stored) return JSON.parse(stored) as SellerListingDraft;
+      const node = document.getElementById("seller-detected-draft");
+      return node?.textContent ? (JSON.parse(node.textContent) as SellerListingDraft) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Prefill the price input from the carried draft so a returning seller sees
+  // the price they already chose.
+  const carried = readCarriedDraft();
+  if (carried && priceInput) priceInput.value = String(carried.listingPrice);
+  if (carried) renderPayoutEstimate(validPriceOrFallback(priceInput?.value, carried.listingPrice));
+
+  // Persist the chosen price onto the carried draft so the promise step submits it.
+  function persistChosenPrice(): void {
+    const base = readCarriedDraft();
+    if (!base) return;
+    const listingPrice = validPriceOrFallback(priceInput?.value, base.listingPrice);
+    renderPayoutEstimate(listingPrice);
+    try {
+      sessionStorage.setItem(SELLER_DRAFT_STORAGE_KEY, JSON.stringify({ ...base, listingPrice }));
+    } catch {
+      // Best-effort carry; the promise step falls back to the detected price.
+    }
+  }
+
+  priceInput?.addEventListener("input", () => {
+    const base = readCarriedDraft();
+    if (!base) return;
+    renderPayoutEstimate(validPriceOrFallback(priceInput.value, base.listingPrice));
+  });
+  priceInput?.addEventListener("change", persistChosenPrice);
 
   const sellContinue = document.querySelector<HTMLAnchorElement>("[data-sell-continue]");
   let phoneGateResolved = false;
   sellContinue?.addEventListener("click", (event) => {
+    persistChosenPrice();
     if (!phoneGateResolved) event.preventDefault();
   });
   void gateProtectedActionLink("[data-sell-continue]").then(() => {
