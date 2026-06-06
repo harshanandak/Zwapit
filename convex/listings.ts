@@ -179,8 +179,9 @@ function buildSubmittedListing(
 }
 
 function listingWithPublicationGates(listing: MockListing, sellerPayoutReady: boolean): MockListing {
-  if (listing.state !== "live") return listing;
-  if (sellerPayoutReady && listing.id === DEMO_LISTING_KEY) return listing;
+  const needsBuyerRoute = listing.state === "live" || listing.state === "waitlist_only";
+  if (!needsBuyerRoute) return listing;
+  if ((listing.state === "waitlist_only" || sellerPayoutReady) && listing.id === DEMO_LISTING_KEY) return listing;
   return { ...listing, state: "under_review", ruleDecision: "NEEDS_MANUAL_REVIEW" };
 }
 

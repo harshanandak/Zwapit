@@ -378,7 +378,8 @@ describe("seller listing submission mutation", () => {
         category: "movie_ticket",
         title: "District Movie Night",
       }),
-      state: "waitlist_only",
+      ruleDecision: "NEEDS_MANUAL_REVIEW",
+      state: "under_review",
     },
     {
       name: "NEEDS_MANUAL_REVIEW",
@@ -491,8 +492,8 @@ describe("seller listing submission mutation", () => {
       }),
     })) as { listing: { state: string; ruleDecision: string; sourceRuleId: string; sourceRuleVersion: number } };
 
-    expect(result.listing.state).toBe("waitlist_only");
-    expect(result.listing.ruleDecision).toBe("AUTO_WAITLIST");
+    expect(result.listing.state).toBe("under_review");
+    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
     expect(result.listing.sourceRuleId).toBe("source_rule_bus_travel_v2");
     expect(result.listing.sourceRuleVersion).toBe(2);
     expect(tables.listings[0].sourceRuleId).toBe("source_rule_bus_travel_v2");
