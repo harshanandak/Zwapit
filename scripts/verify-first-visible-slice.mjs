@@ -46,7 +46,9 @@ const allowedTask10Paths = new Set([
 const allowedFirstSlicePaths = [
   ".beads/issues.jsonl",
   ".beads/team-map.jsonl",
+  ".bun-version",
   ".coderabbit.yaml",
+  ".gitattributes",
   ".gitignore",
   "CHANGELOG.md",
   "README.md",
