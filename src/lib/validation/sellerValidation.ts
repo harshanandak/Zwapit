@@ -10,6 +10,7 @@ export type SellerListingBlocker =
   | "INVALID_FACE_VALUE"
   | "INVALID_LISTING_PRICE"
   | "MISSING_TRANSFER_DEADLINE"
+  | "TRANSFER_DEADLINE_EXPIRED"
   | "MISSING_PROTECTION_DEADLINE"
   | "MISSING_SOURCE_RULE"
   | "RULE_BLOCKED";
@@ -22,12 +23,17 @@ export function validateSellerListing(
 
   if (!listing.title.trim()) blockers.push("MISSING_TITLE");
   if (!listing.venueOrRoute.trim()) blockers.push("MISSING_VENUE_OR_ROUTE");
-  if (!hasValidTimestamp(listing.eventOrTripStartAt)) blockers.push("MISSING_EVENT_OR_TRIP_START");
+  const transferDeadlineMs = timestampMs(listing.transferDeadlineAt);
+  if (timestampMs(listing.eventOrTripStartAt) == null) blockers.push("MISSING_EVENT_OR_TRIP_START");
   if (!Number.isSafeInteger(listing.quantity) || listing.quantity < 1) blockers.push("INVALID_QUANTITY");
   if (listing.faceValue <= 0) blockers.push("INVALID_FACE_VALUE");
   if (listing.listingPrice <= 0) blockers.push("INVALID_LISTING_PRICE");
-  if (!hasValidTimestamp(listing.transferDeadlineAt)) blockers.push("MISSING_TRANSFER_DEADLINE");
-  if (!hasValidTimestamp(listing.protectionDeadlineAt)) blockers.push("MISSING_PROTECTION_DEADLINE");
+  if (transferDeadlineMs == null) {
+    blockers.push("MISSING_TRANSFER_DEADLINE");
+  } else if (transferDeadlineMs <= Date.now()) {
+    blockers.push("TRANSFER_DEADLINE_EXPIRED");
+  }
+  if (timestampMs(listing.protectionDeadlineAt) == null) blockers.push("MISSING_PROTECTION_DEADLINE");
   if (listing.sourceRuleId !== sourceRule.id || listing.sourceRuleVersion !== sourceRule.version) {
     blockers.push("MISSING_SOURCE_RULE");
   }
@@ -38,8 +44,9 @@ export function validateSellerListing(
   return validationResult(blockers);
 }
 
-function hasValidTimestamp(value: string): boolean {
-  return value.trim().length > 0 && !Number.isNaN(Date.parse(value));
+function timestampMs(value: string): number | null {
+  const parsed = Date.parse(value);
+  return value.trim().length > 0 && Number.isFinite(parsed) ? parsed : null;
 }
 
 // Access gate for the protected listing-submission action. Derived from the auth

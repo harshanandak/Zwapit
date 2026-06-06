@@ -59,6 +59,17 @@ describe("seller listing validation blockers", () => {
     expect(result.blockers).toContain("MISSING_EVENT_OR_TRIP_START");
   });
 
+  test("it should block expired transfer deadlines", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing(
+      { ...fixture.listing, transferDeadlineAt: "2020-01-01T00:00:00+05:30" },
+      fixture.sourceRule,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("TRANSFER_DEADLINE_EXPIRED");
+  });
+
   test("should block seller listing when the source rule is auto block", () => {
     const fixture = createMockFixture();
     const result = validateSellerListing(

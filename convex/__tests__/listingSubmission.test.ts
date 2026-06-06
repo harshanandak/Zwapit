@@ -323,6 +323,19 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings).toHaveLength(0);
   });
 
+  test("it should reject expired transfer deadlines before persisting a seller listing", async () => {
+    const { ctx, tables } = createVerifiedListingCtx();
+
+    await expectRejectsWithMessage(
+      () =>
+        handlerOf(submitSellerListingForCurrentUser)(ctx, {
+          draft: firstSliceDraft({ transferDeadlineAt: "2020-01-01T00:00:00+05:30" }),
+        }),
+      "SELLER_LISTING_INVALID:TRANSFER_DEADLINE_EXPIRED",
+    );
+    expect(tables.listings).toHaveLength(0);
+  });
+
   test.each([
     {
       name: "AUTO_APPROVE",
