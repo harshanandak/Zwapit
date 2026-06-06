@@ -132,8 +132,11 @@ function uniqueListingKey(baseKey: string, sellerListings: Array<{ listingKey?: 
   return candidate;
 }
 
-function latestSourceRuleDoc<T extends { version: number }>(rules: T[]): T | null {
+function latestSourceRuleDoc<T extends { effectiveFrom: string; version: number }>(rules: T[]): T | null {
+  const now = Date.now();
   return rules.reduce<T | null>((latest, rule) => {
+    const effectiveAt = Date.parse(rule.effectiveFrom);
+    if (!Number.isFinite(effectiveAt) || effectiveAt > now) return latest;
     if (!latest || rule.version > latest.version) return rule;
     return latest;
   }, null);

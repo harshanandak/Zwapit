@@ -53,7 +53,10 @@ function applyIndexFilters(rows: TestRow[], apply: (q: ReturnType<typeof createE
 function indexedRowsResult(rows: TestRow[], apply: (q: ReturnType<typeof createEqBuilder>) => unknown) {
   const filtered = applyIndexFilters(rows, apply);
   return {
-    unique: async () => filtered[0] ?? null,
+    unique: async () => {
+      if (filtered.length > 1) throw new Error("MOCK_UNIQUE_VIOLATION");
+      return filtered[0] ?? null;
+    },
     collect: async () => filtered,
   };
 }
@@ -430,11 +433,22 @@ describe("seller listing submission mutation", () => {
       priceRule: { kind: "manual_review_above_face_value", maxMultiplier: 1 },
       blockedBehavior: "waitlist_only",
     };
+    const futureBusRule: SourceRule = {
+      ...latestBusRule,
+      id: "source_rule_bus_travel_v3",
+      version: 3,
+      decision: "AUTO_BLOCK",
+      internalStatus: "BLOCKED",
+      protectionLevel: "cannot_list",
+      priceRule: { kind: "blocked" },
+      blockedBehavior: "cannot_list",
+      effectiveFrom: "2099-01-01T00:00:00+05:30",
+    };
     const { ctx, tables } = createMockListingCtx(
       { subject: VERIFIED_PROVIDER_ID },
       {
         ...verifiedSellerRows({ phoneVerified: true }),
-        source_rules: [sourceRuleRow(olderBusRule), sourceRuleRow(latestBusRule)],
+        source_rules: [sourceRuleRow(olderBusRule), sourceRuleRow(latestBusRule), sourceRuleRow(futureBusRule)],
       },
     );
 
