@@ -8,5 +8,5 @@
       }
     ]
   },
-  "exclude": ["node_modules", "dist", "convex"]
+  "exclude": ["node_modules", "dist", "convex", "android", "ios"]
 }
