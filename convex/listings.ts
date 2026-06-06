@@ -296,15 +296,22 @@ export const submitSellerListingForCurrentUser = mutation({
       .query("listings")
       .withIndex("by_seller", (q) => q.eq("sellerId", seller.appUserId))
       .collect();
-    const duplicate = sellerListings.find((candidate) => {
+    const matchingDuplicates = sellerListings.filter((candidate) => {
       return normalizeFingerprint(String(candidate.duplicateFingerprint)) === listing.duplicateFingerprint;
     });
-    if (duplicate && !isTerminalListingState(duplicate.state as ListingState)) {
-      await ctx.db.patch(duplicate._id, listingPatch(listing));
-      return { listing, status: "updated" as const };
+    const activeDuplicate = matchingDuplicates.find((candidate) => !isTerminalListingState(candidate.state as ListingState));
+    if (activeDuplicate) {
+      const updatedListing = buildSubmittedListing(
+        seller.appUserId,
+        args.draft,
+        sourceRule,
+        String(activeDuplicate.listingKey ?? listing.id),
+      );
+      await ctx.db.patch(activeDuplicate._id, listingPatch(updatedListing));
+      return { listing: updatedListing, status: "updated" as const };
     }
 
-    const createdListing = duplicate
+    const createdListing = matchingDuplicates.length > 0
       ? buildSubmittedListing(
           seller.appUserId,
           args.draft,

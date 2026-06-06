@@ -413,4 +413,37 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings[1].listingKey).not.toBe(tables.listings[0].listingKey);
     expect(tables.listings[1].listingPrice).toBe(2300);
   });
+
+  test("it should update an active relist when an older terminal listing has the same fingerprint", async () => {
+    const activeRelistKey = "listing_user_internal_seller_1_seller_upload_arijit_singh_silver_pass_2";
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow()],
+        listings: [
+          existingFirstSliceListingRow({ _id: "listings_terminal_1", state: "sold" }),
+          existingFirstSliceListingRow({
+            _id: "listings_active_relist_1",
+            listingKey: activeRelistKey,
+            listingPrice: 2300,
+            state: "live",
+          }),
+        ],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({ listingPrice: 2400 }),
+    })) as { listing: { id: string; listingPrice: number }; status: string };
+
+    expect(result.status).toBe("updated");
+    expect(result.listing.id).toBe(activeRelistKey);
+    expect(result.listing.listingPrice).toBe(2400);
+    expect(tables.listings).toHaveLength(2);
+    expect(tables.listings[0].state).toBe("sold");
+    expect(tables.listings[0].listingPrice).toBe(2200);
+    expect(tables.listings[1].listingKey).toBe(activeRelistKey);
+    expect(tables.listings[1].listingPrice).toBe(2400);
+  });
 });
