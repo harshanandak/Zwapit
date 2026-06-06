@@ -168,6 +168,11 @@ function buildSubmittedListing(
   };
 }
 
+function listingWithPayoutGate(listing: MockListing, sellerPayoutReady: boolean): MockListing {
+  if (sellerPayoutReady || listing.state !== "live") return listing;
+  return { ...listing, state: "under_review", ruleDecision: "NEEDS_MANUAL_REVIEW" };
+}
+
 function listingPatch(listing: MockListing) {
   return {
     sellerId: listing.sellerId,
@@ -286,7 +291,15 @@ export const submitSellerListingForCurrentUser = mutation({
     if (!sourceRuleDoc) throw new Error("SOURCE_RULE_NOT_FOUND");
 
     const sourceRule = sourceRuleDocToMock(sourceRuleDoc);
-    const listing = buildSubmittedListing(seller.appUserId, args.draft, sourceRule);
+    const sellerPayment = await ctx.db
+      .query("seller_payment_accounts")
+      .withIndex("by_seller", (q) => q.eq("sellerId", seller.appUserId))
+      .unique();
+    const sellerPayoutReady = sellerPayment?.status === "mock_ready";
+    const listing = listingWithPayoutGate(
+      buildSubmittedListing(seller.appUserId, args.draft, sourceRule),
+      sellerPayoutReady,
+    );
     const blockers = blockingValidationCodes(listing, sourceRule);
     if (blockers.length > 0) {
       throw new Error(`SELLER_LISTING_INVALID:${blockers.join(",")}`);
@@ -307,18 +320,23 @@ export const submitSellerListingForCurrentUser = mutation({
         sourceRule,
         String(activeDuplicate.listingKey ?? listing.id),
       );
-      await ctx.db.patch(activeDuplicate._id, listingPatch(updatedListing));
-      return { listing: updatedListing, status: "updated" as const };
+      const gatedListing = listingWithPayoutGate(updatedListing, sellerPayoutReady);
+      await ctx.db.patch(activeDuplicate._id, listingPatch(gatedListing));
+      return { listing: gatedListing, status: "updated" as const };
     }
 
-    const createdListing = matchingDuplicates.length > 0
-      ? buildSubmittedListing(
-          seller.appUserId,
-          args.draft,
-          sourceRule,
-          uniqueListingKey(listing.id, sellerListings),
-        )
-      : listing;
+    const createdListing =
+      matchingDuplicates.length > 0
+        ? listingWithPayoutGate(
+            buildSubmittedListing(
+              seller.appUserId,
+              args.draft,
+              sourceRule,
+              uniqueListingKey(listing.id, sellerListings),
+            ),
+            sellerPayoutReady,
+          )
+        : listing;
     await ctx.db.insert("listings", { listingKey: createdListing.id, ...listingPatch(createdListing) });
     return { listing: createdListing, status: "created" as const };
   },

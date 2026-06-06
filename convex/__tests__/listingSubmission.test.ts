@@ -9,7 +9,14 @@ import {
 import { submitSellerListingForCurrentUser } from "../listings";
 
 type TestRow = Record<string, unknown> & { _id: string };
-type TestTables = Record<"users" | "auth_identities" | "user_verifications" | "source_rules" | "listings", TestRow[]>;
+type TestTableName =
+  | "users"
+  | "auth_identities"
+  | "user_verifications"
+  | "seller_payment_accounts"
+  | "source_rules"
+  | "listings";
+type TestTables = Record<TestTableName, TestRow[]>;
 
 type ConvexFunctionForTest = {
   _handler: (ctx: unknown, args?: Record<string, unknown>) => Promise<unknown>;
@@ -50,10 +57,22 @@ function sourceRuleRow(rule = bookmyshowEventRule): TestRow {
   };
 }
 
-function verifiedSellerRows(options: { phoneVerified: boolean }): Pick<
+function verifiedSellerRows(options: { phoneVerified: boolean; payoutReady?: boolean }): Pick<
   TestTables,
-  "users" | "auth_identities" | "user_verifications"
+  "users" | "auth_identities" | "user_verifications" | "seller_payment_accounts"
 > {
+  const sellerPaymentAccounts =
+    options.payoutReady === false
+      ? []
+      : [
+          {
+            _id: "seller_payment_accounts_verified_seller_1",
+            sellerId: VERIFIED_APP_USER_ID,
+            status: "mock_ready",
+            provider: "mock",
+          },
+        ];
+
   return {
     users: [
       {
@@ -77,6 +96,7 @@ function verifiedSellerRows(options: { phoneVerified: boolean }): Pick<
         phoneVerified: options.phoneVerified,
       },
     ],
+    seller_payment_accounts: sellerPaymentAccounts,
   };
 }
 
@@ -84,13 +104,15 @@ function createMockListingCtx(
   identity: { subject: string } | null,
   seed: Partial<TestTables> = {},
 ) {
-  const tables: TestTables = {
-    users: [...(seed.users ?? [])],
-    auth_identities: [...(seed.auth_identities ?? [])],
-    user_verifications: [...(seed.user_verifications ?? [])],
-    source_rules: [...(seed.source_rules ?? [])],
-    listings: [...(seed.listings ?? [])],
-  };
+  const tableNames: TestTableName[] = [
+    "users",
+    "auth_identities",
+    "user_verifications",
+    "seller_payment_accounts",
+    "source_rules",
+    "listings",
+  ];
+  const tables = Object.fromEntries(tableNames.map((table) => [table, [...(seed[table] ?? [])]])) as TestTables;
   let idSeq = 1;
 
   const ctx = {
@@ -232,6 +254,26 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings).toHaveLength(1);
     expect(tables.listings[0].sellerId).toBe(VERIFIED_APP_USER_ID);
     expect(tables.listings[0].sellerId).not.toBe(VERIFIED_PROVIDER_ID);
+  });
+
+  test("it should keep an auto-approved listing under review when the seller has no mock payout readiness", async () => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true, payoutReady: false }),
+        source_rules: [sourceRuleRow()],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft(),
+    })) as { listing: { state: string; ruleDecision: string }; status: string };
+
+    expect(result.status).toBe("created");
+    expect(result.listing.state).toBe("under_review");
+    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(tables.listings[0].state).toBe("under_review");
+    expect(tables.listings[0].ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
   });
 
   test.each([
