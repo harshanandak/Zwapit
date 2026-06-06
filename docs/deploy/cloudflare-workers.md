@@ -20,6 +20,9 @@ Add this repository secret before relying on GitHub Actions deployments:
 - `CLOUDFLARE_API_TOKEN`
 
 The token needs permission to upload and deploy Workers for the account above.
+Because `wrangler.jsonc` declares Worker Routes for `zwapitt.com/*` and
+`www.zwapitt.com/*`, the token also needs zone-scoped `Workers Routes Write`
+permission so production deploys can create or update those route bindings.
 
 ## GitHub Actions
 
