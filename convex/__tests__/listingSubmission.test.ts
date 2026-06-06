@@ -58,6 +58,28 @@ function indexedRowsResult(rows: TestRow[], apply: (q: ReturnType<typeof createE
   };
 }
 
+function patchTableRow(tables: TestTables, _id: string, patch: Record<string, unknown>): void {
+  for (const rows of Object.values(tables)) {
+    const row = rows.find((candidate) => candidate._id === _id);
+    if (row) Object.assign(row, patch);
+  }
+}
+
+function createMockDb(tables: TestTables, nextId: (table: keyof TestTables) => string) {
+  return {
+    query: (table: keyof TestTables) => ({
+      withIndex: (_indexName: string, apply: (q: ReturnType<typeof createEqBuilder>) => unknown) =>
+        indexedRowsResult(tables[table], apply),
+    }),
+    insert: async (table: keyof TestTables, doc: Record<string, unknown>) => {
+      const _id = nextId(table);
+      tables[table].push({ _id, ...doc });
+      return _id;
+    },
+    patch: async (_id: string, patch: Record<string, unknown>) => patchTableRow(tables, _id, patch),
+  };
+}
+
 function sourceRuleRow(rule = bookmyshowEventRule): TestRow {
   return {
     _id: `source_rules_${rule.id}`,
@@ -128,27 +150,7 @@ function createMockListingCtx(
     auth: {
       getUserIdentity: async () => identity,
     },
-    db: {
-      query(table: keyof TestTables) {
-        const rows = tables[table];
-        return {
-          withIndex(_indexName: string, apply: (q: ReturnType<typeof createEqBuilder>) => unknown) {
-            return indexedRowsResult(rows, apply);
-          },
-        };
-      },
-      insert: async (table: keyof TestTables, doc: Record<string, unknown>) => {
-        const _id = `${table}_${idSeq++}`;
-        tables[table].push({ _id, ...doc });
-        return _id;
-      },
-      patch: async (_id: string, patch: Record<string, unknown>) => {
-        for (const rows of Object.values(tables)) {
-          const row = rows.find((candidate) => candidate._id === _id);
-          if (row) Object.assign(row, patch);
-        }
-      },
-    },
+    db: createMockDb(tables, (table) => `${table}_${idSeq++}`),
   };
 
   return { ctx, tables };
@@ -210,6 +212,28 @@ async function expectRejectsWithMessage(run: () => Promise<unknown>, message: st
   }
 }
 
+function createVerifiedListingCtx(seed: Partial<TestTables> = {}) {
+  return createMockListingCtx(
+    { subject: VERIFIED_PROVIDER_ID },
+    {
+      ...verifiedSellerRows({ phoneVerified: true }),
+      source_rules: [sourceRuleRow()],
+      ...seed,
+    },
+  );
+}
+
+function expectUnderReviewCreated(
+  result: { listing: { state: string; ruleDecision: string }; status: string },
+  tables: TestTables,
+) {
+  expect(result.status).toBe("created");
+  expect(result.listing.state).toBe("under_review");
+  expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+  expect(tables.listings[0].state).toBe("under_review");
+  expect(tables.listings[0].ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+}
+
 describe("seller listing submission mutation", () => {
   test("rejects signed-out sellers before creating a listing", async () => {
     const { ctx, tables } = createMockListingCtx(null, {
@@ -262,37 +286,36 @@ describe("seller listing submission mutation", () => {
   });
 
   test("it should keep an auto-approved listing under review when the seller has no mock payout readiness", async () => {
-    const { ctx, tables } = createMockListingCtx(
-      { subject: VERIFIED_PROVIDER_ID },
-      {
-        ...verifiedSellerRows({ phoneVerified: true, payoutReady: false }),
-        source_rules: [sourceRuleRow()],
-      },
-    );
+    const { ctx, tables } = createVerifiedListingCtx({
+      ...verifiedSellerRows({ phoneVerified: true, payoutReady: false }),
+    });
 
     const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
       draft: firstSliceDraft(),
     })) as { listing: { state: string; ruleDecision: string }; status: string };
 
-    expect(result.status).toBe("created");
-    expect(result.listing.state).toBe("under_review");
-    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
-    expect(tables.listings[0].state).toBe("under_review");
-    expect(tables.listings[0].ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+    expectUnderReviewCreated(result, tables);
   });
 
   test("it should reject fractional quantities before persisting a seller listing", async () => {
-    const { ctx, tables } = createMockListingCtx(
-      { subject: VERIFIED_PROVIDER_ID },
-      {
-        ...verifiedSellerRows({ phoneVerified: true }),
-        source_rules: [sourceRuleRow()],
-      },
-    );
+    const { ctx, tables } = createVerifiedListingCtx();
 
     await expectRejectsWithMessage(
       () => handlerOf(submitSellerListingForCurrentUser)(ctx, { draft: firstSliceDraft({ quantity: 1.5 }) }),
       "SELLER_LISTING_INVALID:INVALID_QUANTITY",
+    );
+    expect(tables.listings).toHaveLength(0);
+  });
+
+  test("it should reject invalid event timestamps before persisting a seller listing", async () => {
+    const { ctx, tables } = createVerifiedListingCtx();
+
+    await expectRejectsWithMessage(
+      () =>
+        handlerOf(submitSellerListingForCurrentUser)(ctx, {
+          draft: firstSliceDraft({ eventOrTripStartAt: "not-a-date" }),
+        }),
+      "SELLER_LISTING_INVALID:MISSING_EVENT_OR_TRIP_START",
     );
     expect(tables.listings).toHaveLength(0);
   });
@@ -432,23 +455,13 @@ describe("seller listing submission mutation", () => {
   });
 
   test("it should require manual review when a persisted face-value cap is exceeded", async () => {
-    const { ctx, tables } = createMockListingCtx(
-      { subject: VERIFIED_PROVIDER_ID },
-      {
-        ...verifiedSellerRows({ phoneVerified: true }),
-        source_rules: [sourceRuleRow()],
-      },
-    );
+    const { ctx, tables } = createVerifiedListingCtx();
 
     const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
       draft: firstSliceDraft({ listingPrice: 2600 }),
     })) as { listing: { state: string; ruleDecision: string }; status: string };
 
-    expect(result.status).toBe("created");
-    expect(result.listing.state).toBe("under_review");
-    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
-    expect(tables.listings[0].state).toBe("under_review");
-    expect(tables.listings[0].ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+    expectUnderReviewCreated(result, tables);
   });
 
   test("updates the seller's existing duplicate listing instead of creating another row", async () => {

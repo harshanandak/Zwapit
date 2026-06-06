@@ -51,6 +51,14 @@ describe("seller listing validation blockers", () => {
     expect(result.blockers).toContain("INVALID_QUANTITY");
   });
 
+  test("it should block invalid listing timestamps", () => {
+    const fixture = createMockFixture();
+    const result = validateSellerListing({ ...fixture.listing, eventOrTripStartAt: "not-a-date" }, fixture.sourceRule);
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers).toContain("MISSING_EVENT_OR_TRIP_START");
+  });
+
   test("should block seller listing when the source rule is auto block", () => {
     const fixture = createMockFixture();
     const result = validateSellerListing(
