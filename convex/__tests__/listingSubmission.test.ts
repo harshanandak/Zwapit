@@ -46,25 +46,7 @@ function sourceRuleRow(rule = bookmyshowEventRule): TestRow {
   return {
     _id: `source_rules_${rule.id}`,
     sourceRuleKey: rule.id,
-    version: rule.version,
-    source: rule.source,
-    category: rule.category,
-    sourceCategoryKey: rule.sourceCategoryKey,
-    decision: rule.decision,
-    internalStatus: rule.internalStatus,
-    transferMode: rule.transferMode,
-    transferability: rule.transferability,
-    protectionLevel: rule.protectionLevel,
-    requiredFields: rule.requiredFields,
-    eligibilityFields: rule.eligibilityFields,
-    priceRule: rule.priceRule,
-    payoutPolicy: rule.payoutPolicy,
-    blockedBehavior: rule.blockedBehavior,
-    manualReviewReasonCodes: rule.manualReviewReasonCodes,
-    effectiveFrom: rule.effectiveFrom,
-    lastVerifiedAt: rule.lastVerifiedAt,
-    verificationSourceUrlOrNote: rule.verificationSourceUrlOrNote,
-    createdBy: rule.createdBy,
+    ...rule,
   };
 }
 
@@ -77,9 +59,7 @@ function verifiedSellerRows(options: { phoneVerified: boolean }): Pick<
       {
         _id: "users_verified_seller_1",
         appUserId: VERIFIED_APP_USER_ID,
-        displayName: "Verified Seller",
         phoneVerified: options.phoneVerified,
-        role: "buyer_seller",
       },
     ],
     auth_identities: [
@@ -95,7 +75,6 @@ function verifiedSellerRows(options: { phoneVerified: boolean }): Pick<
         _id: "user_verifications_verified_seller_1",
         appUserId: VERIFIED_APP_USER_ID,
         phoneVerified: options.phoneVerified,
-        verificationMode: options.phoneVerified ? "clerk_phone" : "unverified",
       },
     ],
   };
@@ -338,6 +317,26 @@ describe("seller listing submission mutation", () => {
     expect(result.listing.sourceRuleId).toBe(bookmyshowEventRule.id);
     expect(tables.listings[0].state).toBe("blocked");
     expect(tables.listings[0].ruleDecision).toBe("AUTO_BLOCK");
+  });
+
+  test("it should require manual review when a persisted face-value cap is exceeded", async () => {
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow()],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({ listingPrice: 2600 }),
+    })) as { listing: { state: string; ruleDecision: string }; status: string };
+
+    expect(result.status).toBe("created");
+    expect(result.listing.state).toBe("under_review");
+    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(tables.listings[0].state).toBe("under_review");
+    expect(tables.listings[0].ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
   });
 
   test("updates the seller's existing duplicate listing instead of creating another row", async () => {

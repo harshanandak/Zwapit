@@ -11,7 +11,7 @@ import { v } from "convex/values";
 import { listingDocToMock, sourceRuleDocToMock } from "./model";
 import { requirePhoneVerifiedAppUser } from "./identity";
 import { calculateCheckoutTotal } from "../src/lib/mock/pricing";
-import { evaluateSourceRule } from "../src/lib/rules/evaluateRule";
+import { applyPriceRule, evaluateSourceRule } from "../src/lib/rules/evaluateRule";
 import { validateSellerListing } from "../src/lib/validation/sellerValidation";
 import type { ListingState, MockListing, RuleDecision, SellerListingDraft, SourceRule } from "../src/lib/types";
 
@@ -60,9 +60,7 @@ function hasRequiredValue(value: unknown): boolean {
 }
 
 function priceRuleRequiresReview(sourceRule: SourceRule, draft: SellerListingDraft): boolean {
-  if (sourceRule.priceRule.kind !== "manual_review_above_face_value") return false;
-  const maxMultiplier = sourceRule.priceRule.maxMultiplier ?? 1;
-  return draft.listingPrice > draft.faceValue * maxMultiplier;
+  return !applyPriceRule(sourceRule, draft.listingPrice, draft.faceValue).passed;
 }
 
 function decisionForPersistedRule(sourceRule: SourceRule, draft: SellerListingDraft): RuleDecision {
