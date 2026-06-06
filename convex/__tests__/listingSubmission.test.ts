@@ -281,8 +281,8 @@ describe("seller listing submission mutation", () => {
 
     expect(result.listing.sellerId).toBe(VERIFIED_APP_USER_ID);
     expect(result.listing.sellerId).not.toBe(VERIFIED_PROVIDER_ID);
-    expect(result.listing.state).toBe("live");
-    expect(result.listing.ruleDecision).toBe("AUTO_APPROVE");
+    expect(result.listing.state).toBe("under_review");
+    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
     expect(tables.listings).toHaveLength(1);
     expect(tables.listings[0].sellerId).toBe(VERIFIED_APP_USER_ID);
     expect(tables.listings[0].sellerId).not.toBe(VERIFIED_PROVIDER_ID);
@@ -341,7 +341,8 @@ describe("seller listing submission mutation", () => {
       name: "AUTO_APPROVE",
       rule: bookmyshowEventRule,
       draft: firstSliceDraft(),
-      state: "live",
+      ruleDecision: "NEEDS_MANUAL_REVIEW",
+      state: "under_review",
     },
     {
       name: "AUTO_BLOCK",
@@ -373,7 +374,7 @@ describe("seller listing submission mutation", () => {
       }),
       state: "under_review",
     },
-  ])("persists $name submissions as $state", async ({ rule, draft, state }) => {
+  ])("persists $name submissions as $state", async ({ rule, draft, ruleDecision, state }) => {
     const { ctx, tables } = createMockListingCtx(
       { subject: VERIFIED_PROVIDER_ID },
       {
@@ -387,7 +388,7 @@ describe("seller listing submission mutation", () => {
     };
 
     expect(result.listing.state).toBe(state);
-    expect(result.listing.ruleDecision).toBe(rule.decision);
+    expect(result.listing.ruleDecision).toBe(ruleDecision ?? rule.decision);
     expect(result.listing.sourceRuleId).toBe(rule.id);
     expect(tables.listings[0].state).toBe(state);
   });

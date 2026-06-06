@@ -178,8 +178,9 @@ function buildSubmittedListing(
   };
 }
 
-function listingWithPayoutGate(listing: MockListing, sellerPayoutReady: boolean): MockListing {
-  if (sellerPayoutReady || listing.state !== "live") return listing;
+function listingWithPublicationGates(listing: MockListing, sellerPayoutReady: boolean): MockListing {
+  if (listing.state !== "live") return listing;
+  if (sellerPayoutReady && listing.id === DEMO_LISTING_KEY) return listing;
   return { ...listing, state: "under_review", ruleDecision: "NEEDS_MANUAL_REVIEW" };
 }
 
@@ -295,7 +296,7 @@ export const submitSellerListingForCurrentUser = mutation({
       .withIndex("by_seller", (q) => q.eq("sellerId", seller.appUserId))
       .unique();
     const sellerPayoutReady = sellerPayment?.status === "mock_ready";
-    const listing = listingWithPayoutGate(
+    const listing = listingWithPublicationGates(
       buildSubmittedListing(seller.appUserId, args.draft, sourceRule),
       sellerPayoutReady,
     );
@@ -319,14 +320,14 @@ export const submitSellerListingForCurrentUser = mutation({
         sourceRule,
         String(activeDuplicate.listingKey ?? listing.id),
       );
-      const gatedListing = listingWithPayoutGate(updatedListing, sellerPayoutReady);
+      const gatedListing = listingWithPublicationGates(updatedListing, sellerPayoutReady);
       await ctx.db.patch(activeDuplicate._id, listingPatch(gatedListing));
       return { listing: gatedListing, status: "updated" as const };
     }
 
     const createdListing =
       matchingDuplicates.length > 0
-        ? listingWithPayoutGate(
+        ? listingWithPublicationGates(
             buildSubmittedListing(
               seller.appUserId,
               args.draft,
