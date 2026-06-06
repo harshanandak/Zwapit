@@ -336,6 +336,22 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings).toHaveLength(0);
   });
 
+  test("it should reject past event starts before persisting a seller listing", async () => {
+    const { ctx, tables } = createVerifiedListingCtx();
+
+    await expectRejectsWithMessage(
+      () =>
+        handlerOf(submitSellerListingForCurrentUser)(ctx, {
+          draft: firstSliceDraft({
+            eventOrTripStartAt: "2020-01-02T00:00:00+05:30",
+            transferDeadlineAt: "2026-12-19T19:00:00+05:30",
+          }),
+        }),
+      "SELLER_LISTING_INVALID:EVENT_OR_TRIP_ALREADY_STARTED,TRANSFER_DEADLINE_AFTER_EVENT_START",
+    );
+    expect(tables.listings).toHaveLength(0);
+  });
+
   test.each([
     {
       name: "AUTO_APPROVE",

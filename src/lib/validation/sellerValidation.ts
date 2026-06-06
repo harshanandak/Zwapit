@@ -6,11 +6,13 @@ export type SellerListingBlocker =
   | "MISSING_TITLE"
   | "MISSING_VENUE_OR_ROUTE"
   | "MISSING_EVENT_OR_TRIP_START"
+  | "EVENT_OR_TRIP_ALREADY_STARTED"
   | "INVALID_QUANTITY"
   | "INVALID_FACE_VALUE"
   | "INVALID_LISTING_PRICE"
   | "MISSING_TRANSFER_DEADLINE"
   | "TRANSFER_DEADLINE_EXPIRED"
+  | "TRANSFER_DEADLINE_AFTER_EVENT_START"
   | "MISSING_PROTECTION_DEADLINE"
   | "MISSING_SOURCE_RULE"
   | "RULE_BLOCKED";
@@ -23,8 +25,13 @@ export function validateSellerListing(
 
   if (!listing.title.trim()) blockers.push("MISSING_TITLE");
   if (!listing.venueOrRoute.trim()) blockers.push("MISSING_VENUE_OR_ROUTE");
+  const eventStartMs = timestampMs(listing.eventOrTripStartAt);
   const transferDeadlineMs = timestampMs(listing.transferDeadlineAt);
-  if (timestampMs(listing.eventOrTripStartAt) == null) blockers.push("MISSING_EVENT_OR_TRIP_START");
+  if (eventStartMs == null) {
+    blockers.push("MISSING_EVENT_OR_TRIP_START");
+  } else if (eventStartMs <= Date.now()) {
+    blockers.push("EVENT_OR_TRIP_ALREADY_STARTED");
+  }
   if (!Number.isSafeInteger(listing.quantity) || listing.quantity < 1) blockers.push("INVALID_QUANTITY");
   if (listing.faceValue <= 0) blockers.push("INVALID_FACE_VALUE");
   if (listing.listingPrice <= 0) blockers.push("INVALID_LISTING_PRICE");
@@ -32,6 +39,8 @@ export function validateSellerListing(
     blockers.push("MISSING_TRANSFER_DEADLINE");
   } else if (transferDeadlineMs <= Date.now()) {
     blockers.push("TRANSFER_DEADLINE_EXPIRED");
+  } else if (eventStartMs != null && transferDeadlineMs > eventStartMs) {
+    blockers.push("TRANSFER_DEADLINE_AFTER_EVENT_START");
   }
   if (timestampMs(listing.protectionDeadlineAt) == null) blockers.push("MISSING_PROTECTION_DEADLINE");
   if (listing.sourceRuleId !== sourceRule.id || listing.sourceRuleVersion !== sourceRule.version) {
