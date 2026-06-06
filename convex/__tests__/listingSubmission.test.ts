@@ -6,6 +6,7 @@ import {
   districtMovieWaitlistRule,
   otherPlatformEventReviewRule,
 } from "../../src/lib/rules/sourceRules";
+import type { SourceRule } from "../../src/lib/types";
 import { submitSellerListingForCurrentUser } from "../listings";
 
 type TestRow = Record<string, unknown> & { _id: string };
@@ -47,6 +48,14 @@ function applyIndexFilters(rows: TestRow[], apply: (q: ReturnType<typeof createE
   const filters: Array<{ field: string; value: unknown }> = [];
   apply(createEqBuilder(filters));
   return rows.filter((row) => rowMatchesFilters(row, filters));
+}
+
+function indexedRowsResult(rows: TestRow[], apply: (q: ReturnType<typeof createEqBuilder>) => unknown) {
+  const filtered = applyIndexFilters(rows, apply);
+  return {
+    unique: async () => filtered[0] ?? null,
+    collect: async () => filtered,
+  };
 }
 
 function sourceRuleRow(rule = bookmyshowEventRule): TestRow {
@@ -124,11 +133,7 @@ function createMockListingCtx(
         const rows = tables[table];
         return {
           withIndex(_indexName: string, apply: (q: ReturnType<typeof createEqBuilder>) => unknown) {
-            const filtered = applyIndexFilters(rows, apply);
-            return {
-              unique: async () => filtered[0] ?? null,
-              collect: async () => filtered,
-            };
+            return indexedRowsResult(rows, apply);
           },
         };
       },
@@ -359,6 +364,55 @@ describe("seller listing submission mutation", () => {
     expect(result.listing.sourceRuleId).toBe(bookmyshowEventRule.id);
     expect(tables.listings[0].state).toBe("blocked");
     expect(tables.listings[0].ruleDecision).toBe("AUTO_BLOCK");
+  });
+
+  test("it should select the latest persisted source-category rule instead of a bundled fallback", async () => {
+    const olderBusRule: SourceRule = {
+      ...bookmyshowEventRule,
+      id: "source_rule_bus_travel_v1",
+      version: 1,
+      source: "bus_operator",
+      category: "bus_travel",
+      sourceCategoryKey: "bus_operator_bus_travel",
+      decision: "AUTO_BLOCK",
+      internalStatus: "BLOCKED",
+      transferMode: "CODE_REVEAL",
+      protectionLevel: "cannot_list",
+      priceRule: { kind: "blocked" },
+      blockedBehavior: "cannot_list",
+    };
+    const latestBusRule: SourceRule = {
+      ...olderBusRule,
+      id: "source_rule_bus_travel_v2",
+      version: 2,
+      decision: "AUTO_WAITLIST",
+      internalStatus: "DEMAND_ONLY",
+      protectionLevel: "waitlist_only",
+      priceRule: { kind: "manual_review_above_face_value", maxMultiplier: 1 },
+      blockedBehavior: "waitlist_only",
+    };
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow(olderBusRule), sourceRuleRow(latestBusRule)],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft({
+        source: "bus_operator",
+        category: "bus_travel",
+        title: "Bengaluru to Mysuru bus pass",
+        venueOrRoute: "Bengaluru to Mysuru",
+      }),
+    })) as { listing: { state: string; ruleDecision: string; sourceRuleId: string; sourceRuleVersion: number } };
+
+    expect(result.listing.state).toBe("waitlist_only");
+    expect(result.listing.ruleDecision).toBe("AUTO_WAITLIST");
+    expect(result.listing.sourceRuleId).toBe("source_rule_bus_travel_v2");
+    expect(result.listing.sourceRuleVersion).toBe(2);
+    expect(tables.listings[0].sourceRuleId).toBe("source_rule_bus_travel_v2");
   });
 
   test("it should require manual review when a persisted face-value cap is exceeded", async () => {

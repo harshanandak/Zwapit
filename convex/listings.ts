@@ -11,7 +11,7 @@ import { v } from "convex/values";
 import { listingDocToMock, sourceRuleDocToMock } from "./model";
 import { requirePhoneVerifiedAppUser } from "./identity";
 import { calculateCheckoutTotal } from "../src/lib/mock/pricing";
-import { applyPriceRule, evaluateSourceRule } from "../src/lib/rules/evaluateRule";
+import { applyPriceRule } from "../src/lib/rules/evaluateRule";
 import { validateSellerListing } from "../src/lib/validation/sellerValidation";
 import type { ListingState, MockListing, RuleDecision, SellerListingDraft, SourceRule } from "../src/lib/types";
 
@@ -130,6 +130,13 @@ function uniqueListingKey(baseKey: string, sellerListings: Array<{ listingKey?: 
     candidate = `${baseKey}_${sequence}`;
   }
   return candidate;
+}
+
+function latestSourceRuleDoc<T extends { version: number }>(rules: T[]): T | null {
+  return rules.reduce<T | null>((latest, rule) => {
+    if (!latest || rule.version > latest.version) return rule;
+    return latest;
+  }, null);
 }
 
 function buildSubmittedListing(
@@ -270,24 +277,13 @@ export const submitSellerListingForCurrentUser = mutation({
   args: { draft: sellerListingDraft },
   handler: async (ctx, args) => {
     const seller = await requirePhoneVerifiedAppUser(ctx);
-    const localEvaluation = evaluateSourceRule({
-      source: args.draft.source,
-      category: args.draft.category,
-      listingPrice: args.draft.listingPrice,
-      faceValue: args.draft.faceValue,
-      requiredFieldValues: {
-        title: args.draft.title,
-        eventOrTripStartAt: args.draft.eventOrTripStartAt,
-        venueOrRoute: args.draft.venueOrRoute,
-        quantity: args.draft.quantity,
-        transferDeadlineAt: args.draft.transferDeadlineAt,
-        sellerPromiseAccepted: args.draft.sellerPromiseAccepted,
-      },
-    });
-    const sourceRuleDoc = await ctx.db
+    const sourceRuleDocs = await ctx.db
       .query("source_rules")
-      .withIndex("by_key", (q) => q.eq("sourceRuleKey", localEvaluation.sourceRuleId))
-      .unique();
+      .withIndex("by_source_category_version", (q) =>
+        q.eq("source", args.draft.source).eq("category", args.draft.category),
+      )
+      .collect();
+    const sourceRuleDoc = latestSourceRuleDoc(sourceRuleDocs);
     if (!sourceRuleDoc) throw new Error("SOURCE_RULE_NOT_FOUND");
 
     const sourceRule = sourceRuleDocToMock(sourceRuleDoc);
