@@ -32,6 +32,16 @@ function createEqBuilder(filters: Array<{ field: string; value: unknown }>) {
   return builder;
 }
 
+function rowMatchesFilters(row: TestRow, filters: Array<{ field: string; value: unknown }>): boolean {
+  return filters.every(({ field, value }) => row[field] === value);
+}
+
+function applyIndexFilters(rows: TestRow[], apply: (q: ReturnType<typeof createEqBuilder>) => unknown): TestRow[] {
+  const filters: Array<{ field: string; value: unknown }> = [];
+  apply(createEqBuilder(filters));
+  return rows.filter((row) => rowMatchesFilters(row, filters));
+}
+
 function sourceRuleRow(rule = bookmyshowEventRule): TestRow {
   return {
     _id: `source_rules_${rule.id}`,
@@ -113,9 +123,7 @@ function createMockListingCtx(
         const rows = tables[table];
         return {
           withIndex(_indexName: string, apply: (q: ReturnType<typeof createEqBuilder>) => unknown) {
-            const filters: Array<{ field: string; value: unknown }> = [];
-            apply(createEqBuilder(filters));
-            const filtered = rows.filter((row) => filters.every(({ field, value }) => row[field] === value));
+            const filtered = applyIndexFilters(rows, apply);
             return {
               unique: async () => filtered[0] ?? null,
               collect: async () => filtered,
@@ -154,6 +162,35 @@ function firstSliceDraft(overrides: Record<string, unknown> = {}) {
     protectionDeadlineAt: "2026-12-21T19:00:00+05:30",
     sellerPromiseAccepted: true,
     duplicateFingerprint: "seller-upload:arijit-singh-silver-pass",
+    ...overrides,
+  };
+}
+
+function existingFirstSliceListingRow(overrides: Record<string, unknown> = {}): TestRow {
+  return {
+    _id: "listings_existing_1",
+    listingKey: "listing_user_internal_seller_1_seller_upload_arijit_singh_silver_pass",
+    sellerId: VERIFIED_APP_USER_ID,
+    sourceRuleId: bookmyshowEventRule.id,
+    sourceRuleVersion: bookmyshowEventRule.version,
+    category: "event_ticket",
+    source: "bookmyshow",
+    sourceCategoryKey: bookmyshowEventRule.sourceCategoryKey,
+    title: "Arijit Singh Live - Silver Pass",
+    venueOrRoute: "Bengaluru Palace Grounds",
+    eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+    quantity: 1,
+    faceValue: 2400,
+    listingPrice: 2200,
+    platformFee: 10,
+    gstOnFee: 1.8,
+    totalPayable: 2211.8,
+    transferMode: bookmyshowEventRule.transferMode,
+    transferDeadlineAt: "2026-12-19T19:00:00+05:30",
+    protectionDeadlineAt: "2026-12-21T19:00:00+05:30",
+    state: "live",
+    ruleDecision: "AUTO_APPROVE",
+    duplicateFingerprint: "seller_upload_arijit_singh_silver_pass",
     ...overrides,
   };
 }
@@ -361,33 +398,7 @@ describe("seller listing submission mutation", () => {
       {
         ...verifiedSellerRows({ phoneVerified: true }),
         source_rules: [sourceRuleRow()],
-        listings: [
-          {
-            _id: "listings_terminal_1",
-            listingKey: "listing_user_internal_seller_1_seller_upload_arijit_singh_silver_pass",
-            sellerId: VERIFIED_APP_USER_ID,
-            sourceRuleId: bookmyshowEventRule.id,
-            sourceRuleVersion: bookmyshowEventRule.version,
-            category: "event_ticket",
-            source: "bookmyshow",
-            sourceCategoryKey: bookmyshowEventRule.sourceCategoryKey,
-            title: "Arijit Singh Live - Silver Pass",
-            venueOrRoute: "Bengaluru Palace Grounds",
-            eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
-            quantity: 1,
-            faceValue: 2400,
-            listingPrice: 2200,
-            platformFee: 10,
-            gstOnFee: 1.8,
-            totalPayable: 2211.8,
-            transferMode: bookmyshowEventRule.transferMode,
-            transferDeadlineAt: "2026-12-19T19:00:00+05:30",
-            protectionDeadlineAt: "2026-12-21T19:00:00+05:30",
-            state: "sold",
-            ruleDecision: "AUTO_APPROVE",
-            duplicateFingerprint: "seller_upload_arijit_singh_silver_pass",
-          },
-        ],
+        listings: [existingFirstSliceListingRow({ _id: "listings_terminal_1", state: "sold" })],
       },
     );
 

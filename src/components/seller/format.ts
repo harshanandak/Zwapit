@@ -124,12 +124,18 @@ export function buildSellerDraftFromListing(
 }
 
 export function sellerDraftJsonScriptContent(draft: SellerListingDraft): string {
+  const escapedLessThan = String.raw`\u003c`;
+  const escapedGreaterThan = String.raw`\u003e`;
+  const escapedAmpersand = String.raw`\u0026`;
+  const escapedLineSeparator = String.raw`\u2028`;
+  const escapedParagraphSeparator = String.raw`\u2029`;
+
   return JSON.stringify(draft)
-    .replaceAll("<", "\\u003c")
-    .replaceAll(">", "\\u003e")
-    .replaceAll("&", "\\u0026")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
+    .replaceAll("<", escapedLessThan)
+    .replaceAll(">", escapedGreaterThan)
+    .replaceAll("&", escapedAmpersand)
+    .replaceAll("\u2028", escapedLineSeparator)
+    .replaceAll("\u2029", escapedParagraphSeparator);
 }
 
 // Friendly UI state for a seller submission result. Keyed on BOTH the adapter

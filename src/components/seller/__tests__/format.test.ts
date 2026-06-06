@@ -4,20 +4,28 @@ import type { MockListing, RuleDecision, SellerListingSubmissionResult } from ".
 import { createMockFixture } from "../../../lib/mock/fixtures";
 import { buildSellerDraftFromListing, sellerDraftJsonScriptContent, sellerSubmissionView } from "../format";
 
+function listingStateForRuleDecision(ruleDecision: RuleDecision): MockListing["state"] {
+  switch (ruleDecision) {
+    case "AUTO_APPROVE":
+      return "live";
+    case "AUTO_WAITLIST":
+      return "waitlist_only";
+    case "AUTO_BLOCK":
+      return "blocked";
+    case "NEEDS_MANUAL_REVIEW":
+      return "under_review";
+    default:
+      return "under_review";
+  }
+}
+
 function listingWithRuleDecision(ruleDecision: RuleDecision): MockListing {
   const base = createMockFixture().listing;
 
   return {
     ...base,
     ruleDecision,
-    state:
-      ruleDecision === "AUTO_APPROVE"
-        ? "live"
-        : ruleDecision === "AUTO_WAITLIST"
-          ? "waitlist_only"
-          : ruleDecision === "AUTO_BLOCK"
-            ? "blocked"
-            : "under_review",
+    state: listingStateForRuleDecision(ruleDecision),
   };
 }
 
@@ -159,8 +167,8 @@ describe("seller draft formatting", () => {
     const scriptContent = sellerDraftJsonScriptContent(draft);
 
     expect(scriptContent).not.toContain("</script>");
-    expect(scriptContent).toContain("\\u003c/script\\u003e");
-    expect(scriptContent).toContain("\\u0026");
+    expect(scriptContent).toContain(String.raw`\u003c/script\u003e`);
+    expect(scriptContent).toContain(String.raw`\u0026`);
     expect(JSON.parse(scriptContent)).toEqual(draft);
   });
 });

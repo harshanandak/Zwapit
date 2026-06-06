@@ -95,14 +95,22 @@ function decisionForPersistedRule(sourceRule: SourceRule, draft: SellerListingDr
 }
 
 function normalizeFingerprint(duplicateFingerprint: string): string {
-  return (
-    duplicateFingerprint
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 72) || "seller_upload"
-  );
+  let normalized = "";
+  let previousWasSeparator = false;
+
+  for (const char of duplicateFingerprint.trim().toLowerCase()) {
+    const isAlphanumeric = (char >= "a" && char <= "z") || (char >= "0" && char <= "9");
+    if (isAlphanumeric) {
+      normalized += char;
+      previousWasSeparator = false;
+    } else if (!previousWasSeparator && normalized.length > 0) {
+      normalized += "_";
+      previousWasSeparator = true;
+    }
+  }
+
+  const trimmed = previousWasSeparator ? normalized.slice(0, -1) : normalized;
+  return trimmed.slice(0, 72) || "seller_upload";
 }
 
 function stableListingKey(sellerId: string, duplicateFingerprint: string): string {
