@@ -64,9 +64,12 @@ jobs:
       - name: Build iOS simulator app
         run: bun run ios:build:sim
 
+      - name: Package iOS simulator app
+        run: tar -czf ios/build/zwapit-ios-simulator-app.tgz -C ios/build/Build/Products/Debug-iphonesimulator App.app
+
       - name: Upload iOS simulator app
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: zwapit-ios-simulator-app
-          path: ios/build/Build/Products/Debug-iphonesimulator/App.app
+          path: ios/build/zwapit-ios-simulator-app.tgz
           if-no-files-found: error
