@@ -38,18 +38,120 @@ Result: pass. 111 tests passed, 0 failed.
 
 ## Implementation Status
 
-No product source implementation has been done in this plan commit.
+Product source implementation is complete for Tasks 1-4.
+
+### Task 1-2 Evidence
+
+RED command:
+
+- `bun test src/lib/rules/__tests__/evaluateRule.test.ts`
+
+RED result:
+
+- Failed with `Export named 'evaluateProvidedSourceRule' not found in module ... src/lib/rules/evaluateRule.ts`.
+
+GREEN command:
+
+- `bun test src/lib/rules/__tests__/evaluateRule.test.ts`
+
+GREEN result:
+
+- Passed: 13 tests, 0 failed, 55 expectations.
+
+Commit:
+
+- `3ff4d4e feat(rules): share source rule decision evaluation`
+
+### Task 3 Evidence
+
+RED command:
+
+- `bun test src/lib/rules/__tests__/sourceRuleSelection.test.ts`
+
+RED result:
+
+- Failed with `Cannot find module '../sourceRuleSelection'`.
+
+GREEN command:
+
+- `bun test src/lib/rules/__tests__/sourceRuleSelection.test.ts`
+
+GREEN result:
+
+- Passed: 4 tests, 0 failed, 5 expectations.
+
+Commit:
+
+- `557c35f feat(rules): select latest effective source rule`
+
+### Task 4 Evidence
+
+RED command:
+
+- `bun test convex/__tests__/listingSubmission.test.ts`
+
+RED result:
+
+- Failed deterministic same-version persisted rule selection:
+  - Expected `source_rule_bookmyshow_event_a`
+  - Received `source_rule_bookmyshow_event_b`
+
+GREEN command:
+
+- `bun test convex/__tests__/listingSubmission.test.ts`
+
+GREEN result:
+
+- Passed: 22 tests, 0 failed, 95 expectations.
+
+Affected-test command:
+
+- `bun test src/lib/rules/__tests__/evaluateRule.test.ts src/lib/rules/__tests__/sourceRuleSelection.test.ts convex/__tests__/listingSubmission.test.ts`
+
+Affected-test result:
+
+- Passed: 39 tests, 0 failed, 155 expectations.
+
+Commit:
+
+- `d1140b1 feat(convex): use shared source rule evaluation`
 
 ## Planned Validation Gates
 
-- `bun run check`
-- `bun test`
-- `bun run build`
-- `bun scripts/verify-first-visible-slice.mjs`
-- `bun scripts/e2e-buyer.mjs`
-- `bun scripts/e2e-seller.mjs`
-- Scope-drift search for Razorpay, real payments, payout setup, full KYC, admin expansion, demand discovery, and category expansion.
-- Provider-id owner search proving provider ids are not used as listing/order/app owner ids.
+- `bun run check`: pass, 0 errors, 11 CommonJS hints in dep-guard scripts.
+- `bun test`: pass, 122 tests, 0 failed, 410 expectations.
+- `bun run build`: pass, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: pass, checked 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: pass, buyer mock path reached completed.
+- `bun scripts/e2e-seller.mjs`: pass, seller mock path reached completed.
+
+## Scope And Owner Searches
+
+Changed source/test scope-drift command:
+
+- `rg -n -i "Razorpay|real payments|payout setup|full KYC|admin expansion|demand discovery|category expansion" convex/listings.ts convex/__tests__/listingSubmission.test.ts src/lib/rules/evaluateRule.ts src/lib/rules/sourceRuleSelection.ts src/lib/rules/__tests__/evaluateRule.test.ts src/lib/rules/__tests__/sourceRuleSelection.test.ts`
+
+Result:
+
+- No matches in changed source/test files.
+
+Broad search note:
+
+- Broad search over product/test/config paths found pre-existing guard/comment/UI strings in `src/lib/auth/authAdapter.ts`, `src/pages/app/sell/orders.astro`, `scripts/ui-smoke-seller.mjs`, and `scripts/verify-first-visible-slice.mjs`; this slice did not modify those files.
+
+Provider-id owner search:
+
+- `rg -n "sellerId|buyerId|appUserId|providerUserId" convex/listings.ts convex/__tests__/listingSubmission.test.ts src/lib/rules/evaluateRule.ts src/lib/rules/sourceRuleSelection.ts`
+
+Result:
+
+- `convex/listings.ts` builds listing ownership from `seller.appUserId`.
+- `convex/__tests__/listingSubmission.test.ts` asserts persisted `sellerId` equals `VERIFIED_APP_USER_ID` and does not equal `VERIFIED_PROVIDER_ID`.
+
+## Beads Progress
+
+- `scripts/beads-context.sh update-progress ...` timed out after 30 seconds for Task 1-2 progress.
+- Direct `bd update` progress notes succeeded for Tasks 1-4.
 
 ## Hard Stop
 
