@@ -9,6 +9,13 @@ export interface SourceRuleEvaluationInput {
   requiredFieldValues: Record<string, unknown>;
 }
 
+export interface ProvidedSourceRuleEvaluationInput {
+  rule: SourceRule;
+  listingPrice: number;
+  faceValue: number;
+  requiredFieldValues: Record<string, unknown>;
+}
+
 export interface PriceRuleResult {
   passed: boolean;
   reasonCode?: "PRICE_ABOVE_FACE_VALUE" | "BLOCKED_PRICE_RULE";
@@ -81,9 +88,8 @@ export function getBlockedBehavior(rule: SourceRule): SourceRule["blockedBehavio
   return rule.blockedBehavior;
 }
 
-export function evaluateSourceRule(input: SourceRuleEvaluationInput): SourceRuleEvaluationResult {
-  const sourceCategoryKey = classifySourceCategory(input.source, input.category);
-  const rule = getSourceRule(sourceCategoryKey);
+export function evaluateProvidedSourceRule(input: ProvidedSourceRuleEvaluationInput): SourceRuleEvaluationResult {
+  const rule = input.rule;
   const explicitRequiredValues: Record<string, unknown> = {
     faceValue: input.faceValue,
     listingPrice: input.listingPrice,
@@ -117,4 +123,16 @@ export function evaluateSourceRule(input: SourceRuleEvaluationInput): SourceRule
     missingRequiredFields,
     manualReviewReasonCodes,
   };
+}
+
+export function evaluateSourceRule(input: SourceRuleEvaluationInput): SourceRuleEvaluationResult {
+  const sourceCategoryKey = classifySourceCategory(input.source, input.category);
+  const rule = getSourceRule(sourceCategoryKey);
+
+  return evaluateProvidedSourceRule({
+    rule,
+    listingPrice: input.listingPrice,
+    faceValue: input.faceValue,
+    requiredFieldValues: input.requiredFieldValues,
+  });
 }
