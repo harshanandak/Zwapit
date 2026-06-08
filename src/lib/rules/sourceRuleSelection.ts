@@ -1,5 +1,6 @@
 export interface EffectiveSourceRuleCandidate {
   id?: string;
+  sourceRuleKey?: string;
   version: number;
   effectiveFrom: string;
 }
@@ -16,7 +17,7 @@ function compareCandidates(a: EffectiveSourceRuleCandidate, b: EffectiveSourceRu
   const bEffective = effectiveTime(b) ?? Number.NEGATIVE_INFINITY;
   if (aEffective !== bEffective) return aEffective - bEffective;
 
-  return String(b.id ?? "").localeCompare(String(a.id ?? ""));
+  return String(b.id ?? b.sourceRuleKey ?? "").localeCompare(String(a.id ?? a.sourceRuleKey ?? ""));
 }
 
 export function selectLatestEffectiveSourceRule<T extends EffectiveSourceRuleCandidate>(

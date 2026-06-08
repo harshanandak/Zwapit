@@ -7,7 +7,7 @@ import {
   otherPlatformEventReviewRule,
 } from "../../src/lib/rules/sourceRules";
 import type { SourceRule } from "../../src/lib/types";
-import { submitSellerListingForCurrentUser } from "../listings";
+import { getCheckoutView, submitSellerListingForCurrentUser } from "../listings";
 
 type TestRow = Record<string, unknown> & { _id: string };
 type TestTableName =
@@ -499,6 +499,65 @@ describe("seller listing submission mutation", () => {
     expect(tables.listings[0].sourceRuleId).toBe("source_rule_bus_travel_v2");
   });
 
+  test("it should use deterministic tie-breakers when same-version persisted rules are both effective", async () => {
+    const sameVersionRuleB: SourceRule = {
+      ...bookmyshowEventRule,
+      id: "source_rule_bookmyshow_event_b",
+      version: 2,
+      decision: "AUTO_BLOCK",
+      internalStatus: "BLOCKED",
+      priceRule: { kind: "blocked" },
+      protectionLevel: "cannot_list",
+      blockedBehavior: "cannot_list",
+      effectiveFrom: "2026-06-01T00:00:00+05:30",
+    };
+    const sameVersionRuleA: SourceRule = {
+      ...sameVersionRuleB,
+      id: "source_rule_bookmyshow_event_a",
+      decision: "AUTO_WAITLIST",
+      internalStatus: "DEMAND_ONLY",
+      priceRule: { kind: "manual_review_above_face_value", maxMultiplier: 1 },
+      protectionLevel: "waitlist_only",
+      blockedBehavior: "waitlist_only",
+    };
+    const { ctx } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow(sameVersionRuleB), sourceRuleRow(sameVersionRuleA)],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft(),
+    })) as { listing: { sourceRuleId: string; sourceRuleVersion: number; ruleDecision: string } };
+
+    expect(result.listing.sourceRuleId).toBe("source_rule_bookmyshow_event_a");
+    expect(result.listing.sourceRuleVersion).toBe(2);
+    expect(result.listing.ruleDecision).toBe("NEEDS_MANUAL_REVIEW");
+  });
+
+  test("it should require manual review when persisted custom required or eligibility fields are missing", async () => {
+    const customRequiredRule: SourceRule = {
+      ...bookmyshowEventRule,
+      requiredFields: [...bookmyshowEventRule.requiredFields, "externalReference"],
+      eligibilityFields: [...bookmyshowEventRule.eligibilityFields, "sellerOwnershipConfirmed"],
+    };
+    const { ctx, tables } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow(customRequiredRule)],
+      },
+    );
+
+    const result = (await handlerOf(submitSellerListingForCurrentUser)(ctx, {
+      draft: firstSliceDraft(),
+    })) as { listing: { state: string; ruleDecision: string }; status: string };
+
+    expectUnderReviewCreated(result, tables);
+  });
+
   test("it should require manual review when a persisted face-value cap is exceeded", async () => {
     const { ctx, tables } = createVerifiedListingCtx();
 
@@ -507,6 +566,43 @@ describe("seller listing submission mutation", () => {
     })) as { listing: { state: string; ruleDecision: string }; status: string };
 
     expectUnderReviewCreated(result, tables);
+  });
+
+  test("checkout should load the historical source rule stored on the listing", async () => {
+    const oldRule: SourceRule = {
+      ...bookmyshowEventRule,
+      id: "source_rule_bookmyshow_event_v1_old",
+      version: 1,
+      transferMode: "OFFICIAL_TRANSFER",
+    };
+    const newRule: SourceRule = {
+      ...bookmyshowEventRule,
+      id: "source_rule_bookmyshow_event_v2_new",
+      version: 2,
+      transferMode: "CUSTOMER_MANAGED_HANDOFF",
+    };
+    const { ctx } = createMockListingCtx(
+      { subject: VERIFIED_PROVIDER_ID },
+      {
+        ...verifiedSellerRows({ phoneVerified: true }),
+        source_rules: [sourceRuleRow(oldRule), sourceRuleRow(newRule)],
+        listings: [
+          existingFirstSliceListingRow({
+            sourceRuleId: oldRule.id,
+            sourceRuleVersion: oldRule.version,
+            transferMode: oldRule.transferMode,
+          }),
+        ],
+      },
+    );
+
+    const result = (await handlerOf(getCheckoutView)(ctx, {
+      listingKey: "listing_user_internal_seller_1_seller_upload_arijit_singh_silver_pass",
+    })) as { sourceRule: { id: string; version: number; transferMode: string } };
+
+    expect(result.sourceRule.id).toBe(oldRule.id);
+    expect(result.sourceRule.version).toBe(1);
+    expect(result.sourceRule.transferMode).toBe("OFFICIAL_TRANSFER");
   });
 
   test("updates the seller's existing duplicate listing instead of creating another row", async () => {

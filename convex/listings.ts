@@ -11,9 +11,10 @@ import { v } from "convex/values";
 import { listingDocToMock, sourceRuleDocToMock } from "./model";
 import { requirePhoneVerifiedAppUser } from "./identity";
 import { calculateCheckoutTotal } from "../src/lib/mock/pricing";
-import { applyPriceRule } from "../src/lib/rules/evaluateRule";
+import { evaluateProvidedSourceRule } from "../src/lib/rules/evaluateRule";
+import { selectLatestEffectiveSourceRule } from "../src/lib/rules/sourceRuleSelection";
 import { validateSellerListing } from "../src/lib/validation/sellerValidation";
-import type { ListingState, MockListing, RuleDecision, SellerListingDraft, SourceRule } from "../src/lib/types";
+import type { ListingState, MockListing, SellerListingDraft, SourceRule } from "../src/lib/types";
 
 const DEMO_LISTING_KEY = "listing_bms_event_1";
 
@@ -51,45 +52,17 @@ function listingStateForDecision(decision: MockListing["ruleDecision"]): Listing
   return "under_review";
 }
 
-function hasRequiredValue(value: unknown): boolean {
-  if (value == null) return false;
-  if (typeof value === "string") return value.trim().length > 0;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return Number.isFinite(value) && value > 0;
-  return true;
-}
-
-function priceRuleRequiresReview(sourceRule: SourceRule, draft: SellerListingDraft): boolean {
-  return !applyPriceRule(sourceRule, draft.listingPrice, draft.faceValue).passed;
-}
-
-function decisionForPersistedRule(sourceRule: SourceRule, draft: SellerListingDraft): RuleDecision {
-  if (sourceRule.decision === "AUTO_BLOCK" || sourceRule.decision === "AUTO_WAITLIST") {
-    return sourceRule.decision;
-  }
-
-  if (sourceRule.decision === "NEEDS_MANUAL_REVIEW") return "NEEDS_MANUAL_REVIEW";
-
-  const explicitRequiredValues: Record<string, unknown> = {
-    faceValue: draft.faceValue,
-    listingPrice: draft.listingPrice,
-  };
-  const draftRequiredValues: Record<string, unknown> = {
+function draftRequiredFieldValues(draft: SellerListingDraft): Record<string, unknown> {
+  return {
     title: draft.title,
     eventOrTripStartAt: draft.eventOrTripStartAt,
     venueOrRoute: draft.venueOrRoute,
     quantity: draft.quantity,
+    faceValue: draft.faceValue,
+    listingPrice: draft.listingPrice,
     transferDeadlineAt: draft.transferDeadlineAt,
     sellerPromiseAccepted: draft.sellerPromiseAccepted,
   };
-  const requiredFields = [...new Set([...sourceRule.requiredFields, ...sourceRule.eligibilityFields])];
-  const hasMissingFields = requiredFields.some(
-    (field) => !hasRequiredValue(draftRequiredValues[field] ?? explicitRequiredValues[field]),
-  );
-
-  return hasMissingFields || sourceRule.manualReviewReasonCodes.length > 0 || priceRuleRequiresReview(sourceRule, draft)
-    ? "NEEDS_MANUAL_REVIEW"
-    : sourceRule.decision;
 }
 
 function normalizeFingerprint(duplicateFingerprint: string): string {
@@ -132,16 +105,6 @@ function uniqueListingKey(baseKey: string, sellerListings: Array<{ listingKey?: 
   return candidate;
 }
 
-function latestSourceRuleDoc<T extends { effectiveFrom: string; version: number }>(rules: T[]): T | null {
-  const now = Date.now();
-  return rules.reduce<T | null>((latest, rule) => {
-    const effectiveAt = Date.parse(rule.effectiveFrom);
-    if (!Number.isFinite(effectiveAt) || effectiveAt > now) return latest;
-    if (!latest || rule.version > latest.version) return rule;
-    return latest;
-  }, null);
-}
-
 function buildSubmittedListing(
   sellerId: string,
   draft: SellerListingDraft,
@@ -149,7 +112,12 @@ function buildSubmittedListing(
   listingKey = stableListingKey(sellerId, draft.duplicateFingerprint),
 ): MockListing {
   const normalizedFingerprint = normalizeFingerprint(draft.duplicateFingerprint);
-  const ruleDecision = decisionForPersistedRule(sourceRule, draft);
+  const evaluation = evaluateProvidedSourceRule({
+    rule: sourceRule,
+    listingPrice: draft.listingPrice,
+    faceValue: draft.faceValue,
+    requiredFieldValues: draftRequiredFieldValues(draft),
+  });
   const checkoutTotal = calculateCheckoutTotal(draft.listingPrice);
 
   return {
@@ -172,8 +140,8 @@ function buildSubmittedListing(
     transferMode: sourceRule.transferMode,
     transferDeadlineAt: draft.transferDeadlineAt,
     protectionDeadlineAt: draft.protectionDeadlineAt,
-    state: listingStateForDecision(ruleDecision),
-    ruleDecision,
+    state: listingStateForDecision(evaluation.decision),
+    ruleDecision: evaluation.decision,
     duplicateFingerprint: normalizedFingerprint,
   };
 }
@@ -288,7 +256,7 @@ export const submitSellerListingForCurrentUser = mutation({
         q.eq("source", args.draft.source).eq("category", args.draft.category),
       )
       .collect();
-    const sourceRuleDoc = latestSourceRuleDoc(sourceRuleDocs);
+    const sourceRuleDoc = selectLatestEffectiveSourceRule(sourceRuleDocs);
     if (!sourceRuleDoc) throw new Error("SOURCE_RULE_NOT_FOUND");
 
     const sourceRule = sourceRuleDocToMock(sourceRuleDoc);
