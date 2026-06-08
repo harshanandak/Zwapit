@@ -60,6 +60,23 @@ Branch: feat/clerk-auth-configuration
 - `bun scripts/e2e-seller.mjs`
   - Result: pass. Seller mock path completed.
 
+### Final Validation After Allowlist Fix
+
+- `bun run check`
+  - Result: pass. Astro reported 0 errors, 0 warnings, 11 existing CommonJS hints in dep-guard scripts.
+- `bun test`
+  - Result: 128 pass, 0 fail, 420 assertions.
+- `bun run build`
+  - Result: pass. Built 15 pages.
+- `bun audit`
+  - Result: pass. No vulnerabilities found.
+- `bun scripts/verify-first-visible-slice.mjs`
+  - Result: pass. Checked 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`
+  - Result: pass. Buyer mock path completed.
+- `bun scripts/e2e-seller.mjs`
+  - Result: pass. Seller mock path completed.
+
 ### Scope Drift
 
 - Command: `rg -n "Razorpay|real payments|payout setup|full KYC|admin expansion|demand discovery|category expansion" src convex .github .env.example docs/deploy docs/work/2026-06-08-clerk-auth-configuration package.json -g "*.ts" -g "*.astro" -g "*.md" -g "*.yml" -g "*.json" -g ".env.example"`
