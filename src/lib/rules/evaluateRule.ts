@@ -90,6 +90,7 @@ export function getBlockedBehavior(rule: SourceRule): SourceRule["blockedBehavio
 
 export function evaluateProvidedSourceRule(input: ProvidedSourceRuleEvaluationInput): SourceRuleEvaluationResult {
   const rule = input.rule;
+  // Keep numeric fields as evaluator-owned fallbacks so callers do not need to duplicate them in requiredFieldValues.
   const explicitRequiredValues: Record<string, unknown> = {
     faceValue: input.faceValue,
     listingPrice: input.listingPrice,

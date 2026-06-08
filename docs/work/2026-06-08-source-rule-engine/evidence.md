@@ -207,3 +207,28 @@ Full review validation:
 Validation note:
 
 - The first attempted full `bun test` and `bun run build` run was started in parallel and timed out at 120 seconds; it was discarded as a noisy runner issue. Both commands passed when rerun serially with clean evidence above.
+
+Additional CodeRabbit review:
+
+- Finding: same-version comparator direction could be misread and candidates could lack a stable identifier.
+- Fix: `src/lib/rules/sourceRuleSelection.ts` now requires `id` or `sourceRuleKey`, validates effective candidates at runtime, and documents that same-version ties prefer the lexically smallest canonical rule key.
+- Test: `src/lib/rules/__tests__/sourceRuleSelection.test.ts` now covers missing candidate identifiers.
+- Finding: `faceValue` and `listingPrice` were duplicated between Convex `requiredFieldValues` and evaluator-owned params.
+- Fix: `convex/listings.ts` no longer duplicates those numeric fields in `draftRequiredFieldValues`; `src/lib/rules/evaluateRule.ts` documents the evaluator fallback.
+- Finding considered but not changed: the Convex mutation uses `Date.now()` through `selectLatestEffectiveSourceRule()`; this is production-correct because persisted source-rule effectiveness must be evaluated at real mutation time. Unit tests continue to inject `now` in `sourceRuleSelection.test.ts`.
+
+Additional CodeRabbit validation:
+
+- `bun test src/lib/rules/__tests__/sourceRuleSelection.test.ts src/lib/rules/__tests__/evaluateRule.test.ts convex/__tests__/listingSubmission.test.ts`: pass, 41 tests, 0 failed, 159 expectations.
+- `bun run check`: pass, 0 errors, 11 CommonJS hints in dep-guard scripts.
+- `bun test`: pass, 124 tests, 0 failed, 414 expectations.
+- `bun run build`: pass, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: pass, checked 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: pass.
+- `bun scripts/e2e-seller.mjs`: pass.
+- Changed review-file scope search for excluded terms: no matches.
+- Provider-id owner search: listing ownership remains from `seller.appUserId`, with tests still asserting `sellerId` is not the provider id.
+
+Additional validation note:
+
+- One parallel `bun run build` run failed with `ENOENT ... dist/.prerender/.vite` while a full test run was also reading built output. The serial build passed immediately afterward, so the failure was treated as a local dist-output race, not a source regression.

@@ -58,8 +58,6 @@ function draftRequiredFieldValues(draft: SellerListingDraft): Record<string, unk
     eventOrTripStartAt: draft.eventOrTripStartAt,
     venueOrRoute: draft.venueOrRoute,
     quantity: draft.quantity,
-    faceValue: draft.faceValue,
-    listingPrice: draft.listingPrice,
     transferDeadlineAt: draft.transferDeadlineAt,
     sellerPromiseAccepted: draft.sellerPromiseAccepted,
   };

@@ -88,3 +88,21 @@ Full review gates:
 - `bun scripts/e2e-seller.mjs`: pass.
 - Scope-drift search across changed review files: no excluded-scope matches.
 - Provider-id owner search: app data owner ids remain internal app ids, not provider ids.
+
+Additional CodeRabbit review:
+
+- Fixed comparator readability and missing-identifier determinism in `src/lib/rules/sourceRuleSelection.ts`.
+- Fixed duplicated numeric required-field caller data in `convex/listings.ts`; `evaluateProvidedSourceRule()` remains the owner of `faceValue` and `listingPrice` fallbacks.
+- Added `sourceRuleSelection.test.ts` coverage for missing effective candidate identifiers.
+- Accepted without source change: the Convex mutation should use real current time for persisted source-rule effectiveness; deterministic clock injection remains covered in pure unit tests.
+
+Additional review gates:
+
+- `bun test src/lib/rules/__tests__/sourceRuleSelection.test.ts src/lib/rules/__tests__/evaluateRule.test.ts convex/__tests__/listingSubmission.test.ts`: pass, 41 tests.
+- `bun run check`: pass, 0 errors.
+- `bun test`: pass, 124 tests.
+- `bun run build`: pass, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: pass.
+- `bun scripts/e2e-buyer.mjs`: pass.
+- `bun scripts/e2e-seller.mjs`: pass.
+- Scope/provider searches: pass.

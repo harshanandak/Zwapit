@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { selectLatestEffectiveSourceRule } from "../sourceRuleSelection";
+import { selectLatestEffectiveSourceRule, type EffectiveSourceRuleCandidate } from "../sourceRuleSelection";
 
 interface CandidateRule {
   id: string;
@@ -43,5 +43,11 @@ describe("source rule selection", () => {
 
     expect(selectLatestEffectiveSourceRule(rules, now)?.id).toBe("newer-same-version");
     expect(selectLatestEffectiveSourceRule(rules.slice(0, 2), now)?.id).toBe("rule_a");
+  });
+
+  test("requires a canonical identifier for effective candidates", () => {
+    const rules = [{ version: 1, effectiveFrom: "2026-06-01T00:00:00+05:30" } as EffectiveSourceRuleCandidate];
+
+    expect(() => selectLatestEffectiveSourceRule(rules, now)).toThrow("SOURCE_RULE_IDENTIFIER_REQUIRED");
   });
 });
