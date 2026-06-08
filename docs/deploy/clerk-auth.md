@@ -17,9 +17,19 @@ Do not add direct provider SDK calls outside the provider runtime wrapper. Do no
 1. Create a Clerk application for Zwapit.
 2. Enable phone number auth/verification in Clerk.
 3. Activate Clerk's Convex integration.
-4. Copy the publishable key.
-5. Copy the Clerk issuer / Frontend API domain used by the Convex integration.
-6. Add local and production origins:
+4. In the Convex JWT template named `convex`, include the phone claims that Convex maps to `identity.phoneNumber` and `identity.phoneNumberVerified`:
+
+   ```json
+   {
+     "phone_number": "{{user.primary_phone_address}}",
+     "phone_number_verified": "{{user.phone_number_verified}}"
+   }
+   ```
+
+   Zwapit's protected buy/sell gates only accept Clerk phone verification when Convex receives `identity.phoneNumberVerified === true`.
+5. Copy the publishable key.
+6. Copy the Clerk issuer / Frontend API domain used by the Convex integration.
+7. Add local and production origins:
    - `http://localhost:4321`
    - `https://zwapitt.com`
    - `https://www.zwapitt.com`
@@ -72,7 +82,8 @@ After configuring Clerk and Convex:
 3. Sign in through Clerk.
 4. Use an unverified phone account and confirm the protected action stays gated.
 5. Verify the phone in Clerk and retry the saved action.
-6. Confirm Convex `users.appUserId` is internal and `auth_identities.providerUserId` holds the Clerk subject.
+6. Confirm Convex receives `identity.phoneNumberVerified === true` after Clerk phone verification.
+7. Confirm Convex `users.appUserId` is internal and `auth_identities.providerUserId` holds the Clerk subject.
 
 Run:
 

@@ -28,7 +28,7 @@ import AppShell from "../../components/AppShell.astro";
 
 <script>
   import { getClerkPublishableKey } from "../../lib/auth/authAdapter";
-  import { loadClerkRuntime, openClerkSignIn, openClerkUserProfile } from "../../lib/auth/providerRuntime";
+  import { isClerkSignedIn, loadClerkRuntime, openClerkSignIn, openClerkUserProfile } from "../../lib/auth/providerRuntime";
   import { getConvexClient, refreshConvexAuthTokenOnNextRequest } from "../../lib/convex/client";
   import { functionRefs } from "../../lib/convex/functionRefs";
 
@@ -82,8 +82,8 @@ import AppShell from "../../components/AppShell.astro";
     link.addEventListener("click", async (event) => {
       if (!hasClerkKey) return;
       event.preventDefault();
-      const clerk = await loadClerkRuntime();
-      if (clerk?.user) {
+      await loadClerkRuntime();
+      if (isClerkSignedIn()) {
         const phoneStatus = await getPhoneRequirementStatus();
         if (phoneStatus === "verified") {
           window.location.href = target;

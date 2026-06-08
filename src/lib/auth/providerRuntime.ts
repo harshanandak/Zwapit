@@ -22,6 +22,10 @@ export function getBrowserClerk(): ClerkRuntime | null {
   return (globalThis.window as typeof globalThis.window & { Clerk?: ClerkRuntime }).Clerk ?? null;
 }
 
+export function isClerkSignedIn(): boolean {
+  return getBrowserClerk()?.user != null;
+}
+
 export function loadClerkRuntime(publishableKey: string | undefined = getClerkPublishableKey()): Promise<ClerkRuntime | null> {
   if (!publishableKey || typeof globalThis.window === "undefined" || typeof document === "undefined") {
     return Promise.resolve(null);
@@ -45,6 +49,7 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
       try {
         await clerk?.load?.();
       } catch {
+        clerkPromise = null;
         resolve(null);
         return;
       }
@@ -52,7 +57,14 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
     };
 
     script.addEventListener("load", () => void finish(), { once: true });
-    script.addEventListener("error", () => resolve(null), { once: true });
+    script.addEventListener(
+      "error",
+      () => {
+        clerkPromise = null;
+        resolve(null);
+      },
+      { once: true },
+    );
     if (!existingScript) document.head.append(script);
   });
 
