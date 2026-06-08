@@ -105,7 +105,7 @@ export function evaluateProvidedSourceRule(input: ProvidedSourceRuleEvaluationIn
     manualReviewReasonCodes.push("MISSING_REQUIRED_FIELDS");
   }
 
-  if (!priceResult.passed && priceResult.reasonCode === "PRICE_ABOVE_FACE_VALUE" && rule.decision === "AUTO_APPROVE") {
+  if (!priceResult.passed && priceResult.reasonCode && rule.decision === "AUTO_APPROVE") {
     manualReviewReasonCodes.push(priceResult.reasonCode);
   }
 

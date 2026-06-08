@@ -168,3 +168,42 @@ Result:
 ## Next Stage
 
 Review PR #12 after GitHub checks and review comments settle.
+
+## Review Evidence
+
+PR:
+
+- https://github.com/harshanandak/Zwapit/pull/12
+
+Live PR status before review fix:
+
+- All GitHub Actions checks passed.
+- Cloudflare preview passed and deployed to `https://1d945d22-zwapit.harshananda57.workers.dev`.
+- SonarCloud failed quality gate: `7.2% Duplication on New Code` with 25 duplicated new lines.
+- SonarCloud duplication target: `src/lib/rules/__tests__/evaluateRule.test.ts`, duplicated against `src/lib/rules/sourceRules.ts`.
+- CodeRabbit status passed, review skipped because auto reviews are disabled.
+- Codex review finding: persisted `AUTO_APPROVE` rules with `priceRule.kind === "blocked"` ignored `BLOCKED_PRICE_RULE` and could remain `AUTO_APPROVE`.
+
+Review fix:
+
+- `src/lib/rules/evaluateRule.ts`: record any failed `PriceRuleResult.reasonCode` for `AUTO_APPROVE` persisted/source rules, including `BLOCKED_PRICE_RULE`.
+- `src/lib/rules/__tests__/evaluateRule.test.ts`: added blocked-price-rule coverage and derived the persisted test fixture from `getSourceRule("bookmyshow_event")` to remove the duplicated canonical rule literal flagged by SonarCloud.
+
+Focused review validation:
+
+- `bun test src/lib/rules/__tests__/evaluateRule.test.ts`: pass, 14 tests, 0 failed, 58 expectations.
+- `bun run check`: pass, 0 errors, 11 CommonJS hints in dep-guard scripts.
+
+Full review validation:
+
+- `bun test`: pass, 123 tests, 0 failed, 413 expectations.
+- `bun run build`: pass, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: pass, checked 15 contract routes.
+- `bun scripts/e2e-buyer.mjs`: pass, buyer mock path reached completed.
+- `bun scripts/e2e-seller.mjs`: pass, seller mock path reached completed.
+- Changed review-file scope search for excluded terms: no matches.
+- Provider-id owner search: `convex/listings.ts` continues to derive listing ownership from `seller.appUserId`; `convex/__tests__/listingSubmission.test.ts` still asserts persisted `sellerId` is not `VERIFIED_PROVIDER_ID`.
+
+Validation note:
+
+- The first attempted full `bun test` and `bun run build` run was started in parallel and timed out at 120 seconds; it was discarded as a noisy runner issue. Both commands passed when rerun serially with clean evidence above.

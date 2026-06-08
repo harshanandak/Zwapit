@@ -168,28 +168,9 @@ describe("local source rule engine", () => {
 
 describe("persisted source rule evaluation", () => {
   const basePersistedRule: SourceRule = {
+    ...getSourceRule("bookmyshow_event"),
     id: "source_rule_persisted_event_v4",
     version: 4,
-    source: "bookmyshow",
-    category: "event_ticket",
-    sourceCategoryKey: "bookmyshow_event",
-    decision: "AUTO_APPROVE",
-    internalStatus: "ALLOW",
-    transferMode: "OFFICIAL_TRANSFER",
-    transferability: "transferable",
-    protectionLevel: "protected_payment",
-    requiredFields: ["title", "eventOrTripStartAt", "venueOrRoute", "quantity", "faceValue", "listingPrice"],
-    eligibilityFields: ["sellerPromiseAccepted", "transferDeadlineAt"],
-    priceRule: {
-      kind: "face_value_cap",
-      maxMultiplier: 1,
-    },
-    payoutPolicy: {
-      releaseAfter: "buyer_confirmation_and_issue_window",
-      mockOnly: true,
-    },
-    blockedBehavior: "cannot_list",
-    manualReviewReasonCodes: [],
     effectiveFrom: "2026-06-01T00:00:00+05:30",
     lastVerifiedAt: "2026-06-01T00:00:00+05:30",
     verificationSourceUrlOrNote: "Persisted test rule.",
@@ -275,6 +256,22 @@ describe("persisted source rule evaluation", () => {
     expect(missingFields.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
     expect(priceCap.decision).toBe("NEEDS_MANUAL_REVIEW");
     expect(priceCap.manualReviewReasonCodes).toContain("PRICE_ABOVE_FACE_VALUE");
+  });
+
+  test("moves persisted auto-approve blocked price rules to manual review", () => {
+    const result = evaluateProvidedSourceRule({
+      rule: {
+        ...basePersistedRule,
+        priceRule: { kind: "blocked" },
+      },
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+
+    expect(result.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(result.internalStatus).toBe("AMBER");
+    expect(result.manualReviewReasonCodes).toContain("BLOCKED_PRICE_RULE");
   });
 
   test("preserves explicit manual-review persisted rules and their reason codes", () => {

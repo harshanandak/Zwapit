@@ -53,3 +53,38 @@ Known tooling caveat:
 ## Evaluator Verdict
 
 Implementation is ready for `/ship` when the user asks. No Codex implementation ownership was assigned outside the backend/test scope, and no Claude implementation ownership was assigned in this PR.
+
+## Review Stage
+
+PR #12 review found two still-valid issues:
+
+- Codex review: persisted `AUTO_APPROVE` rules with a blocked price rule did not record `BLOCKED_PRICE_RULE`.
+- SonarCloud: new-code duplication was 7.2% because the persisted-rule test fixture duplicated the canonical BookMyShow source rule literal.
+
+Review fix scope:
+
+- `src/lib/rules/evaluateRule.ts`
+- `src/lib/rules/__tests__/evaluateRule.test.ts`
+- `docs/work/2026-06-08-source-rule-engine/evidence.md`
+- `docs/work/2026-06-08-source-rule-engine/evaluator-report.md`
+
+Ownership check:
+
+- Pass. The review fix remained in Codex-owned backend/test/evidence files.
+- No Claude-owned UI files were changed.
+- No excluded payment, KYC, admin, demand, or category scope was added.
+
+Focused gates:
+
+- `bun test src/lib/rules/__tests__/evaluateRule.test.ts`: pass, 14 tests.
+- `bun run check`: pass, 0 errors.
+
+Full review gates:
+
+- `bun test`: pass, 123 tests.
+- `bun run build`: pass, 15 pages built.
+- `bun scripts/verify-first-visible-slice.mjs`: pass.
+- `bun scripts/e2e-buyer.mjs`: pass.
+- `bun scripts/e2e-seller.mjs`: pass.
+- Scope-drift search across changed review files: no excluded-scope matches.
+- Provider-id owner search: app data owner ids remain internal app ids, not provider ids.
