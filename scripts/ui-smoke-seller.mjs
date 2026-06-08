@@ -121,7 +121,8 @@ for (const [route, html] of [
   mustNot(route, html);
 }
 
-const promiseScriptPath = (promise ?? "").match(/<script type="module" src="\/([^"]+)"><\/script>/)?.[1];
+const promiseScriptMatches = [...(promise ?? "").matchAll(/<script type="module" src="\/([^"]+)"><\/script>/g)];
+const promiseScriptPath = promiseScriptMatches.at(-1)?.[1];
 
 class FakeElement {
   constructor({ textContent = "", hidden = false } = {}) {
@@ -157,7 +158,10 @@ class FakeAnchor extends FakeElement {
       },
     };
     const listener = this.listeners.get("click");
-    listener?.(event);
+    if (!listener) {
+      throw new Error("no click listener registered");
+    }
+    listener(event);
     return event;
   }
 }
