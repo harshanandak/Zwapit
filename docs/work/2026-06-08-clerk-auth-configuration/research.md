@@ -43,4 +43,4 @@ Zwapit already has an auth identity boundary and phone verification gates. The r
 
 ## Open Implementation Risk
 
-`convex/auth.config.ts` must not break local `bunx convex codegen` or default checks when `CLERK_JWT_ISSUER_DOMAIN` is absent. The implementation should make the config active only when the issuer env is present, and tests must cover absent and present env behavior.
+`convex/auth.config.ts` should follow the official Convex auth config pattern. Fresh verification found that Convex CLI treats `CLERK_JWT_ISSUER_DOMAIN` as mandatory as soon as the auth config reads it, even when a helper can return no providers in unit tests. That means `bunx convex codegen`, `bunx convex dev`, and deploy need the issuer env configured in Convex before they can pass.

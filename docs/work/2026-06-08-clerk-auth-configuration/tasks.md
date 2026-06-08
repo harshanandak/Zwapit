@@ -8,10 +8,10 @@ Branch: feat/clerk-auth-configuration
 Owner: Codex
 
 Files:
-- `src/lib/auth/clerkRuntime.ts`
+- `src/lib/auth/providerRuntime.ts`
 - `src/lib/convex/client.ts`
 - `src/pages/app/me.astro`
-- `src/lib/auth/__tests__/clerkRuntime.test.ts`
+- `src/lib/auth/__tests__/providerRuntime.test.ts`
 
 RED:
 - Add tests proving the wrapper exposes a pinned ClerkJS URL and returns `null` without browser/key runtime.
@@ -36,7 +36,7 @@ Files:
 - `convex/__tests__/authConfig.test.ts`
 
 RED:
-- Add tests proving absent `CLERK_JWT_ISSUER_DOMAIN` yields no providers and a present issuer yields one provider with `applicationID: "convex"`.
+- Add tests proving the config helper yields no providers without an issuer and a present issuer yields one provider with `applicationID: "convex"`.
 
 GREEN:
 - Implement `buildAuthConfig(...)` and default export.
@@ -45,7 +45,8 @@ REFACTOR:
 - Keep the config small and documented enough to avoid accidental hard-fail local setups.
 
 Acceptance:
-- Default no-env validation stays green.
+- Default app validation stays green.
+- Convex CLI codegen/dev/deploy documents `CLERK_JWT_ISSUER_DOMAIN` as required once the active config exists.
 - Clerk issuer env activates the Convex provider.
 
 ## Task 3 - Document Clerk/Convex/Cloudflare Setup
@@ -56,6 +57,8 @@ Files:
 - `.env.example`
 - `docs/deploy/clerk-auth.md`
 - `docs/deploy/cloudflare-workers.md` if needed for cross-link only
+- `.github/workflows/cloudflare-worker-preview.yml`
+- `.github/workflows/cloudflare-worker-production.yml`
 - `docs/work/2026-06-08-clerk-auth-configuration/evidence.md`
 
 RED:
@@ -64,6 +67,7 @@ RED:
 GREEN:
 - Add env examples for `PUBLIC_CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY` compatibility, and `CLERK_JWT_ISSUER_DOMAIN`.
 - Document dashboard setup: Clerk app, phone verification, Convex integration, Convex env, Cloudflare env.
+- Pass optional GitHub Actions build-time env values into Cloudflare preview and production builds without hardcoding credentials.
 
 REFACTOR:
 - Keep deployment docs as setup instructions, not product scope expansion.

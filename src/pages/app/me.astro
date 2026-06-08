@@ -27,6 +27,8 @@ import AppShell from "../../components/AppShell.astro";
 </AppShell>
 
 <script>
+  import { getClerkPublishableKey } from "../../lib/auth/authAdapter";
+  import { loadClerkRuntime, openClerkSignIn, openClerkUserProfile } from "../../lib/auth/providerRuntime";
   import { getConvexClient, refreshConvexAuthTokenOnNextRequest } from "../../lib/convex/client";
   import { functionRefs } from "../../lib/convex/functionRefs";
 
@@ -47,53 +49,9 @@ import AppShell from "../../components/AppShell.astro";
   const label = document.getElementById("auth-intent-label");
   const copy = document.getElementById("auth-intent-copy");
   const accountStepTarget = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const clerkPublishableKey = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-  const hasClerkKey = Boolean(clerkPublishableKey);
-  const clerkScriptId = "zwapit-clerk-js";
-  const clerkScriptUrl = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js";
-
-  type ClerkRuntime = {
-    load?: () => Promise<void>;
-    openSignIn?: (options: { afterSignInUrl: string; afterSignUpUrl: string; redirectUrl: string }) => Promise<void>;
-    openUserProfile?: () => Promise<void> | void;
-    user?: unknown;
-  };
+  const hasClerkKey = Boolean(getClerkPublishableKey());
 
   type PhoneRequirementStatus = "verified" | "required" | "unknown";
-
-  function getClerk(): ClerkRuntime | null {
-    return (window as Window & { Clerk?: ClerkRuntime }).Clerk ?? null;
-  }
-
-  function loadClerk(): Promise<ClerkRuntime | null> {
-    if (!clerkPublishableKey) return Promise.resolve(null);
-    const existingClerk = getClerk();
-    if (existingClerk) return Promise.resolve(existingClerk);
-    return new Promise((resolve) => {
-      const existingScript = document.getElementById(clerkScriptId) as HTMLScriptElement | null;
-      const script = existingScript ?? document.createElement("script");
-      script.id = clerkScriptId;
-      script.async = true;
-      script.crossOrigin = "anonymous";
-      script.dataset.clerkPublishableKey = clerkPublishableKey;
-      script.src = clerkScriptUrl;
-
-      const finish = async () => {
-        const clerk = getClerk();
-        try {
-          await clerk?.load?.();
-        } catch {
-          resolve(null);
-          return;
-        }
-        resolve(clerk ?? null);
-      };
-
-      script.addEventListener("load", () => void finish(), { once: true });
-      script.addEventListener("error", () => resolve(null), { once: true });
-      if (!existingScript) document.head.append(script);
-    });
-  }
 
   async function getPhoneRequirementStatus(): Promise<PhoneRequirementStatus> {
     const client = await getConvexClient();
@@ -124,7 +82,7 @@ import AppShell from "../../components/AppShell.astro";
     link.addEventListener("click", async (event) => {
       if (!hasClerkKey) return;
       event.preventDefault();
-      const clerk = await loadClerk();
+      const clerk = await loadClerkRuntime();
       if (clerk?.user) {
         const phoneStatus = await getPhoneRequirementStatus();
         if (phoneStatus === "verified") {
@@ -132,10 +90,10 @@ import AppShell from "../../components/AppShell.astro";
           return;
         }
         keepOnAccountStep();
-        await clerk.openUserProfile?.();
+        await openClerkUserProfile();
         return;
       }
-      await clerk?.openSignIn?.({
+      await openClerkSignIn({
         afterSignInUrl: accountStepTarget,
         afterSignUpUrl: accountStepTarget,
         redirectUrl: accountStepTarget,
