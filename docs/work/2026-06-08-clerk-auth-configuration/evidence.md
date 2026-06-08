@@ -47,8 +47,10 @@ Branch: feat/clerk-auth-configuration
 
 - `bun run check`
   - Result: pass. Astro reported 0 errors, 0 warnings, 11 existing CommonJS hints in dep-guard scripts.
-- `bun test`
-  - Result: 128 pass, 0 fail, 420 assertions.
+- Initial `bun test` after `/validate` rebase:
+  - Result: failed only `first visible slice has no forbidden scope drift`.
+  - Failure: `out-of-scope first-slice branch change: docs/deploy/clerk-auth.md`.
+  - Fix: added `docs/deploy/clerk-auth.md` to `scripts/verify-first-visible-slice.mjs` allowlist because this slice legitimately introduces the Clerk deployment setup doc.
 - `bun run build`
   - Result: pass. Built 15 pages.
 - `bun scripts/verify-first-visible-slice.mjs`

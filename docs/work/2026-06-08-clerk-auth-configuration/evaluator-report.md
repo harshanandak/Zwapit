@@ -19,4 +19,5 @@ Branch: feat/clerk-auth-configuration
 - Provider id separation: pass. Search found no provider id owner usage in `convex` or `src`.
 - Out-of-scope expansion: pass. No real payments, payout setup, full KYC, admin expansion, demand discovery, or category expansion code added.
 - Deployment setup docs: pass. `docs/deploy/clerk-auth.md` documents Clerk dashboard setup, Convex issuer env, frontend build env, GitHub Actions, and Cloudflare.
+- Validation-found allowlist fix: pass. `scripts/verify-first-visible-slice.mjs` now permits `docs/deploy/clerk-auth.md` as an in-scope deploy doc.
 - Important caveat: `bunx convex codegen` now requires `CLERK_JWT_ISSUER_DOMAIN` configured in the Convex deployment because an active auth config exists. This is expected and documented.
