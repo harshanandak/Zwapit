@@ -10,6 +10,6 @@ describe("Clerk runtime wrapper", () => {
 
   test("returns null outside the browser/runtime boundary", async () => {
     expect(getBrowserClerk()).toBeNull();
-    expect(await loadClerkRuntime(undefined)).toBeNull();
+    expect(await loadClerkRuntime()).toBeNull();
   });
 });

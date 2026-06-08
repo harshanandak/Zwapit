@@ -18,18 +18,18 @@ export type ClerkRuntime = {
 let clerkPromise: Promise<ClerkRuntime | null> | null = null;
 
 export function getBrowserClerk(): ClerkRuntime | null {
-  if (typeof window === "undefined") return null;
-  return (window as typeof window & { Clerk?: ClerkRuntime }).Clerk ?? null;
+  if (typeof globalThis.window === "undefined") return null;
+  return (globalThis.window as typeof globalThis.window & { Clerk?: ClerkRuntime }).Clerk ?? null;
 }
 
 export function loadClerkRuntime(publishableKey: string | undefined = getClerkPublishableKey()): Promise<ClerkRuntime | null> {
-  if (!publishableKey || typeof window === "undefined" || typeof document === "undefined") {
+  if (!publishableKey || typeof globalThis.window === "undefined" || typeof document === "undefined") {
     return Promise.resolve(null);
   }
 
   const existingClerk = getBrowserClerk();
   if (existingClerk) return Promise.resolve(existingClerk);
-  if (clerkPromise) return clerkPromise;
+  if (clerkPromise !== null) return clerkPromise;
 
   clerkPromise = new Promise((resolve) => {
     const existingScript = document.getElementById(CLERK_JS_SCRIPT_ID) as HTMLScriptElement | null;
