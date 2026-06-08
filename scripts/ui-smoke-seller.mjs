@@ -211,7 +211,7 @@ function installPromisePageDom({ checked }) {
     createElement(tagName) {
       return {
         tagName,
-        relList: { supports: () => false },
+        relList: { supports: (feature) => feature === "modulepreload" },
         set rel(value) {
           this._rel = value;
         },
