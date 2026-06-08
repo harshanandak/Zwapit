@@ -102,6 +102,8 @@ Branch: feat/clerk-auth-configuration
 - CodeRabbit noted a minor `clerk?.user` abstraction leak and a local Windows worktree path in evidence.
   - Fix: `src/pages/app/me.astro` now uses `isClerkSignedIn()` from the provider wrapper.
   - Fix: this evidence file now records the worktree as `.worktrees/clerk-auth-configuration`.
+- CodeRabbit noted `.env.example` could mislead developers into setting the Clerk issuer in `.env.local`.
+  - Fix: `.env.example` no longer includes a `CLERK_JWT_ISSUER_DOMAIN=` assignment and explicitly says to set it only through Convex.
 
 ### Review Validation
 
