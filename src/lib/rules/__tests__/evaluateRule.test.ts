@@ -3,10 +3,12 @@ import { describe, expect, test } from "bun:test";
 import {
   applyPriceRule,
   classifySourceCategory,
+  evaluateProvidedSourceRule,
   evaluateSourceRule,
   getBlockedBehavior,
   getSourceRule,
 } from "../evaluateRule";
+import type { SourceRule } from "../../types";
 
 describe("local source rule engine", () => {
   test("auto-approves the first BookMyShow event rule", () => {
@@ -161,5 +163,132 @@ describe("local source rule engine", () => {
     expect(rule.effectiveFrom).toBeTruthy();
     expect(rule.lastVerifiedAt).toBeTruthy();
     expect(rule.verificationSourceUrlOrNote).toBeTruthy();
+  });
+});
+
+describe("persisted source rule evaluation", () => {
+  const basePersistedRule: SourceRule = {
+    ...getSourceRule("bookmyshow_event"),
+    id: "source_rule_persisted_event_v4",
+    version: 4,
+    effectiveFrom: "2026-06-01T00:00:00+05:30",
+    lastVerifiedAt: "2026-06-01T00:00:00+05:30",
+    verificationSourceUrlOrNote: "Persisted test rule.",
+    createdBy: "system",
+  };
+
+  const completeValues = {
+    title: "Persisted event ticket",
+    eventOrTripStartAt: "2026-12-20T19:00:00+05:30",
+    venueOrRoute: "Bengaluru Arena",
+    quantity: 1,
+    transferDeadlineAt: "2026-12-20T18:00:00+05:30",
+    sellerPromiseAccepted: true,
+  };
+
+  test("evaluates a provided persisted rule without bundled sourceRules lookup", () => {
+    const result = evaluateProvidedSourceRule({
+      rule: basePersistedRule,
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+
+    expect(result.decision).toBe("AUTO_APPROVE");
+    expect(result.internalStatus).toBe("ALLOW");
+    expect(result.sourceRuleId).toBe("source_rule_persisted_event_v4");
+    expect(result.sourceRuleVersion).toBe(4);
+    expect(result.manualReviewReasonCodes).toEqual([]);
+  });
+
+  test("preserves blocked and waitlist persisted rule decisions", () => {
+    const blocked = evaluateProvidedSourceRule({
+      rule: {
+        ...basePersistedRule,
+        decision: "AUTO_BLOCK",
+        internalStatus: "BLOCKED",
+        priceRule: { kind: "blocked" },
+        blockedBehavior: "cannot_list",
+      },
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+    const waitlist = evaluateProvidedSourceRule({
+      rule: {
+        ...basePersistedRule,
+        decision: "AUTO_WAITLIST",
+        internalStatus: "DEMAND_ONLY",
+        blockedBehavior: "waitlist_only",
+      },
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+
+    expect(blocked.decision).toBe("AUTO_BLOCK");
+    expect(blocked.internalStatus).toBe("BLOCKED");
+    expect(waitlist.decision).toBe("AUTO_WAITLIST");
+    expect(waitlist.internalStatus).toBe("DEMAND_ONLY");
+  });
+
+  test("moves persisted auto-approve rules to manual review for missing fields and price caps", () => {
+    const missingFields = evaluateProvidedSourceRule({
+      rule: basePersistedRule,
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: {
+        ...completeValues,
+        title: "",
+        sellerPromiseAccepted: false,
+      },
+    });
+    const priceCap = evaluateProvidedSourceRule({
+      rule: basePersistedRule,
+      listingPrice: 2500,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+
+    expect(missingFields.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(missingFields.internalStatus).toBe("AMBER");
+    expect(missingFields.missingRequiredFields).toEqual(expect.arrayContaining(["title", "sellerPromiseAccepted"]));
+    expect(missingFields.manualReviewReasonCodes).toContain("MISSING_REQUIRED_FIELDS");
+    expect(priceCap.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(priceCap.manualReviewReasonCodes).toContain("PRICE_ABOVE_FACE_VALUE");
+  });
+
+  test("moves persisted auto-approve blocked price rules to manual review", () => {
+    const result = evaluateProvidedSourceRule({
+      rule: {
+        ...basePersistedRule,
+        priceRule: { kind: "blocked" },
+      },
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+
+    expect(result.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(result.internalStatus).toBe("AMBER");
+    expect(result.manualReviewReasonCodes).toContain("BLOCKED_PRICE_RULE");
+  });
+
+  test("preserves explicit manual-review persisted rules and their reason codes", () => {
+    const result = evaluateProvidedSourceRule({
+      rule: {
+        ...basePersistedRule,
+        decision: "NEEDS_MANUAL_REVIEW",
+        internalStatus: "AMBER",
+        manualReviewReasonCodes: ["UNVERIFIED_SOURCE"],
+      },
+      listingPrice: 2400,
+      faceValue: 2400,
+      requiredFieldValues: completeValues,
+    });
+
+    expect(result.decision).toBe("NEEDS_MANUAL_REVIEW");
+    expect(result.internalStatus).toBe("AMBER");
+    expect(result.manualReviewReasonCodes).toContain("UNVERIFIED_SOURCE");
   });
 });
