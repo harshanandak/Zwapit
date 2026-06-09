@@ -53,6 +53,37 @@ function createFakeScript(): FakeScript {
 
 const TEST_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZSQ=";
 
+function installFakeBrowser(browserWindow: Record<string, unknown> = {}): {
+  scriptById: Map<string, FakeScript>;
+  scripts: FakeScript[];
+  window: Record<string, unknown>;
+} {
+  const scripts: FakeScript[] = [];
+  const scriptById = new Map<string, FakeScript>();
+  Object.defineProperty(globalThis, "window", { configurable: true, value: browserWindow });
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      createElement: () => {
+        const script = createFakeScript();
+        scripts.push(script);
+        return script;
+      },
+      getElementById: (id: string) => {
+        const script = scriptById.get(id);
+        return script?.removed ? null : script;
+      },
+      head: {
+        append: (script: FakeScript) => {
+          scriptById.set(script.id, script);
+        },
+      },
+    },
+  });
+
+  return { scriptById, scripts, window: browserWindow };
+}
+
 describe("Clerk runtime wrapper", () => {
   afterEach(() => {
     restoreGlobalProperty("window", originalWindowDescriptor);
@@ -83,28 +114,7 @@ describe("Clerk runtime wrapper", () => {
   });
 
   test("retries Clerk loading after a script error", async () => {
-    const scripts: FakeScript[] = [];
-    const scriptById = new Map<string, FakeScript>();
-    Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      value: {
-        createElement: () => {
-          const script = createFakeScript();
-          scripts.push(script);
-          return script;
-        },
-        getElementById: (id: string) => {
-          const script = scriptById.get(id);
-          return script?.removed ? null : script;
-        },
-        head: {
-          append: (script: FakeScript) => {
-            scriptById.set(script.id, script);
-          },
-        },
-      },
-    });
+    const { scriptById, scripts } = installFakeBrowser();
 
     const firstLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
     scripts[0]?.emit("load");
@@ -126,29 +136,7 @@ describe("Clerk runtime wrapper", () => {
   });
 
   test("clears failed Clerk runtime when Clerk load rejects", async () => {
-    const scripts: FakeScript[] = [];
-    const scriptById = new Map<string, FakeScript>();
-    const browserWindow = { __internal_ClerkUICtor: {} };
-    Object.defineProperty(globalThis, "window", { configurable: true, value: browserWindow });
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      value: {
-        createElement: () => {
-          const script = createFakeScript();
-          scripts.push(script);
-          return script;
-        },
-        getElementById: (id: string) => {
-          const script = scriptById.get(id);
-          return script?.removed ? null : script;
-        },
-        head: {
-          append: (script: FakeScript) => {
-            scriptById.set(script.id, script);
-          },
-        },
-      },
-    });
+    const { scripts, window: browserWindow } = installFakeBrowser({ __internal_ClerkUICtor: {} });
 
     const firstLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
     scripts[0]?.emit("load");
