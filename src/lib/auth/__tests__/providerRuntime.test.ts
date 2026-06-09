@@ -119,6 +119,50 @@ describe("Clerk runtime wrapper", () => {
     expect(scripts[0]?.removed).toBe(true);
     scripts[2]?.emit("load");
     await Promise.resolve();
+    expect(scriptById.get(CLERK_UI_SCRIPT_ID)).toBe(scripts[2]);
+    expect(scripts).toHaveLength(4);
+    scripts[3]?.emit("error");
+    expect(await secondLoad).toBeNull();
+  });
+
+  test("clears failed Clerk runtime when Clerk load rejects", async () => {
+    const scripts: FakeScript[] = [];
+    const scriptById = new Map<string, FakeScript>();
+    const browserWindow = { __internal_ClerkUICtor: {} };
+    Object.defineProperty(globalThis, "window", { configurable: true, value: browserWindow });
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        createElement: () => {
+          const script = createFakeScript();
+          scripts.push(script);
+          return script;
+        },
+        getElementById: (id: string) => {
+          const script = scriptById.get(id);
+          return script?.removed ? null : script;
+        },
+        head: {
+          append: (script: FakeScript) => {
+            scriptById.set(script.id, script);
+          },
+        },
+      },
+    });
+
+    const firstLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
+    scripts[0]?.emit("load");
+    await Promise.resolve();
+    Object.assign(browserWindow, { Clerk: { load: async () => Promise.reject(new Error("load failed")) } });
+    scripts[1]?.emit("load");
+
+    expect(await firstLoad).toBeNull();
+    expect(getBrowserClerk()).toBeNull();
+    expect(scripts[1]?.removed).toBe(true);
+
+    const secondLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
+    scripts[2]?.emit("load");
+    await Promise.resolve();
     expect(scripts).toHaveLength(4);
     scripts[3]?.emit("error");
     expect(await secondLoad).toBeNull();

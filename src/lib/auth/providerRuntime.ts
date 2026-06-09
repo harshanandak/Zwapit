@@ -23,6 +23,14 @@ type ClerkRuntimeWindow = typeof globalThis.window & {
 
 let clerkPromise: Promise<ClerkRuntime | null> | null = null;
 
+function clearFailedClerkRuntime(script?: HTMLScriptElement): void {
+  clerkPromise = null;
+  script?.remove();
+  if (typeof globalThis.window !== "undefined") {
+    delete (globalThis.window as ClerkRuntimeWindow).Clerk;
+  }
+}
+
 export function getBrowserClerk(): ClerkRuntime | null {
   if (typeof globalThis.window === "undefined") return null;
   return (globalThis.window as ClerkRuntimeWindow).Clerk ?? null;
@@ -57,7 +65,7 @@ function loadScript(id: string, src: string, configure?: (script: HTMLScriptElem
 
     script.addEventListener("load", () => resolve(script), { once: true });
     script.addEventListener("error", () => reject(script), { once: true });
-    if (!existingScript) document.head.append(script);
+    document.head.append(script);
   });
 }
 
@@ -78,17 +86,23 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
       return;
     }
 
-    const finish = async () => {
+    const finish = async (script: HTMLScriptElement) => {
       const clerk = getBrowserClerk();
       try {
         await clerk?.load?.({ ui: { ClerkUI: (globalThis.window as ClerkRuntimeWindow).__internal_ClerkUICtor } });
       } catch {
-        clerkPromise = null;
-        delete (globalThis.window as ClerkRuntimeWindow).Clerk;
+        clearFailedClerkRuntime(script);
         resolve(null);
         return;
       }
-      resolve(clerk ?? null);
+
+      if (clerk == null) {
+        clearFailedClerkRuntime(script);
+        resolve(null);
+        return;
+      }
+
+      resolve(clerk);
     };
 
     loadScript(CLERK_UI_SCRIPT_ID, uiScriptUrl)
@@ -97,10 +111,9 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
           script.dataset.clerkPublishableKey = publishableKey;
         }),
       )
-      .then(() => void finish())
+      .then((script) => void finish(script))
       .catch((script: HTMLScriptElement) => {
-        clerkPromise = null;
-        script.remove();
+        clearFailedClerkRuntime(script);
         resolve(null);
       });
   });
