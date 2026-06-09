@@ -37,7 +37,10 @@ export interface ClerkAuthStateInput {
 
 function readPublicEnv(name: "PUBLIC_CLERK_PUBLISHABLE_KEY" | "VITE_CLERK_PUBLISHABLE_KEY"): string | undefined {
   try {
-    const value = import.meta.env[name];
+    const value =
+      name === "PUBLIC_CLERK_PUBLISHABLE_KEY"
+        ? import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY
+        : import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
     if (typeof value === "string" && value.length > 0) return value;
   } catch {
     // import.meta.env is not available in bun tests and some server contexts.

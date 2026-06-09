@@ -246,7 +246,10 @@ function installPromisePageDom({ checked }) {
       return [];
     },
   };
-  globalThis.window = { location: { pathname: "/app/sell/promise", search: "", href: "" } };
+  globalThis.window = {
+    __ZWAPIT_UI_SMOKE_PHONE_GATE_STATUS: "verified",
+    location: { hostname: "localhost", pathname: "/app/sell/promise", search: "", href: "" },
+  };
   globalThis.sessionStorage = createStorage();
   globalThis.localStorage = createStorage();
 

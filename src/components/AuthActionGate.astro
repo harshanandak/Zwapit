@@ -11,14 +11,8 @@ interface Props {
 const { class: className = "", id, label, state } = Astro.props;
 const gateHref = `/app/me?next=${encodeURIComponent(state.href)}`;
 const href = state.status === "allowed" ? state.href : gateHref;
-const text =
-  state.status === "allowed"
-    ? label
-    : state.status === "phone_verification_required"
-      ? "Verify phone to continue"
-      : "Sign in to continue";
 ---
 
 <a id={id} href={href} class={className} data-auth-action={state.action} data-auth-state={state.status}>
-  {text}
+  {label}
 </a>

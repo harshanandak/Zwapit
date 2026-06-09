@@ -53,7 +53,19 @@ export function accountStepUrl(next: string): string {
   return `/app/me?next=${encodeURIComponent(next)}`;
 }
 
+function readSmokePhoneGateStatus(): PhoneGateStatus | null {
+  if (typeof window !== "undefined") {
+    const smokeWindow = window as typeof window & { __ZWAPIT_UI_SMOKE_PHONE_GATE_STATUS?: PhoneGateStatus };
+    if (window.location.hostname === "localhost" && smokeWindow.__ZWAPIT_UI_SMOKE_PHONE_GATE_STATUS === "verified") {
+      return "verified";
+    }
+  }
+  return null;
+}
+
 export async function resolvePhoneGateStatus(): Promise<PhoneGateStatus> {
+  const smokeStatus = readSmokePhoneGateStatus();
+  if (smokeStatus) return smokeStatus;
   if (!isClerkAuthConfigured()) return "verified";
   const client = await getConvexClient();
   if (!client) return "unknown";
@@ -293,6 +305,9 @@ export async function submitSellerListingDraft(
   draft: SellerListingDraft,
 ): Promise<SellerListingSubmissionResult> {
   const localListing = localSubmittedListingFromDraft(draft);
+  if (readSmokePhoneGateStatus() === "verified") {
+    return { ok: true, blockers: [], listing: localListing, status: "mock" };
+  }
   if (!isClerkAuthConfigured()) return { ok: true, blockers: [], listing: localListing, status: "mock" };
 
   const client = await getConvexClient();
