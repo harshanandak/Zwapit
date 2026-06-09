@@ -16,8 +16,8 @@ let forceFreshTokenOnce = false;
 
 function configureClientAuth(client: ConvexClient): ConvexClient {
   if (!isClerkAuthConfigured()) return client;
-  client.setAuth(async () => {
-    const skipCache = forceFreshTokenOnce;
+  client.setAuth(async ({ forceRefreshToken }) => {
+    const skipCache = forceFreshTokenOnce || forceRefreshToken;
     forceFreshTokenOnce = false;
     return await getClerkConvexToken({ skipCache });
   });
