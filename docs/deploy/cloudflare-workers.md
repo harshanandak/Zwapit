@@ -20,9 +20,11 @@ Add this repository secret before relying on GitHub Actions deployments:
 - `CLOUDFLARE_API_TOKEN`
 
 The token needs permission to upload and deploy Workers for the account above.
-Because `wrangler.jsonc` declares Worker Routes for `zwapitt.com/*` and
-`www.zwapitt.com/*`, the token also needs zone-scoped `Workers Routes Write`
-permission so production deploys can create or update those route bindings.
+Production deploys do not create or update Worker Routes. Keep the
+`zwapitt.com/*` and `www.zwapitt.com/*` route bindings managed in the
+Cloudflare dashboard, pointing at the `zwapit` Worker. This keeps routine
+deploys scoped to Worker upload permissions and avoids requiring every deploy
+token to have zone route-write access.
 
 ## Required Auth Build Env
 
@@ -70,9 +72,11 @@ bunx wrangler versions upload --preview-alias pr-2 --tag pr-2
 
 Use `wrangler versions deploy` only when intentionally promoting a version to production traffic.
 
-`wrangler.jsonc` also declares Worker Routes for `zwapitt.com/*` and
-`www.zwapitt.com/*`. Routes are used instead of Worker Custom Domains because
-the hostnames already have DNS records in Cloudflare.
+The custom-domain Worker Routes are intentionally not stored in
+`wrangler.jsonc`. If the routes must be recreated, add them in the Cloudflare
+dashboard or run a one-off route-management command with a token that has the
+required zone route-write permission, then remove route declarations from the
+routine deploy config again.
 
 ## Source References
 

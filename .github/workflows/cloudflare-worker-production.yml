@@ -214,16 +214,8 @@ jobs:
           set -e
           printf '%s\n' "$wrangler_output" | tee wrangler-deploy.log
           if [ "$wrangler_status" -ne 0 ]; then
-            case "$wrangler_output" in
-              *Authentication*|*authenticating\ Wrangler*|*Invalid\ access\ token*|*code:\ 10000*|*code:\ 9109*|*Unauthorized*|*401*)
-                echo "Cloudflare production deploy skipped because Wrangler credentials were rejected."
-                echo "skipped=true" >> "$GITHUB_OUTPUT"
-                exit 0
-                ;;
-            esac
             exit "$wrangler_status"
           fi
-          echo "skipped=false" >> "$GITHUB_OUTPUT"
           url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev[^[:space:]]*' wrangler-deploy.log | head -n 1 || true)"
           if [ -z "$url" ]; then
             url="https://${CLOUDFLARE_WORKER_NAME}.${CLOUDFLARE_WORKERS_SUBDOMAIN}.workers.dev"
@@ -231,7 +223,6 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Mark deployment success
-        if: steps.deploy.outputs.skipped != 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
           DEPLOYMENT_ID: '${{ needs.production-start.outputs.deployment_id }}'
@@ -255,32 +246,6 @@ jobs:
               state: "success",
               target_url: process.env.DEPLOY_URL,
               description: "Production deployment has completed",
-              context: "Cloudflare Production - zwapit"
-            });
-
-      - name: Mark deployment skipped
-        if: steps.deploy.outputs.skipped == 'true'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
-        env:
-          DEPLOYMENT_ID: '${{ needs.production-start.outputs.deployment_id }}'
-        with:
-          script: |
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: Number(process.env.DEPLOYMENT_ID),
-              state: "inactive",
-              log_url: runUrl,
-              description: "Cloudflare Worker production deploy skipped because credentials were rejected"
-            });
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: "failure",
-              target_url: runUrl,
-              description: "Production skipped - Cloudflare credentials rejected",
               context: "Cloudflare Production - zwapit"
             });
 
