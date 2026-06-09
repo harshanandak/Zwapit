@@ -50,6 +50,7 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
         await clerk?.load?.();
       } catch {
         clerkPromise = null;
+        script.remove();
         resolve(null);
         return;
       }
@@ -61,6 +62,7 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
       "error",
       () => {
         clerkPromise = null;
+        script.remove();
         resolve(null);
       },
       { once: true },

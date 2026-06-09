@@ -17,12 +17,14 @@ function restoreGlobalProperty(name: "document" | "window", descriptor: Property
 type FakeScript = HTMLScriptElement & {
   emit: (type: "error" | "load") => void;
   listeners: Map<string, EventListenerOrEventListenerObject>;
+  removed: boolean;
 };
 
 function createFakeScript(): FakeScript {
   const listeners = new Map<string, EventListenerOrEventListenerObject>();
   return {
     dataset: {},
+    removed: false,
     emit(type: "error" | "load") {
       const listener = listeners.get(type);
       if (typeof listener === "function") {
@@ -34,6 +36,9 @@ function createFakeScript(): FakeScript {
     listeners,
     addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
       listeners.set(type, listener);
+    },
+    remove: function (this: FakeScript) {
+      this.removed = true;
     },
   } as unknown as FakeScript;
 }
@@ -65,6 +70,7 @@ describe("Clerk runtime wrapper", () => {
 
   test("retries Clerk loading after a script error", async () => {
     const scripts: FakeScript[] = [];
+    let currentScript: FakeScript | null = null;
     Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
     Object.defineProperty(globalThis, "document", {
       configurable: true,
@@ -72,9 +78,10 @@ describe("Clerk runtime wrapper", () => {
         createElement: () => {
           const script = createFakeScript();
           scripts.push(script);
+          currentScript = script;
           return script;
         },
-        getElementById: () => null,
+        getElementById: () => (currentScript?.removed ? null : currentScript),
         head: { append: () => undefined },
       },
     });
@@ -82,6 +89,7 @@ describe("Clerk runtime wrapper", () => {
     const firstLoad = loadClerkRuntime("pk_test_retry");
     scripts[0]?.emit("error");
     expect(await firstLoad).toBeNull();
+    expect(scripts[0]?.removed).toBe(true);
 
     const secondLoad = loadClerkRuntime("pk_test_retry");
     expect(scripts).toHaveLength(2);
