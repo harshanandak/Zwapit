@@ -32,6 +32,19 @@ Convex-backed flows need `PUBLIC_CONVEX_URL` available to the same build.
 Convex auth validation needs `CLERK_JWT_ISSUER_DOMAIN` on the Convex deployment,
 not in Cloudflare or the browser bundle. See `docs/deploy/clerk-auth.md`.
 
+Use environment-specific GitHub variables for deployed builds:
+
+- Preview/development builds:
+  - `PREVIEW_PUBLIC_CLERK_PUBLISHABLE_KEY`
+  - `PREVIEW_PUBLIC_CONVEX_URL`
+- Production builds:
+  - `PRODUCTION_PUBLIC_CLERK_PUBLISHABLE_KEY`
+  - `PRODUCTION_PUBLIC_CONVEX_URL`
+
+The generic `PUBLIC_CLERK_PUBLISHABLE_KEY` and `PUBLIC_CONVEX_URL` names remain
+workflow fallbacks only. Do not rely on them for normal preview/production
+separation.
+
 ## GitHub Actions
 
 - `.github/workflows/cloudflare-worker-preview.yml`
