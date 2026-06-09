@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { CLERK_JS_SCRIPT_URL, getBrowserClerk, isClerkSignedIn, loadClerkRuntime } from "../providerRuntime";
+import {
+  CLERK_JS_SCRIPT_ID,
+  CLERK_JS_SCRIPT_URL,
+  CLERK_UI_SCRIPT_ID,
+  getBrowserClerk,
+  getClerkUiScriptUrl,
+  isClerkSignedIn,
+  loadClerkRuntime,
+} from "../providerRuntime";
 
 const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
 const originalDocumentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -43,6 +51,8 @@ function createFakeScript(): FakeScript {
   } as unknown as FakeScript;
 }
 
+const TEST_PUBLISHABLE_KEY = "pk_test_Y2xlcmsuZXhhbXBsZSQ=";
+
 describe("Clerk runtime wrapper", () => {
   afterEach(() => {
     restoreGlobalProperty("window", originalWindowDescriptor);
@@ -52,6 +62,10 @@ describe("Clerk runtime wrapper", () => {
   test("pins ClerkJS instead of loading the drifting latest build", () => {
     expect(CLERK_JS_SCRIPT_URL).toContain("@clerk/clerk-js@6/");
     expect(CLERK_JS_SCRIPT_URL).not.toContain("@latest");
+  });
+
+  test("derives the Clerk UI bundle URL from the publishable key", () => {
+    expect(getClerkUiScriptUrl(TEST_PUBLISHABLE_KEY)).toBe("https://clerk.example/npm/@clerk/ui@1/dist/ui.browser.js");
   });
 
   test("returns null outside the browser/runtime boundary", async () => {
@@ -70,7 +84,7 @@ describe("Clerk runtime wrapper", () => {
 
   test("retries Clerk loading after a script error", async () => {
     const scripts: FakeScript[] = [];
-    let currentScript: FakeScript | null = null;
+    const scriptById = new Map<string, FakeScript>();
     Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
     Object.defineProperty(globalThis, "document", {
       configurable: true,
@@ -78,22 +92,35 @@ describe("Clerk runtime wrapper", () => {
         createElement: () => {
           const script = createFakeScript();
           scripts.push(script);
-          currentScript = script;
           return script;
         },
-        getElementById: () => (currentScript?.removed ? null : currentScript),
-        head: { append: () => undefined },
+        getElementById: (id: string) => {
+          const script = scriptById.get(id);
+          return script?.removed ? null : script;
+        },
+        head: {
+          append: (script: FakeScript) => {
+            scriptById.set(script.id, script);
+          },
+        },
       },
     });
 
-    const firstLoad = loadClerkRuntime("pk_test_retry");
-    scripts[0]?.emit("error");
-    expect(await firstLoad).toBeNull();
-    expect(scripts[0]?.removed).toBe(true);
-
-    const secondLoad = loadClerkRuntime("pk_test_retry");
-    expect(scripts).toHaveLength(2);
+    const firstLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
+    scripts[0]?.emit("load");
+    await Promise.resolve();
+    expect(scripts[0]?.id).toBe(CLERK_UI_SCRIPT_ID);
+    expect(scripts[1]?.id).toBe(CLERK_JS_SCRIPT_ID);
     scripts[1]?.emit("error");
+    expect(await firstLoad).toBeNull();
+    expect(scripts[1]?.removed).toBe(true);
+
+    const secondLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
+    expect(scripts[0]?.removed).toBe(true);
+    scripts[2]?.emit("load");
+    await Promise.resolve();
+    expect(scripts).toHaveLength(4);
+    scripts[3]?.emit("error");
     expect(await secondLoad).toBeNull();
   });
 });

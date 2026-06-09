@@ -2,11 +2,12 @@ import { getClerkPublishableKey } from "./authAdapter";
 
 export const CLERK_JS_SCRIPT_ID = "zwapit-clerk-js";
 export const CLERK_JS_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
+export const CLERK_UI_SCRIPT_ID = "zwapit-clerk-ui";
 
 type ClerkTokenTemplate = "convex";
 
 export type ClerkRuntime = {
-  load?: () => Promise<void>;
+  load?: (options?: { ui?: { ClerkUI?: unknown } }) => Promise<void>;
   openSignIn?: (options: { afterSignInUrl: string; afterSignUpUrl: string; redirectUrl: string }) => Promise<void>;
   openUserProfile?: () => Promise<void> | void;
   session?: {
@@ -15,15 +16,49 @@ export type ClerkRuntime = {
   user?: unknown;
 };
 
+type ClerkRuntimeWindow = typeof globalThis.window & {
+  Clerk?: ClerkRuntime;
+  __internal_ClerkUICtor?: unknown;
+};
+
 let clerkPromise: Promise<ClerkRuntime | null> | null = null;
 
 export function getBrowserClerk(): ClerkRuntime | null {
   if (typeof globalThis.window === "undefined") return null;
-  return (globalThis.window as typeof globalThis.window & { Clerk?: ClerkRuntime }).Clerk ?? null;
+  return (globalThis.window as ClerkRuntimeWindow).Clerk ?? null;
 }
 
 export function isClerkSignedIn(): boolean {
   return getBrowserClerk()?.user != null;
+}
+
+export function getClerkUiScriptUrl(publishableKey: string): string | null {
+  const encodedDomain = publishableKey.split("_")[2];
+  if (!encodedDomain) return null;
+
+  try {
+    const domain = globalThis.atob(encodedDomain).slice(0, -1);
+    return domain ? `https://${domain}/npm/@clerk/ui@1/dist/ui.browser.js` : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadScript(id: string, src: string, configure?: (script: HTMLScriptElement) => void): Promise<HTMLScriptElement> {
+  return new Promise((resolve, reject) => {
+    const existingScript = document.getElementById(id) as HTMLScriptElement | null;
+    existingScript?.remove();
+    const script = document.createElement("script");
+    script.id = id;
+    script.async = true;
+    script.crossOrigin = "anonymous";
+    script.src = src;
+    configure?.(script);
+
+    script.addEventListener("load", () => resolve(script), { once: true });
+    script.addEventListener("error", () => reject(script), { once: true });
+    if (!existingScript) document.head.append(script);
+  });
 }
 
 export function loadClerkRuntime(publishableKey: string | undefined = getClerkPublishableKey()): Promise<ClerkRuntime | null> {
@@ -36,38 +71,38 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
   if (clerkPromise !== null) return clerkPromise;
 
   clerkPromise = new Promise((resolve) => {
-    const existingScript = document.getElementById(CLERK_JS_SCRIPT_ID) as HTMLScriptElement | null;
-    const script = existingScript ?? document.createElement("script");
-    script.id = CLERK_JS_SCRIPT_ID;
-    script.async = true;
-    script.crossOrigin = "anonymous";
-    script.dataset.clerkPublishableKey = publishableKey;
-    script.src = CLERK_JS_SCRIPT_URL;
+    const uiScriptUrl = getClerkUiScriptUrl(publishableKey);
+    if (!uiScriptUrl) {
+      clerkPromise = null;
+      resolve(null);
+      return;
+    }
 
     const finish = async () => {
       const clerk = getBrowserClerk();
       try {
-        await clerk?.load?.();
+        await clerk?.load?.({ ui: { ClerkUI: (globalThis.window as ClerkRuntimeWindow).__internal_ClerkUICtor } });
       } catch {
         clerkPromise = null;
-        script.remove();
+        delete (globalThis.window as ClerkRuntimeWindow).Clerk;
         resolve(null);
         return;
       }
       resolve(clerk ?? null);
     };
 
-    script.addEventListener("load", () => void finish(), { once: true });
-    script.addEventListener(
-      "error",
-      () => {
+    loadScript(CLERK_UI_SCRIPT_ID, uiScriptUrl)
+      .then(() =>
+        loadScript(CLERK_JS_SCRIPT_ID, CLERK_JS_SCRIPT_URL, (script) => {
+          script.dataset.clerkPublishableKey = publishableKey;
+        }),
+      )
+      .then(() => void finish())
+      .catch((script: HTMLScriptElement) => {
         clerkPromise = null;
         script.remove();
         resolve(null);
-      },
-      { once: true },
-    );
-    if (!existingScript) document.head.append(script);
+      });
   });
 
   return clerkPromise;
