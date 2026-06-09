@@ -8,12 +8,19 @@ type ClerkTokenTemplate = "convex";
 
 export type ClerkRuntime = {
   load?: (options?: { ui?: { ClerkUI?: unknown } }) => Promise<void>;
-  openSignIn?: (options: { afterSignInUrl: string; afterSignUpUrl: string; redirectUrl: string }) => Promise<void>;
+  openSignIn?: (options: ClerkSignInOptions) => Promise<void>;
   openUserProfile?: () => Promise<void> | void;
   session?: {
     getToken: (options: { template: ClerkTokenTemplate; skipCache?: boolean }) => Promise<string | null>;
   } | null;
   user?: unknown;
+};
+
+type ClerkSignInOptions = {
+  fallbackRedirectUrl: string;
+  forceRedirectUrl: string;
+  signUpFallbackRedirectUrl: string;
+  signUpForceRedirectUrl: string;
 };
 
 type ClerkRuntimeWindow = typeof globalThis.window & {
@@ -136,11 +143,7 @@ export async function getClerkConvexToken(options: { skipCache?: boolean } = {})
   return (await clerk?.session?.getToken({ template: "convex", skipCache: options.skipCache })) ?? null;
 }
 
-export async function openClerkSignIn(options: {
-  afterSignInUrl: string;
-  afterSignUpUrl: string;
-  redirectUrl: string;
-}): Promise<void> {
+export async function openClerkSignIn(options: ClerkSignInOptions): Promise<void> {
   const clerk = await loadClerkRuntime();
   await clerk?.openSignIn?.(options);
 }

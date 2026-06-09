@@ -94,9 +94,10 @@ import AppShell from "../../components/AppShell.astro";
         return;
       }
       await openClerkSignIn({
-        afterSignInUrl: accountStepTarget,
-        afterSignUpUrl: accountStepTarget,
-        redirectUrl: accountStepTarget,
+        fallbackRedirectUrl: accountStepTarget,
+        forceRedirectUrl: accountStepTarget,
+        signUpFallbackRedirectUrl: accountStepTarget,
+        signUpForceRedirectUrl: accountStepTarget,
       });
     });
   }
