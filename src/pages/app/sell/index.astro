@@ -9,12 +9,6 @@ const ordersAction = getAuthActionState("sell", "/app/sell/orders", authState, {
 
 const ordersHref =
   ordersAction.status === "allowed" ? ordersAction.href : `/app/me?next=${encodeURIComponent(ordersAction.href)}`;
-const ordersTitle =
-  ordersAction.status === "allowed"
-    ? "Orders"
-    : ordersAction.status === "phone_verification_required"
-      ? "Verify phone to continue"
-      : "Sign in to continue";
 const ordersSubtitle =
   ordersAction.status === "allowed" ? "Tickets people have bought from you" : "Open your account to continue";
 ---
@@ -51,7 +45,7 @@ const ordersSubtitle =
       data-auth-state={ordersAction.status}
     >
       <span>
-        <span class="font-semibold text-foreground">{ordersTitle}</span>
+        <span class="font-semibold text-foreground">Orders</span>
         <span class="block text-xs text-muted-foreground">{ordersSubtitle}</span>
       </span>
       <span aria-hidden="true" class="text-muted-foreground">›</span>
