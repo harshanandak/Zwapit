@@ -153,7 +153,13 @@ describe("Clerk runtime wrapper", () => {
     const firstLoad = loadClerkRuntime(TEST_PUBLISHABLE_KEY);
     scripts[0]?.emit("load");
     await Promise.resolve();
-    Object.assign(browserWindow, { Clerk: { load: async () => Promise.reject(new Error("load failed")) } });
+    Object.assign(browserWindow, {
+      Clerk: {
+        load: async () => {
+          throw new Error("load failed");
+        },
+      },
+    });
     scripts[1]?.emit("load");
 
     expect(await firstLoad).toBeNull();

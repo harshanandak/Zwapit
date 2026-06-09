@@ -21,18 +21,20 @@ type ClerkRuntimeWindow = typeof globalThis.window & {
   __internal_ClerkUICtor?: unknown;
 };
 
+type ClerkScriptError = Error & { script?: HTMLScriptElement };
+
 let clerkPromise: Promise<ClerkRuntime | null> | null = null;
 
 function clearFailedClerkRuntime(script?: HTMLScriptElement): void {
   clerkPromise = null;
   script?.remove();
-  if (typeof globalThis.window !== "undefined") {
+  if (globalThis.window !== undefined) {
     delete (globalThis.window as ClerkRuntimeWindow).Clerk;
   }
 }
 
 export function getBrowserClerk(): ClerkRuntime | null {
-  if (typeof globalThis.window === "undefined") return null;
+  if (globalThis.window === undefined) return null;
   return (globalThis.window as ClerkRuntimeWindow).Clerk ?? null;
 }
 
@@ -64,13 +66,21 @@ function loadScript(id: string, src: string, configure?: (script: HTMLScriptElem
     configure?.(script);
 
     script.addEventListener("load", () => resolve(script), { once: true });
-    script.addEventListener("error", () => reject(script), { once: true });
+    script.addEventListener(
+      "error",
+      () => {
+        const error = new Error(`Failed to load script ${id}`) as ClerkScriptError;
+        error.script = script;
+        reject(error);
+      },
+      { once: true },
+    );
     document.head.append(script);
   });
 }
 
 export function loadClerkRuntime(publishableKey: string | undefined = getClerkPublishableKey()): Promise<ClerkRuntime | null> {
-  if (!publishableKey || typeof globalThis.window === "undefined" || typeof document === "undefined") {
+  if (!publishableKey || globalThis.window === undefined || globalThis.document === undefined) {
     return Promise.resolve(null);
   }
 
@@ -112,8 +122,8 @@ export function loadClerkRuntime(publishableKey: string | undefined = getClerkPu
         }),
       )
       .then((script) => void finish(script))
-      .catch((script: HTMLScriptElement) => {
-        clearFailedClerkRuntime(script);
+      .catch((error_: ClerkScriptError) => {
+        clearFailedClerkRuntime(error_.script);
         resolve(null);
       });
   });
