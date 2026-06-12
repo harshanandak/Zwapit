@@ -1,0 +1,1185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zwapit UI Revamp v2 — Glass & Metal (District-inspired)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0C0C10;
+    --bg-2:#121218;
+    --glass:rgba(255,255,255,.055);
+    --glass-2:rgba(255,255,255,.09);
+    --gb:rgba(255,255,255,.11);
+    --gb-strong:rgba(255,255,255,.2);
+    --text:#F5F4F7;
+    --dim:#A7A3B3;
+    --faint:#6E6A7C;
+    --purple:#A06BFF;
+    --pink:#FF4D9D;
+    --gold:#FFC44D;
+    --ice:#6FC8FF;
+    --lime:#B6FF5C;
+    --cyan:#4DE1FF;
+    --red:#FF6464;
+    --pink-soft:rgba(255,77,157,.14);
+    --cyan-soft:rgba(77,225,255,.12);
+    --lime-soft:rgba(182,255,92,.12);
+    --amber-soft:rgba(255,196,77,.12);
+    --r-lg:22px;
+    --r-md:16px;
+    --font-display:'Unbounded',sans-serif;
+    --font-body:'Space Grotesk',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:
+      radial-gradient(1100px 480px at 78% -8%, rgba(160,107,255,.08), transparent 62%),
+      radial-gradient(900px 480px at 8% 108%, rgba(77,225,255,.05), transparent 62%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    min-height:100vh;
+    padding:48px 32px 80px;
+  }
+
+  /* ---------- page chrome ---------- */
+  .page-head{max-width:1840px;margin:0 auto 8px}
+  .page-head .kicker{font-family:var(--font-display);font-size:11px;letter-spacing:.32em;
+    text-transform:uppercase;color:var(--purple)}
+  .page-head h1{font-family:var(--font-display);font-weight:700;font-size:clamp(22px,3vw,34px);
+    margin-top:10px;letter-spacing:-.01em}
+  .page-head p{color:var(--dim);margin-top:10px;max-width:780px;font-size:15px;line-height:1.55}
+  .swatches{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  .swatch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);
+    border:1px solid var(--gb);border-radius:999px;padding:6px 12px 6px 7px;
+    background:var(--glass);backdrop-filter:blur(10px)}
+  .swatch i{width:16px;height:16px;border-radius:50%;display:inline-block}
+
+  .frames{display:flex;gap:48px;overflow-x:auto;padding:36px 8px 24px;
+    max-width:1840px;margin:0 auto;scroll-snap-type:x proximity}
+  .frame-col{flex:0 0 auto;width:400px;scroll-snap-align:start;position:relative;
+    opacity:0;transform:translateY(18px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+  .frame-col:nth-child(1){animation-delay:.05s}
+  .frame-col:nth-child(2){animation-delay:.15s}
+  .frame-col:nth-child(3){animation-delay:.25s}
+  .frame-col:nth-child(4){animation-delay:.35s}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .frame-label{display:flex;align-items:baseline;gap:10px;margin:0 10px 14px}
+  .frame-label b{font-family:var(--font-display);font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+  .frame-label span{color:var(--faint);font-size:12px}
+  .frame-notes{margin:18px 10px 0;color:var(--dim);font-size:12.5px;line-height:1.6}
+  .frame-notes li{margin-left:16px;margin-top:4px}
+
+  /* ---------- District-style stage: ambient glow + metallic frame ---------- */
+  .stage{position:relative;padding:5px;display:flex;justify-content:center}
+  .stage::before{content:"";position:absolute;left:50%;top:42%;width:560px;height:680px;
+    transform:translate(-50%,-50%);pointer-events:none;
+    background:radial-gradient(48% 42% at 50% 42%, color-mix(in srgb, var(--acc) 26%, transparent), transparent 72%);
+    filter:blur(34px)}
+  .phone{
+    width:390px;height:844px;border-radius:44px;position:relative;overflow:hidden;z-index:1;
+    display:flex;flex-direction:column;
+    border:1.5px solid transparent;
+    background:
+      linear-gradient(var(--bg),var(--bg)) padding-box,
+      linear-gradient(168deg,
+        var(--acc) 0%,
+        rgba(255,255,255,.55) 9%,
+        color-mix(in srgb, var(--acc) 55%, #6a6a78) 22%,
+        rgba(90,90,104,.35) 48%,
+        rgba(40,40,50,.5) 70%,
+        var(--acc2,var(--acc)) 100%) border-box;
+    box-shadow:
+      0 0 0 7px #060608,
+      0 34px 90px rgba(0,0,0,.7),
+      0 0 90px color-mix(in srgb, var(--acc) 20%, transparent);
+  }
+  .screen{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;position:relative;
+    background:
+      radial-gradient(420px 280px at 50% -6%, color-mix(in srgb, var(--acc) 13%, transparent), transparent 70%),
+      var(--bg)}
+  .screen::-webkit-scrollbar{display:none}
+
+  .statusbar{display:flex;justify-content:space-between;align-items:center;
+    padding:16px 26px 6px;font-size:12.5px;font-weight:600}
+  .statusbar .pills{display:flex;gap:5px;color:var(--dim);font-size:11px}
+
+  /* ---------- glass + metal utilities ---------- */
+  .gl{background:linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.028));
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--gb);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 10px 30px rgba(0,0,0,.35)}
+  .metal{position:relative;overflow:hidden;isolation:isolate;
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.22), inset 0 -1px 0 rgba(0,0,0,.4), 0 14px 34px rgba(0,0,0,.45)}
+  .metal::after{content:"";position:absolute;inset:-40% -20%;z-index:1;pointer-events:none;
+    background:linear-gradient(105deg, transparent 42%, rgba(255,255,255,.16) 50%, transparent 58%);
+    transform:translateX(-70%);animation:sweep 5.5s ease-in-out infinite}
+  @keyframes sweep{0%,55%{transform:translateX(-70%)}85%,100%{transform:translateX(70%)}}
+
+  /* ---------- bottom nav (glass dock) ---------- */
+  .bnav{position:absolute;left:0;right:0;bottom:0;z-index:30;
+    display:grid;grid-template-columns:1fr 1fr 88px 1fr 1fr;align-items:end;
+    padding:10px 14px 20px;
+    background:linear-gradient(to top, rgba(12,12,16,.95) 55%, rgba(12,12,16,0))}
+  .bnav::before{content:"";position:absolute;inset:auto 14px 10px 14px;height:62px;border-radius:20px;
+    background:linear-gradient(160deg, rgba(255,255,255,.085), rgba(255,255,255,.03));
+    border:1px solid var(--gb);backdrop-filter:blur(18px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1);z-index:-1}
+  .bnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;
+    color:var(--faint);font-size:10.5px;font-weight:600;padding:10px 0 12px;letter-spacing:.02em}
+  .bnav a.on{color:var(--text)}
+  .bnav a svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .bnav a.on svg{stroke:var(--acc)}
+  .bnav .sellbtn{position:relative;top:-16px;justify-self:center;display:flex;flex-direction:column;
+    align-items:center;gap:5px;text-decoration:none;color:var(--text);font-size:10.5px;font-weight:700}
+  .bnav .sellbtn .orb{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;position:relative;
+    background:linear-gradient(140deg,#FF6FB1 0%,var(--pink) 38%,#A34DFF 100%);
+    border:1px solid rgba(255,255,255,.35);
+    box-shadow:inset 0 2px 4px rgba(255,255,255,.45), inset 0 -4px 8px rgba(120,0,60,.45),
+      0 8px 24px rgba(255,77,157,.45), 0 0 0 5px rgba(255,77,157,.1)}
+  .bnav .sellbtn svg{width:24px;height:24px;stroke:#1c0a14;stroke-width:2.4;fill:none;stroke-linecap:round}
+
+  /* ---------- shared atoms ---------- */
+  .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;
+    font-size:11px;font-weight:700;letter-spacing:.02em;white-space:nowrap;
+    backdrop-filter:blur(8px)}
+  .chip.protect{background:var(--lime-soft);color:var(--lime);border:1px solid rgba(182,255,92,.28)}
+  .chip.mode{background:var(--cyan-soft);color:var(--cyan);border:1px solid rgba(77,225,255,.25)}
+  .chip.wait{background:var(--amber-soft);color:var(--gold);border:1px solid rgba(255,196,77,.28)}
+  .chip.live{background:var(--pink-soft);color:var(--pink);border:1px solid rgba(255,77,157,.28)}
+  .dot{width:5px;height:5px;border-radius:50%;background:currentColor;display:inline-block}
+
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;
+    border-radius:16px;font-family:var(--font-body);font-weight:700;font-size:15px;letter-spacing:.01em}
+  .btn-primary{position:relative;overflow:hidden;
+    background:linear-gradient(140deg,#FF6FB1 0%,var(--pink) 40%,#A34DFF 115%);color:#1c0a14;
+    padding:16px 22px;border:1px solid rgba(255,255,255,.3);
+    box-shadow:inset 0 1.5px 3px rgba(255,255,255,.4), inset 0 -3px 6px rgba(120,0,60,.4),
+      0 10px 28px rgba(255,77,157,.35)}
+  .btn-ghost{color:var(--text);padding:13px 18px;font-size:13.5px;
+    background:linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.028));
+    border:1px solid var(--gb);backdrop-filter:blur(12px)}
+
+  /* District-style letterspaced divider */
+  .divider{display:flex;align-items:center;gap:12px;margin:26px 22px 13px;color:var(--dim);
+    font-size:10px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;white-space:nowrap}
+  .divider::before{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--gb-strong))}
+  .divider::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--gb-strong),transparent)}
+  .divider a{color:var(--acc);text-decoration:none;letter-spacing:.08em;font-size:11px}
+
+  /* ---------- HOME ---------- */
+  .home-top{padding:10px 22px 0;display:flex;justify-content:space-between;align-items:center}
+  .wordmark{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:.02em}
+  .wordmark em{font-style:normal;color:var(--pink)}
+  .city{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dim);
+    border-radius:999px;padding:7px 12px}
+  .searchbar{margin:16px 22px 0;display:flex;align-items:center;gap:10px;
+    border-radius:999px;padding:13px 18px;color:var(--faint);font-size:13.5px}
+  .searchbar svg{width:16px;height:16px;stroke:var(--faint);fill:none;stroke-width:2;stroke-linecap:round}
+
+  /* top tab row with underline (District pattern) */
+  .tabrow{display:flex;gap:22px;padding:18px 22px 0;overflow-x:auto;scrollbar-width:none;
+    border-bottom:1px solid var(--gb)}
+  .tabrow::-webkit-scrollbar{display:none}
+  .tabrow a{flex:0 0 auto;padding-bottom:11px;font-size:13px;font-weight:600;color:var(--faint);
+    text-decoration:none;position:relative}
+  .tabrow a.on{color:var(--text)}
+  .tabrow a.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2.5px;
+    border-radius:3px;background:var(--acc);box-shadow:0 0 12px var(--acc)}
+
+  /* story circles with neon ring */
+  .stories{display:flex;gap:16px;padding:18px 22px 2px;overflow-x:auto;scrollbar-width:none}
+  .stories::-webkit-scrollbar{display:none}
+  .story{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:8px;width:76px;text-decoration:none}
+  .story .ring{width:68px;height:68px;border-radius:50%;padding:2.5px;
+    background:conic-gradient(from 210deg, var(--acc), var(--acc2,var(--pink)), rgba(255,255,255,.5), var(--acc));
+    box-shadow:0 0 16px color-mix(in srgb, var(--acc) 35%, transparent)}
+  .story .ring .in{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;font-size:26px;
+    background:radial-gradient(circle at 32% 26%, #26262e, #121216 70%);border:2.5px solid var(--bg)}
+  .story span{font-size:11px;color:var(--dim);font-weight:600}
+
+  .carousel{display:flex;gap:14px;padding:6px 22px;overflow-x:auto;scrollbar-width:none}
+  .carousel::-webkit-scrollbar{display:none}
+  .poster-card{flex:0 0 246px;border-radius:var(--r-lg);overflow:hidden;text-decoration:none;color:var(--text)}
+  .poster{height:150px;position:relative;display:flex;align-items:flex-end;padding:14px;overflow:hidden}
+  .poster::after{content:"";position:absolute;inset:0;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.16'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;pointer-events:none}
+  .poster .art{position:absolute;inset:0}
+  .poster.p1 .art{background:linear-gradient(140deg,#FF4D9D 0%,#7B2BFF 70%,#16091F 100%)}
+  .poster.p2 .art{background:linear-gradient(140deg,#4DE1FF 0%,#2B50FF 65%,#0A0F26 100%)}
+  .poster.p3 .art{background:linear-gradient(140deg,#B6FF5C 0%,#0FA77B 65%,#05201A 100%)}
+  .poster .glyph{position:absolute;right:-14px;top:-18px;font-family:var(--font-display);font-weight:700;
+    font-size:96px;line-height:1;opacity:.18;letter-spacing:-.04em}
+  .poster .when{position:relative;z-index:2;border-radius:10px;padding:5px 10px;font-size:10.5px;font-weight:700;
+    letter-spacing:.04em;background:rgba(10,8,14,.45);backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.18)}
+  .poster .urgency{position:absolute;top:12px;left:12px;z-index:2;color:var(--gold);
+    background:rgba(10,8,14,.5);backdrop-filter:blur(10px);border:1px solid rgba(255,196,77,.3);
+    border-radius:999px;padding:4px 10px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+  .poster-card .body{padding:13px 14px 15px;border-top:none}
+  .poster-card h4{font-size:14.5px;font-weight:700;line-height:1.3}
+  .poster-card .venue{color:var(--dim);font-size:12px;margin-top:3px}
+  .poster-card .meta{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .poster-card .pricerow{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+  .poster-card .price{font-family:var(--font-display);font-size:16px;font-weight:600}
+  .poster-card .price small{display:block;font-family:var(--font-body);font-weight:600;font-size:10px;
+    color:var(--faint);letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px}
+  .poster-card .cut{color:var(--faint);text-decoration:line-through;font-size:11px;font-weight:600;margin-left:6px}
+  .poster-card .go{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;
+    background:var(--pink-soft);border:1px solid rgba(255,77,157,.3)}
+  .poster-card .go svg{width:15px;height:15px;stroke:var(--pink);stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+  .rowcard{display:flex;gap:13px;margin:0 22px 12px;padding:12px;border-radius:var(--r-md);
+    text-decoration:none;color:var(--text)}
+  .rowcard .mini{width:62px;height:78px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;
+    font-family:var(--font-display);font-weight:700;font-size:22px;color:rgba(255,255,255,.85);
+    border:1px solid rgba(255,255,255,.16)}
+  .rowcard .mini.m1{background:linear-gradient(160deg,#FFC44D,#FF5C39 80%)}
+  .rowcard .mini.m2{background:linear-gradient(160deg,#A34DFF,#311B5E 85%)}
+  .rowcard .info{flex:1;min-width:0}
+  .rowcard h5{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rowcard .sub{color:var(--dim);font-size:11.5px;margin-top:2px}
+  .rowcard .meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .rowcard .right{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;flex:0 0 auto}
+  .rowcard .price{font-family:var(--font-display);font-size:14px;font-weight:600}
+  .seller-tick{display:inline-flex;align-items:center;gap:4px;color:var(--cyan);font-size:10.5px;font-weight:700}
+
+  /* metallic trust banner (one8-premiere style) */
+  .trust-metal{margin:20px 22px 0;border-radius:var(--r-lg);padding:16px;display:flex;gap:13px;align-items:center;
+    background:linear-gradient(118deg,#0D3534 0%,#1F8A7D 46%,#0C2B33 100%)}
+  .trust-metal .shield{width:44px;height:44px;border-radius:14px;flex:0 0 auto;display:grid;place-items:center;
+    background:rgba(255,255,255,.14);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.3)}
+  .trust-metal .shield svg{width:21px;height:21px;stroke:#D9FFEF;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .trust-metal b{font-size:13px;display:block;color:#EFFFF8}
+  .trust-metal span{font-size:11.5px;color:#B8E6D6;line-height:1.45;display:block;margin-top:3px}
+
+  /* ---------- DEMAND-FIRST: wants, requests, matches ---------- */
+  .want-card{flex:0 0 196px;border-radius:var(--r-md);padding:13px 14px;text-decoration:none;color:var(--text)}
+  .want-card .fire{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:#FF8A5C;display:flex;align-items:center;gap:5px}
+  .want-card h6{font-size:13px;font-weight:700;margin-top:6px;line-height:1.35}
+  .want-card .budget{font-size:11px;color:var(--dim);margin-top:3px}
+  .want-card .sellnow{margin-top:11px;display:inline-flex;border-radius:10px;padding:7px 12px;
+    font-size:11px;font-weight:800;color:#1c0f08;
+    background:linear-gradient(140deg,#FFB68A 0%,#FF8A5C 50%,#E85D2F 110%);
+    border:1px solid rgba(255,255,255,.35);
+    box-shadow:inset 0 1.5px 2px rgba(255,255,255,.45), 0 6px 16px rgba(255,138,92,.3)}
+
+  .req-cta{margin:18px 22px 0;border-radius:var(--r-lg);padding:17px;display:flex;align-items:center;gap:13px;
+    border:1px solid rgba(255,138,92,.3);
+    background:radial-gradient(300px 120px at 12% 0%, rgba(255,138,92,.14), transparent 70%),
+      linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    backdrop-filter:blur(12px)}
+  .req-cta .em{font-size:26px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+  .req-cta b{font-size:13px;display:block}
+  .req-cta span{font-size:11.5px;color:var(--dim);display:block;margin-top:2px;line-height:1.45}
+  .req-cta .go{margin-left:auto;flex:0 0 auto;border-radius:12px;padding:10px 14px;font-size:11.5px;
+    font-weight:800;color:#1c0f08;text-decoration:none;
+    background:linear-gradient(140deg,#FFB68A,#FF8A5C 50%,#E85D2F 110%);
+    border:1px solid rgba(255,255,255,.35);
+    box-shadow:inset 0 1.5px 2px rgba(255,255,255,.45), 0 8px 18px rgba(255,138,92,.3)}
+
+  .buyerwait{margin:16px 22px 0;display:flex;align-items:center;gap:13px;border-radius:var(--r-md);
+    padding:14px 16px;text-decoration:none;color:var(--text);
+    background:linear-gradient(115deg,#3A2407 0%,#8A5A16 48%,#2A1A05 100%)}
+  .buyerwait .led{width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);flex:0 0 auto}
+  .buyerwait b{font-size:13px;display:block;color:#FFF3DD}
+  .buyerwait span{font-size:11.5px;color:#E2C28A;display:block;margin-top:2px;line-height:1.45}
+  .buyerwait .arrow{margin-left:auto;color:#C19A55}
+
+  .catres{display:flex;gap:12px;margin:0 22px 10px;padding:12px 14px;border-radius:var(--r-md);align-items:center}
+  .catres .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:19px;
+    background:rgba(255,255,255,.07);border:1px solid var(--gb);flex:0 0 auto}
+  .catres .tx{min-width:0}
+  .catres b{font-size:13px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .catres .s{font-size:11px;color:var(--dim);display:block;margin-top:2px}
+  .catres .srcb{margin-left:auto;flex:0 0 auto;font-size:8.5px;font-weight:800;letter-spacing:.08em;
+    padding:4px 7px;border-radius:6px;background:rgba(255,255,255,.07);border:1px solid var(--gb);color:var(--dim)}
+  .catres.sel{border:1px solid rgba(255,138,92,.55);box-shadow:0 0 20px rgba(255,138,92,.16)}
+  .catres.sel .srcb{color:#FF8A5C;border-color:rgba(255,138,92,.4)}
+
+  .formrow{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-top:1px solid var(--gb)}
+  .formrow:first-of-type{border-top:none}
+  .formrow .lbl{font-size:12px;color:var(--dim);font-weight:600}
+  .formrow .val{font-family:var(--font-display);font-size:15px;font-weight:600}
+  .stepper{display:flex;align-items:center;gap:14px}
+  .stepper button{width:30px;height:30px;border-radius:10px;color:var(--text);font-weight:800;cursor:pointer;
+    background:rgba(255,255,255,.07);border:1px solid var(--gb-strong)}
+  .stepper b{font-family:var(--font-display);font-size:15px}
+
+  .matchbar{margin:16px 22px 0;display:flex;gap:10px;align-items:center;border-radius:14px;padding:12px 14px;
+    background:var(--lime-soft);border:1px solid rgba(182,255,92,.3);font-size:12px;color:var(--lime);font-weight:700}
+  .matchbar .arrow{margin-left:auto}
+
+  .reqcard{margin:16px 22px 0;border-radius:var(--r-lg);overflow:hidden}
+  .reqcard.hot{border:1px solid transparent;
+    background:
+      linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.028)) padding-box,
+      linear-gradient(160deg,#FF8A5C 0%,rgba(255,255,255,.4) 20%,rgba(120,70,40,.3) 50%,rgba(255,138,92,.5) 100%) border-box}
+  .reqcard .rhead{display:flex;gap:12px;padding:14px 16px;align-items:center}
+  .reqcard .emoji{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-size:21px;
+    background:rgba(255,255,255,.07);border:1px solid var(--gb);flex:0 0 auto}
+  .reqcard .rhead h5{font-size:14px;font-weight:700}
+  .reqcard .rhead .sub{font-size:11.5px;color:var(--dim);margin-top:3px}
+  .reqcard .rhead .chip{margin-left:auto;flex:0 0 auto}
+  .matchrow{display:flex;align-items:center;gap:11px;padding:11px 16px;border-top:1px solid var(--gb)}
+  .matchrow .p{font-family:var(--font-display);font-size:14px;font-weight:600;flex:0 0 auto}
+  .matchrow .d{flex:1;font-size:11px;color:var(--dim);line-height:1.4;min-width:0}
+  .matchrow .buy{flex:0 0 auto;border-radius:10px;padding:8px 13px;font-size:11.5px;font-weight:800;cursor:pointer;
+    color:#1c0a14;border:1px solid rgba(255,255,255,.3);
+    background:linear-gradient(140deg,#FF6FB1 0%,var(--pink) 40%,#A34DFF 115%);
+    box-shadow:inset 0 1.5px 2px rgba(255,255,255,.4), 0 6px 16px rgba(255,77,157,.3)}
+  .matchrow .buy.ghost{color:var(--text);background:rgba(255,255,255,.07);border:1px solid var(--gb-strong);box-shadow:none}
+  .resv{display:flex;align-items:center;gap:8px;margin:10px 16px 13px;padding:9px 12px;border-radius:11px;
+    background:var(--amber-soft);border:1px solid rgba(255,196,77,.28);font-size:11px;color:var(--gold);font-weight:700}
+  .resv b{font-variant-numeric:tabular-nums;font-weight:800}
+  .qline{padding:2px 16px 12px;font-size:11.5px;color:var(--dim);line-height:1.55;border-top:1px solid var(--gb);padding-top:12px}
+  .qline .qpos{color:#FF8A5C;font-weight:800}
+  .reqactions{display:flex;gap:9px;padding:0 16px 15px}
+  .reqactions .btn{flex:1;padding:10px 0;font-size:12px;border-radius:11px}
+
+  /* ---------- LISTING DETAIL ---------- */
+  .hero{height:300px;position:relative;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+  .hero .art{position:absolute;inset:0;background:linear-gradient(155deg,#FF4D9D -10%,#7B2BFF 55%,#0C0C10 100%)}
+  .hero::after{content:"";position:absolute;inset:0;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.14'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;pointer-events:none}
+  .hero .fade{position:absolute;inset:auto 0 0 0;height:140px;background:linear-gradient(to top,var(--bg),transparent)}
+  .hero .glyph{position:absolute;right:-30px;top:6px;font-family:var(--font-display);font-weight:700;
+    font-size:170px;line-height:1;opacity:.14;letter-spacing:-.05em}
+  .hero .topbar{position:relative;z-index:3;display:flex;justify-content:space-between;padding:14px 18px}
+  .iconbtn{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;
+    background:rgba(12,12,16,.4);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.22);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+  .iconbtn svg{width:17px;height:17px;stroke:var(--text);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .hero .headline{position:relative;z-index:3;padding:0 22px 18px}
+  .hero .headline .chips{display:flex;gap:7px;margin-bottom:10px}
+  .hero h2{font-family:var(--font-display);font-size:22px;font-weight:700;line-height:1.22;letter-spacing:-.01em}
+  .hero .sub{color:#D9D4E4;font-size:13px;margin-top:7px}
+
+  .panel{margin:16px 22px 0;border-radius:var(--r-lg);overflow:hidden}
+  .panel .head{display:flex;align-items:center;gap:9px;padding:14px 16px 0;font-size:10px;font-weight:800;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  .trust-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--gb);margin-top:12px}
+  .trust-cell{background:rgba(18,18,24,.85);padding:14px 16px}
+  .trust-cell .k{font-size:10.5px;color:var(--faint);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .trust-cell .v{margin-top:5px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+  .trust-cell .v.cy{color:var(--cyan)} .trust-cell .v.li{color:var(--lime)}
+  .trust-cell .d{margin-top:3px;font-size:11px;color:var(--dim);line-height:1.45}
+
+  .sellerrow{display:flex;align-items:center;gap:12px;padding:14px 16px}
+  .avatar{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
+    font-family:var(--font-display);font-weight:700;font-size:15px;color:#0c1016;
+    background:linear-gradient(140deg,#9FE6FF 0%,#4DE1FF 40%,#A34DFF 100%);
+    border:1px solid rgba(255,255,255,.4);
+    box-shadow:inset 0 1.5px 3px rgba(255,255,255,.6), inset 0 -3px 6px rgba(20,40,90,.4)}
+  .sellerrow .who b{font-size:13.5px;display:flex;align-items:center;gap:6px}
+  .sellerrow .who span{font-size:11.5px;color:var(--dim);display:block;margin-top:2px}
+  .sellerrow .rating{margin-left:auto;display:flex;align-items:center;gap:4px;border-radius:10px;
+    padding:6px 10px;font-size:12px;font-weight:800;color:var(--gold);
+    background:var(--amber-soft);border:1px solid rgba(255,196,77,.25)}
+
+  .pricelist{padding:6px 16px 14px}
+  .pricelist .li{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);padding:7px 0}
+  .pricelist .li b{color:var(--text);font-weight:600}
+  .pricelist .li.total{border-top:1px dashed var(--gb-strong);margin-top:6px;padding-top:13px;font-size:14.5px}
+  .pricelist .li.total b{font-family:var(--font-display);font-size:17px}
+  .pricelist .note{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.5}
+
+  .stickybar{position:absolute;left:0;right:0;bottom:0;z-index:30;padding:14px 18px 20px;
+    background:linear-gradient(to top, rgba(12,12,16,.96) 55%, rgba(12,12,16,0))}
+  .stickybar .inner{display:flex;gap:12px;align-items:center;border-radius:22px;padding:12px;
+    background:linear-gradient(160deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+    border:1px solid var(--gb);backdrop-filter:blur(18px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
+  .stickybar .total{flex:0 0 auto;padding-left:8px}
+  .stickybar .total small{display:block;font-size:10px;color:var(--faint);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .stickybar .total b{font-family:var(--font-display);font-size:19px}
+  .stickybar .btn-primary{flex:1;padding:14px 18px}
+
+  /* ---------- MY TICKETS ---------- */
+  .seg{display:flex;gap:6px;margin:14px 22px 0;border-radius:16px;padding:5px}
+  .seg button{flex:1;border:none;border-radius:11px;padding:9px 0;font-family:var(--font-body);
+    font-size:12.5px;font-weight:700;background:transparent;color:var(--faint);cursor:pointer}
+  .seg button.on{color:var(--text);background:linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.05));
+    border:1px solid var(--gb-strong);box-shadow:inset 0 1px 0 rgba(255,255,255,.14), 0 2px 10px rgba(0,0,0,.35)}
+
+  .stub{margin:16px 22px 0;position:relative;filter:drop-shadow(0 16px 32px rgba(0,0,0,.5))}
+  .stub .card{border-radius:var(--r-lg);overflow:hidden;
+    background:linear-gradient(165deg, #1B1B23 0%, #131318 55%, #17171E 100%);
+    border:1px solid var(--gb);
+    -webkit-mask:radial-gradient(circle 11px at 0 var(--notch), transparent 98%, black) left/51% 100% no-repeat,
+                 radial-gradient(circle 11px at 100% var(--notch), transparent 98%, black) right/51% 100% no-repeat;
+    mask:radial-gradient(circle 11px at 0 var(--notch), transparent 98%, black) left/51% 100% no-repeat,
+         radial-gradient(circle 11px at 100% var(--notch), transparent 98%, black) right/51% 100% no-repeat}
+  .stub.hot .card{border:1px solid transparent;
+    background:
+      linear-gradient(165deg,#1B1B23 0%,#131318 55%,#17171E 100%) padding-box,
+      linear-gradient(160deg, var(--gold) 0%, rgba(255,255,255,.4) 18%, rgba(120,100,60,.3) 45%, rgba(255,196,77,.5) 100%) border-box}
+  .stub .card::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(115deg, rgba(255,255,255,.06) 0%, transparent 30%)}
+  .stub .topband{display:flex;gap:13px;padding:15px 16px;position:relative}
+  .stub .mini{width:58px;height:72px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;
+    font-family:var(--font-display);font-weight:700;font-size:20px;color:rgba(255,255,255,.85);
+    background:linear-gradient(160deg,#FF4D9D,#7B2BFF 85%);border:1px solid rgba(255,255,255,.2)}
+  .stub .mini.done{background:linear-gradient(160deg,#46414f,#221f2b 85%)}
+  .stub h5{font-size:14.5px;font-weight:700}
+  .stub .sub{font-size:11.5px;color:var(--dim);margin-top:3px}
+  .stub .chips{display:flex;gap:6px;margin-top:9px}
+  .perf{display:flex;align-items:center;gap:8px;padding:0 18px}
+  .perf .ln{flex:1;border-top:2px dashed var(--gb-strong)}
+  .stub .botband{padding:13px 16px 16px;position:relative}
+
+  .steps{display:flex;align-items:center;margin-top:2px}
+  .step{display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto;width:64px}
+  .step .nub{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+    background:rgba(255,255,255,.06);border:1.5px solid var(--gb-strong);font-size:11px;color:var(--faint);font-weight:800}
+  .step.done .nub{background:var(--lime-soft);border-color:rgba(182,255,92,.5)}
+  .step.done .nub svg{width:12px;height:12px;stroke:var(--lime);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .step.now .nub{background:var(--pink-soft);border-color:var(--pink);color:var(--pink);
+    box-shadow:0 0 0 4px rgba(255,77,157,.12);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(255,77,157,.12)}50%{box-shadow:0 0 0 7px rgba(255,77,157,.05)}}
+  .step span{font-size:9.5px;color:var(--faint);font-weight:700;text-align:center;line-height:1.25}
+  .step.done span,.step.now span{color:var(--dim)}
+  .step-ln{flex:1;height:2px;background:var(--gb-strong);margin-top:-18px;min-width:8px}
+  .step-ln.fill{background:linear-gradient(90deg,var(--lime),var(--pink))}
+
+  .duebox{margin-top:13px;display:flex;align-items:center;gap:10px;border-radius:12px;padding:10px 13px;
+    background:var(--amber-soft);border:1px solid rgba(255,196,77,.25);backdrop-filter:blur(8px)}
+  .duebox svg{width:16px;height:16px;stroke:var(--gold);fill:none;stroke-width:2;stroke-linecap:round;flex:0 0 auto}
+  .duebox p{font-size:11.5px;color:var(--dim);line-height:1.45}
+  .duebox b{color:var(--gold);font-variant-numeric:tabular-nums}
+  .stub .actions{display:flex;gap:9px;margin-top:13px}
+  .stub .actions .btn{flex:1;padding:11px 0;font-size:12.5px;border-radius:12px}
+  .stub .actions .ghostlink{flex:0 0 auto;align-self:center;color:var(--faint);font-size:12px;font-weight:700;
+    text-decoration:underline;text-underline-offset:3px;background:none;border:none;padding:0 6px;cursor:pointer}
+  .stub.past .card{opacity:.6}
+  .donebox{margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--lime);font-weight:700}
+  .donebox svg{width:14px;height:14px;stroke:var(--lime);stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+  /* ---------- SELL ---------- */
+  .dropzone{margin:18px 22px 0;border-radius:var(--r-lg);position:relative;padding:34px 24px;text-align:center;
+    background:
+      radial-gradient(420px 200px at 50% -40%, rgba(77,225,255,.14), transparent 70%),
+      linear-gradient(160deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    backdrop-filter:blur(14px);
+    border:1.5px dashed rgba(77,225,255,.45)}
+  .dropzone .up{width:62px;height:62px;margin:0 auto;border-radius:20px;display:grid;place-items:center;
+    background:linear-gradient(140deg,#9FF0FF 0%,var(--cyan) 38%,#2B7FFF 100%);
+    border:1px solid rgba(255,255,255,.45);
+    box-shadow:inset 0 2px 4px rgba(255,255,255,.55), inset 0 -4px 8px rgba(10,60,110,.5),
+      0 12px 30px rgba(77,225,255,.3)}
+  .dropzone .up svg{width:26px;height:26px;stroke:#062536;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .dropzone h4{font-family:var(--font-display);font-size:15.5px;font-weight:600;margin-top:16px}
+  .dropzone p{font-size:12px;color:var(--dim);margin-top:7px;line-height:1.5}
+  .dropzone .formats{display:flex;justify-content:center;gap:7px;margin-top:14px}
+  .fmt{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--dim);border-radius:7px;padding:4px 8px;
+    background:rgba(255,255,255,.06);border:1px solid var(--gb)}
+
+  /* glass tile grid (District main-hub pattern) for source eligibility */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 22px}
+  .tile{border-radius:18px;padding:14px 8px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;
+    position:relative;text-align:center}
+  .tile::before{content:"";position:absolute;inset:0 0 55% 0;border-radius:18px 18px 0 0;
+    background:radial-gradient(80% 100% at 50% 0%, rgba(255,255,255,.09), transparent 75%);pointer-events:none}
+  .tile .em{font-size:30px;filter:drop-shadow(0 7px 12px rgba(0,0,0,.55)) saturate(1.15)}
+  .tile b{font-size:11px;font-weight:700;line-height:1.3}
+  .tile .st{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+  .tile .st.ok{color:var(--lime)} .tile .st.no{color:var(--red)}
+  .tile.no{opacity:.6}
+
+  .sell-steps{margin:6px 22px 0;display:grid}
+  .sstep{display:flex;gap:13px;position:relative;padding-bottom:18px}
+  .sstep::before{content:"";position:absolute;left:14px;top:30px;bottom:0;width:2px;background:var(--gb)}
+  .sstep:last-child::before{display:none}
+  .sstep .n{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+    font-size:12px;font-weight:800;color:var(--dim);z-index:1;
+    background:rgba(255,255,255,.06);border:1px solid var(--gb-strong);backdrop-filter:blur(8px)}
+  .sstep.hot .n{background:var(--cyan-soft);border-color:var(--cyan);color:var(--cyan);
+    box-shadow:0 0 14px rgba(77,225,255,.25)}
+  .sstep b{font-size:13.5px;display:block;padding-top:5px}
+  .sstep span{font-size:11.5px;color:var(--dim);display:block;margin-top:3px;line-height:1.5}
+
+  /* metallic order banner (bank-offer-card style) */
+  .order-metal{margin:14px 22px 0;display:flex;align-items:center;gap:13px;border-radius:var(--r-md);
+    padding:14px 16px;text-decoration:none;color:var(--text);
+    background:linear-gradient(115deg,#101C30 0%,#23456E 48%,#0D1626 100%)}
+  .order-metal .led{width:9px;height:9px;border-radius:50%;background:var(--gold);
+    box-shadow:0 0 10px var(--gold);flex:0 0 auto}
+  .order-metal b{font-size:13px;display:block;color:#EAF2FF}
+  .order-metal span{font-size:11.5px;color:#9FB6D9;display:block;margin-top:2px}
+  .order-metal .arrow{margin-left:auto;color:#7E97BD}
+
+  .spacer-nav{height:120px}
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <div class="kicker">Zwapit · UI Revamp v3 · Glass &amp; Metal · Demand-First</div>
+  <h1>The marketplace that works <span style="color:#FF8A5C">both ways</span></h1>
+  <p>v3 adds the demand-first flow on top of the District-style glass &amp; metal system: buyers can
+     <b style="color:var(--text)">Request a ticket</b> from a canonical catalog (TMDB movies, live events, bus routes)
+     before any seller lists it, see live matches instantly, and get auto-reserved when a matching ticket arrives.
+     Sellers see <b style="color:var(--text)">Buyer waiting</b> signals and can sell instantly. Six screens — scroll right →</p>
+  <div class="swatches">
+    <span class="swatch"><i style="background:#0C0C10;border:1px solid #333"></i> Charcoal #0C0C10</span>
+    <span class="swatch"><i style="background:linear-gradient(140deg,rgba(255,255,255,.25),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.3)"></i> Frosted glass</span>
+    <span class="swatch"><i style="background:linear-gradient(140deg,#fff,#888 45%,#444)"></i> Metallic edge</span>
+    <span class="swatch"><i style="background:#A06BFF"></i> Purple · Home</span>
+    <span class="swatch"><i style="background:#FF4D9D"></i> Pink · Action</span>
+    <span class="swatch"><i style="background:#FFC44D"></i> Gold · Tickets</span>
+    <span class="swatch"><i style="background:#4DE1FF"></i> Ice · Sell</span>
+    <span class="swatch"><i style="background:#B6FF5C"></i> Lime · Protection</span>
+    <span class="swatch"><i style="background:#FF8A5C"></i> Coral · Requests</span>
+  </div>
+</header>
+
+<div class="frames">
+
+  <!-- ============ SCREEN 1 · HOME (purple ambient) ============ -->
+  <div class="frame-col" style="--acc:#A06BFF;--acc2:#FF4D9D">
+    <div class="frame-label"><b>01 · Home</b><span>purple ambient · discover</span></div>
+    <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="pills">▮▮▮ ⏶ ▰</span></div>
+
+        <div class="home-top">
+          <div class="wordmark">zwap<em>it</em></div>
+          <div class="city gl">📍 Hyderabad ▾</div>
+        </div>
+
+        <div class="searchbar gl">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          Search 'Arijit Singh'
+        </div>
+
+        <div class="tabrow">
+          <a class="on">⌂ All</a><a>Events</a><a>Movies</a><a>Bus</a><a>Watchers</a><a>More</a>
+        </div>
+
+        <div class="stories">
+          <a class="story"><span class="ring"><span class="in">🎤</span></span><span>Concerts</span></a>
+          <a class="story"><span class="ring"><span class="in">😂</span></span><span>Comedy</span></a>
+          <a class="story"><span class="ring"><span class="in">🏏</span></span><span>Sports</span></a>
+          <a class="story"><span class="ring"><span class="in">🌃</span></span><span>Nightlife</span></a>
+          <a class="story"><span class="ring"><span class="in">🚌</span></span><span>Travel</span></a>
+        </div>
+
+        <div class="divider">Tonight in Hyderabad</div>
+        <div class="carousel">
+          <a class="poster-card gl">
+            <div class="poster p1">
+              <div class="art"></div>
+              <div class="glyph">AR</div>
+              <span class="urgency">⚡ Starts in 4h</span>
+              <span class="when">SAT · 7:00 PM</span>
+            </div>
+            <div class="body">
+              <h4>Arijit Singh — India Tour</h4>
+              <div class="venue">GMR Arena · Gate 4 · Qty 2</div>
+              <div class="meta">
+                <span class="chip protect">🛡 Protected</span>
+                <span class="chip mode">Official Transfer</span>
+              </div>
+              <div class="pricerow">
+                <div class="price"><small>per ticket</small>₹1,250 <span class="cut">₹1,800</span></div>
+                <span class="go"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+              </div>
+            </div>
+          </a>
+          <a class="poster-card gl">
+            <div class="poster p2">
+              <div class="art"></div>
+              <div class="glyph">TM</div>
+              <span class="when">SUN · 9:30 AM</span>
+            </div>
+            <div class="body">
+              <h4>TMC Sleeper — HYD → BLR</h4>
+              <div class="venue">Miyapur pickup · 1 berth</div>
+              <div class="meta">
+                <span class="chip protect">🛡 Protected</span>
+                <span class="chip mode">Verify &amp; Redeem</span>
+              </div>
+              <div class="pricerow">
+                <div class="price"><small>per berth</small>₹899</div>
+                <span class="go"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+              </div>
+            </div>
+          </a>
+          <a class="poster-card gl">
+            <div class="poster p3">
+              <div class="art"></div>
+              <div class="glyph">CW</div>
+              <span class="when">FRI · 6:00 PM</span>
+            </div>
+            <div class="body">
+              <h4>Comedy Wala — Open Mic</h4>
+              <div class="venue">Aaromale Café · Qty 4</div>
+              <div class="meta"><span class="chip wait">Waitlist Only</span></div>
+              <div class="pricerow">
+                <div class="price"><small>per ticket</small>₹349</div>
+                <span class="go" style="opacity:.4"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="trust-metal metal">
+          <span class="shield"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.6-8 9-4.8-1.4-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <div><b>Protected payment on every order</b>
+          <span>Your money is held safely and released only after the transfer is done.</span></div>
+        </div>
+
+        <div class="divider">Most wanted right now</div>
+        <div class="carousel">
+          <a class="want-card gl">
+            <span class="fire">🔥 12 waiting</span>
+            <h6>Coldplay — Music of the Spheres, Mumbai</h6>
+            <div class="budget">Top budget <b style="color:var(--text)">₹4,000</b> / ticket</div>
+            <span class="sellnow">Sell to them →</span>
+          </a>
+          <a class="want-card gl">
+            <span class="fire">🔥 7 waiting</span>
+            <h6>IPL Final — Ahmedabad</h6>
+            <div class="budget">Top budget <b style="color:var(--text)">₹6,500</b> / ticket</div>
+            <span class="sellnow">Sell to them →</span>
+          </a>
+          <a class="want-card gl">
+            <span class="fire">🔥 4 waiting</span>
+            <h6>HYD → VIZAG sleeper, this Friday</h6>
+            <div class="budget">Top budget <b style="color:var(--text)">₹1,100</b> / berth</div>
+            <span class="sellnow">Sell to them →</span>
+          </a>
+        </div>
+
+        <div class="divider">Fresh listings</div>
+        <a class="rowcard gl">
+          <span class="mini m1">DJ</span>
+          <div class="info">
+            <h5>Sunburn Arena — DJ Snake</h5>
+            <div class="sub">Novotel HICC · Sun, 21 Jun · 6 PM</div>
+            <div class="meta"><span class="chip protect">🛡 Protected</span><span class="chip mode">Code Reveal</span></div>
+          </div>
+          <div class="right">
+            <span class="seller-tick">✓ Verified seller</span>
+            <span class="price">₹2,100</span>
+          </div>
+        </a>
+        <a class="rowcard gl">
+          <span class="mini m2">IP</span>
+          <div class="info">
+            <h5>IPL Qualifier — SRH v RCB</h5>
+            <div class="sub">Uppal Stadium · Tue, 24 Jun · 7:30 PM</div>
+            <div class="meta"><span class="chip wait">Waitlist Only</span></div>
+          </div>
+          <div class="right">
+            <span class="seller-tick">✓ Verified seller</span>
+            <span class="price">₹3,400</span>
+          </div>
+        </a>
+
+        <div class="req-cta">
+          <span class="em">🪄</span>
+          <div>
+            <b>Can't find your ticket?</b>
+            <span>Request it — we'll match you the moment one is listed.</span>
+          </div>
+          <a class="go">Request →</a>
+        </div>
+
+        <div class="spacer-nav"></div>
+      </div>
+
+      <nav class="bnav">
+        <a class="on"><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Home</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search</a>
+        <a class="sellbtn"><span class="orb"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Sell</a>
+        <a><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4V8z"/></svg>Tickets</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Me</a>
+      </nav>
+    </div>
+    </div>
+    <ul class="frame-notes">
+      <li>District's top pattern: glass search pill → underlined tab row → neon story rings for genres.</li>
+      <li>Metallic teal trust banner with a moving light sweep — the one8-premiere card treatment.</li>
+      <li><b>— MOST WANTED RIGHT NOW —</b>: open buyer requests become supply bait ("12 waiting · Sell to them").</li>
+      <li>"Can't find your ticket? Request it" CTA — the demand-first entry point lives right on Home.</li>
+    </ul>
+  </div>
+
+  <!-- ============ SCREEN 2 · LISTING DETAIL (pink ambient) ============ -->
+  <div class="frame-col" style="--acc:#FF4D9D;--acc2:#A34DFF">
+    <div class="frame-label"><b>02 · Listing</b><span>pink ambient · trust before pay</span></div>
+    <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="hero">
+          <div class="art"></div>
+          <div class="glyph">AR</div>
+          <div class="fade"></div>
+          <div class="topbar">
+            <span class="iconbtn"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+            <span class="iconbtn"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 13v6h14v-6"/></svg></span>
+          </div>
+          <div class="headline">
+            <div class="chips">
+              <span class="chip live"><span class="dot"></span> 2 left at this price</span>
+              <span class="chip protect">🛡 Protected</span>
+            </div>
+            <h2>Arijit Singh — India Tour</h2>
+            <div class="sub">GMR Arena, Hyderabad · Sat 14 Jun, 7:00 PM · Gate 4 · Qty 2</div>
+          </div>
+        </div>
+
+        <div class="panel gl">
+          <div class="head">How you're protected</div>
+          <div class="trust-grid">
+            <div class="trust-cell">
+              <div class="k">Transfer mode</div>
+              <div class="v cy">Official Transfer</div>
+              <div class="d">Moved to your BookMyShow account before the show.</div>
+            </div>
+            <div class="trust-cell">
+              <div class="k">Your payout shield</div>
+              <div class="v li">Held until done</div>
+              <div class="d">Seller is paid only after you confirm the transfer.</div>
+            </div>
+            <div class="trust-cell">
+              <div class="k">Transfer deadline</div>
+              <div class="v">Sat, 3:00 PM</div>
+              <div class="d">Missed deadline = automatic full refund.</div>
+            </div>
+            <div class="trust-cell">
+              <div class="k">Report window</div>
+              <div class="v">Until showtime</div>
+              <div class="d">Something wrong? Report the issue with one tap.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel gl">
+          <div class="head">Seller</div>
+          <div class="sellerrow">
+            <span class="avatar">RK</span>
+            <div class="who">
+              <b>Rahul K. <span class="seller-tick">✓ Phone verified</span></b>
+              <span>14 transfers completed · member since 2025</span>
+            </div>
+            <span class="rating">★ 4.9</span>
+          </div>
+        </div>
+
+        <div class="panel gl">
+          <div class="head">Price — no surprises</div>
+          <div class="pricelist">
+            <div class="li"><span>Ticket price × 2</span><b>₹2,500</b></div>
+            <div class="li"><span>Protection fee</span><b>₹10</b></div>
+            <div class="li"><span>GST on fee</span><b>₹1.80</b></div>
+            <div class="li total"><span>Total payable</span><b>₹2,511.80</b></div>
+            <p class="note">Full refund if the seller misses the transfer deadline or the transfer fails verification.</p>
+          </div>
+        </div>
+
+        <div class="spacer-nav"></div>
+      </div>
+
+      <div class="stickybar">
+        <div class="inner">
+          <div class="total"><small>Total</small><b>₹2,511.80</b></div>
+          <button class="btn btn-primary metal">🛡 Buy with Protection</button>
+        </div>
+      </div>
+    </div>
+    </div>
+    <ul class="frame-notes">
+      <li>Glass trust grid answers the four buyer fears; panels float on frosted blur over the ambient glow.</li>
+      <li>Sticky bar is now a glass dock; the CTA gets a glossy dimensional finish + light sweep.</li>
+      <li>Phone frame border is metallic pink — each screen carries its own ambient identity, like District.</li>
+    </ul>
+  </div>
+
+  <!-- ============ SCREEN 3 · MY TICKETS (gold ambient) ============ -->
+  <div class="frame-col" style="--acc:#FFC44D;--acc2:#FF8A3D">
+    <div class="frame-label"><b>03 · My Tickets</b><span>gold ambient · stub wallet</span></div>
+    <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="pills">▮▮▮ ⏶ ▰</span></div>
+        <div class="home-top" style="margin-top:2px">
+          <div><div class="wordmark" style="font-size:17px">My Tickets</div></div>
+          <div class="city gl">2 active</div>
+        </div>
+
+        <div class="seg gl">
+          <button class="on">Upcoming</button>
+          <button>Waiting on seller</button>
+          <button>Past</button>
+        </div>
+
+        <!-- Active stub: gold metallic edge -->
+        <div class="stub hot" style="--notch:196px">
+          <div class="card">
+            <div class="topband">
+              <span class="mini">AR</span>
+              <div style="flex:1;min-width:0">
+                <h5>Arijit Singh — India Tour</h5>
+                <div class="sub">GMR Arena · Sat 14 Jun, 7:00 PM · Qty 2</div>
+                <div class="chips">
+                  <span class="chip live"><span class="dot"></span> Transfer needed</span>
+                  <span class="chip mode">Official Transfer</span>
+                </div>
+              </div>
+            </div>
+            <div class="perf"><span class="ln"></span></div>
+            <div class="botband">
+              <div class="steps">
+                <div class="step done"><span class="nub"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg></span><span>Paid &amp; protected</span></div>
+                <span class="step-ln fill"></span>
+                <div class="step now"><span class="nub">2</span><span>Seller transfers</span></div>
+                <span class="step-ln"></span>
+                <div class="step"><span class="nub">3</span><span>You confirm</span></div>
+                <span class="step-ln"></span>
+                <div class="step"><span class="nub">4</span><span>Done</span></div>
+              </div>
+              <div class="duebox">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+                <p>Seller must transfer in <b id="cd">17h 42m 10s</b> — or you get a <b style="color:var(--lime)">full refund automatically</b>.</p>
+              </div>
+              <div class="actions">
+                <button class="btn btn-primary" style="padding:11px 0;font-size:12.5px;border-radius:12px">View timeline</button>
+                <button class="btn btn-ghost">I got the ticket ✓</button>
+                <button class="ghostlink">Report issue</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Completed stub -->
+        <div class="stub past" style="--notch:148px">
+          <div class="card">
+            <div class="topband">
+              <span class="mini done">CW</span>
+              <div style="flex:1;min-width:0">
+                <h5>Comedy Wala — Open Mic</h5>
+                <div class="sub">Aaromale Café · Fri 6 Jun · Qty 1</div>
+                <div class="chips"><span class="chip protect">Completed</span></div>
+              </div>
+            </div>
+            <div class="perf"><span class="ln"></span></div>
+            <div class="botband" style="padding-top:10px">
+              <div class="donebox">
+                <svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>
+                Transferred &amp; confirmed · seller paid out
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="trust-metal metal" style="margin-top:20px">
+          <span class="shield"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.6-8 9-4.8-1.4-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <div><b>You're covered on both tickets</b>
+          <span>Money stays protected until each transfer is confirmed by you.</span></div>
+        </div>
+
+        <div class="spacer-nav"></div>
+      </div>
+
+      <nav class="bnav">
+        <a><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Home</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search</a>
+        <a class="sellbtn"><span class="orb"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Sell</a>
+        <a class="on"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4V8z"/></svg>Tickets</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Me</a>
+      </nav>
+    </div>
+    </div>
+    <ul class="frame-notes">
+      <li>Gold ambient — District gives Events screens a warm gold stage glow; your ticket wallet earns it.</li>
+      <li>The active stub gets a gold metallic gradient edge; notched perforation + glass body stay.</li>
+      <li>Pulsing "you are here" step, live countdown, and "I got the ticket ✓" as the payout-releasing action.</li>
+    </ul>
+  </div>
+
+  <!-- ============ SCREEN 4 · SELL (ice ambient) ============ -->
+  <div class="frame-col" style="--acc:#4DE1FF;--acc2:#2B7FFF">
+    <div class="frame-label"><b>04 · Sell</b><span>ice ambient · upload-first</span></div>
+    <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="pills">▮▮▮ ⏶ ▰</span></div>
+        <div class="home-top" style="margin-top:2px">
+          <div><div class="wordmark" style="font-size:17px">Sell a ticket</div></div>
+          <div class="city gl">⏱ ~60 sec</div>
+        </div>
+
+        <a class="buyerwait metal">
+          <span class="led"></span>
+          <div>
+            <b>⚡ Buyer waiting — sell instantly</b>
+            <span>2 people want DJ Snake tickets at up to ₹2,400. Upload yours and skip the wait.</span>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+
+        <div class="dropzone">
+          <span class="up"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 17v3h16v-3"/></svg></span>
+          <h4>Drop your ticket here</h4>
+          <p>Screenshot or PDF — we read the event, seats and price for you.<br/>You just confirm.</p>
+          <div class="formats"><span class="fmt">PNG</span><span class="fmt">JPG</span><span class="fmt">PDF</span><span class="fmt">SHARE&nbsp;SHEET</span></div>
+        </div>
+
+        <div class="divider">What can I sell?</div>
+        <div class="tiles">
+          <div class="tile gl"><span class="em">🎟️</span><b>BookMyShow</b><span class="st ok">✓ Sellable</span></div>
+          <div class="tile gl"><span class="em">🎪</span><b>District events</b><span class="st ok">✓ Sellable</span></div>
+          <div class="tile gl"><span class="em">🚌</span><b>Bus tickets</b><span class="st ok">✓ Sellable</span></div>
+          <div class="tile gl"><span class="em">🎬</span><b>Movie shows</b><span class="st ok">✓ Sellable</span></div>
+          <div class="tile gl"><span class="em">🔭</span><b>Watchers</b><span class="st ok">✓ Sellable</span></div>
+          <div class="tile gl no"><span class="em">🪪</span><b>ID-locked passes</b><span class="st no">✕ Cannot list</span></div>
+        </div>
+
+        <div class="divider">How selling works</div>
+        <div class="sell-steps">
+          <div class="sstep hot"><span class="n">1</span><div><b>Upload your ticket</b><span>Any screenshot from BookMyShow, District, or your bus app.</span></div></div>
+          <div class="sstep"><span class="n">2</span><div><b>Confirm the details</b><span>We pre-fill everything we can. Fix anything that's off.</span></div></div>
+          <div class="sstep"><span class="n">3</span><div><b>Set your price</b><span>We suggest a fair price against face value.</span></div></div>
+          <div class="sstep"><span class="n">4</span><div><b>Promise the transfer</b><span>Pick how you'll hand it over. Get paid after the buyer confirms.</span></div></div>
+        </div>
+
+        <div class="divider">Your orders</div>
+        <a class="order-metal metal">
+          <span class="led"></span>
+          <div>
+            <b>Sunburn Arena — DJ Snake</b>
+            <span>Sold for ₹2,100 · transfer due in 6h · payout waiting</span>
+          </div>
+          <span class="arrow">→</span>
+        </a>
+
+        <div class="spacer-nav"></div>
+      </div>
+
+      <nav class="bnav">
+        <a><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Home</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search</a>
+        <a class="sellbtn" style="filter:saturate(1.2)"><span class="orb"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Sell</a>
+        <a><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4V8z"/></svg>Tickets</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Me</a>
+      </nav>
+    </div>
+    </div>
+    <ul class="frame-notes">
+      <li>Glass tile grid with glossy icons — District's main-hub signature — used for rule-engine eligibility.</li>
+      <li>Frosted dropzone with an ice-blue dimensional upload orb; ice ambient sets the Sell identity.</li>
+      <li>Seller order banner gets the metallic bank-card treatment with sweep, gold LED for payout waiting.</li>
+      <li><b>⚡ Buyer waiting</b> banner up top: open requests become an instant-sell path — no waiting for a buyer.</li>
+    </ul>
+  </div>
+
+  <!-- ============ SCREEN 5 · REQUEST A TICKET (coral ambient) ============ -->
+  <div class="frame-col" style="--acc:#FF8A5C;--acc2:#FF4D9D">
+    <div class="frame-label"><b>05 · Request</b><span>coral ambient · demand-first</span></div>
+    <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="pills">▮▮▮ ⏶ ▰</span></div>
+        <div class="home-top" style="margin-top:2px">
+          <div><div class="wordmark" style="font-size:17px">Request a ticket</div></div>
+          <div class="city gl">Free</div>
+        </div>
+
+        <div class="searchbar gl" style="color:var(--text)">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          coldplay
+        </div>
+
+        <div class="divider">Pick from the catalog</div>
+        <div class="catres gl sel">
+          <span class="ic">🎤</span>
+          <div class="tx">
+            <b>Coldplay — Music of the Spheres</b>
+            <span class="s">DY Patil Stadium, Mumbai · Sun 25 Jan</span>
+          </div>
+          <span class="srcb">LIVE EVENTS</span>
+        </div>
+        <div class="catres gl">
+          <span class="ic">🎬</span>
+          <div class="tx">
+            <b>Peddi — IMAX 2D</b>
+            <span class="s">Any show · Hyderabad</span>
+          </div>
+          <span class="srcb">TMDB</span>
+        </div>
+        <div class="catres gl">
+          <span class="ic">🚌</span>
+          <div class="tx">
+            <b>Hyderabad → Bengaluru sleeper</b>
+            <span class="s">Any operator · Fri night</span>
+          </div>
+          <span class="srcb">ROUTES</span>
+        </div>
+
+        <div class="divider">Your request</div>
+        <div class="panel gl" style="margin-top:0">
+          <div class="formrow">
+            <span class="lbl">Tickets needed</span>
+            <span class="stepper"><button>−</button><b>2</b><button>+</button></span>
+          </div>
+          <div class="formrow">
+            <span class="lbl">Max price per ticket</span>
+            <span class="val">₹4,000</span>
+          </div>
+          <div class="formrow">
+            <span class="lbl">Request active until</span>
+            <span class="chip wait">Event day</span>
+          </div>
+        </div>
+
+        <div class="matchbar">
+          🛡 2 live listings already fit your budget
+          <span class="arrow">See them →</span>
+        </div>
+
+        <div class="spacer-nav"></div>
+      </div>
+
+      <div class="stickybar">
+        <div class="inner">
+          <button class="btn btn-primary metal" style="flex:1">🪄 Request &amp; get matched</button>
+        </div>
+      </div>
+    </div>
+    </div>
+    <ul class="frame-notes">
+      <li>Requests pick from a canonical catalog — TMDB movies, live events, bus routes — never free text, so matching is exact.</li>
+      <li>Instant gratification: if live listings already fit, the lime match bar shows them before the request is even posted.</li>
+      <li>Three fields total: quantity, max price, expiry. Same upload-first philosophy — minimum friction.</li>
+    </ul>
+  </div>
+
+  <!-- ============ SCREEN 6 · MY REQUESTS / MATCHES (coral ambient) ============ -->
+  <div class="frame-col" style="--acc:#FF8A5C;--acc2:#FFC44D">
+    <div class="frame-label"><b>06 · Matches</b><span>auto-reserve · you're in line</span></div>
+    <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="pills">▮▮▮ ⏶ ▰</span></div>
+        <div class="home-top" style="margin-top:2px">
+          <div><div class="wordmark" style="font-size:17px">My Tickets</div></div>
+          <div class="city gl">2 requests</div>
+        </div>
+
+        <div class="seg gl">
+          <button>Tickets</button>
+          <button class="on">Requests</button>
+          <button>Past</button>
+        </div>
+
+        <!-- Request with matches: coral metallic edge -->
+        <div class="reqcard hot gl">
+          <div class="rhead">
+            <span class="emoji">🎤</span>
+            <div>
+              <h5>Coldplay — Mumbai</h5>
+              <div class="sub">Qty 2 · up to ₹4,000 each · until 25 Jan</div>
+            </div>
+            <span class="chip live"><span class="dot"></span> 2 matches</span>
+          </div>
+          <div class="matchrow">
+            <span class="p">₹3,800</span>
+            <span class="d">Official Transfer · ★ 4.9 seller · Qty 2 · Level 1 stand</span>
+            <button class="buy">Buy 🛡</button>
+          </div>
+          <div class="resv">
+            ⏳ Reserved for you — <b id="rcd">28:43</b> before it opens to everyone
+          </div>
+          <div class="matchrow" style="opacity:.75">
+            <span class="p">₹3,950</span>
+            <span class="d">Code Reveal · ★ 4.7 seller · Qty 2</span>
+            <button class="buy ghost">View</button>
+          </div>
+        </div>
+
+        <!-- Request waiting in line -->
+        <div class="reqcard gl">
+          <div class="rhead">
+            <span class="emoji">🎬</span>
+            <div>
+              <h5>Peddi — IMAX, Hyderabad</h5>
+              <div class="sub">Qty 4 · up to ₹350 each · until show week</div>
+            </div>
+            <span class="chip wait">In line</span>
+          </div>
+          <div class="qline">
+            You're <span class="qpos">#3 in line</span>. The next matching ticket is
+            <b style="color:var(--text)">auto-reserved for you for 30 minutes</b> — we'll ping you the second it lands.
+          </div>
+          <div class="reqactions">
+            <button class="btn btn-ghost">🔔 Notifying you</button>
+            <button class="btn btn-ghost">Raise budget</button>
+            <button class="btn btn-ghost" style="flex:0 0 auto;padding:10px 14px">✕</button>
+          </div>
+        </div>
+
+        <div class="trust-metal metal" style="margin-top:20px">
+          <span class="shield"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.6-8 9-4.8-1.4-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <div><b>Matched tickets are still protected</b>
+          <span>Buying a match uses the same protected payment and transfer deadline rules.</span></div>
+        </div>
+
+        <div class="spacer-nav"></div>
+      </div>
+
+      <nav class="bnav">
+        <a><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Home</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search</a>
+        <a class="sellbtn"><span class="orb"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Sell</a>
+        <a class="on"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4V8z"/></svg>Tickets</a>
+        <a><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>Me</a>
+      </nav>
+    </div>
+    </div>
+    <ul class="frame-notes">
+      <li>Requests live inside My Tickets as a segment — one wallet for what you have and what you're hunting.</li>
+      <li>FIFO allotment made human: "You're #3 in line" + a 30-minute auto-reserve window with a live countdown.</li>
+      <li>This is the stickiness engine: an open request is a standing reason to return, and every match is a push notification.</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  // live countdown on the active ticket stub
+  (function(){
+    const el = document.getElementById('cd');
+    if(!el) return;
+    let t = 17*3600 + 42*60 + 10;
+    setInterval(()=>{
+      t--;
+      const h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
+      el.textContent = h+'h '+String(m).padStart(2,'0')+'m '+String(s).padStart(2,'0')+'s';
+    },1000);
+  })();
+
+  // auto-reserve window countdown on the matched request
+  (function(){
+    const el = document.getElementById('rcd');
+    if(!el) return;
+    let t = 28*60 + 43;
+    setInterval(()=>{
+      t--;
+      el.textContent = Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+    },1000);
+  })();
+</script>
+</body>
+</html>

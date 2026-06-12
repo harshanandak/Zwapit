@@ -30,6 +30,7 @@ The v1 proof is:
 - Can a seller list a transferable item easily?
 - Can a buyer understand protection and buy safely?
 - Can the platform protect payment until transfer/completion without taking custody of the item?
+- Can a buyer request what they want before supply exists and get matched automatically?
 
 ## Current UX Baseline
 
@@ -45,6 +46,30 @@ The v1 proof is:
 - Trust details must show transfer mode and payout rule upfront.
 
 Older Buy/Sell split tab drafts are not active unless the user explicitly revives them.
+
+## Demand-First Wants (Reverse Listings)
+
+Decision (2026-06-12): buyers can post what they want before any matching listing
+exists. This is a core marketplace mechanic, not a later phase.
+
+- A Want is a buyer request for a specific catalog item: quantity, max price per
+  unit, and expiry.
+- Wants must reference canonical catalog items, not free text, so matching is exact.
+- Catalog sources: TMDB for movies (IMDB has no usable public API), curated or
+  manually seeded live events, curated bus routes (Google Places/Routes may assist
+  with location data). User-submitted catalog entries are allowed but reviewed.
+- When a buyer posts a Want and live listings already match, show those matches
+  immediately (instant path).
+- When a new listing goes live, it is matched against open Wants on the same
+  catalog item with quantity and price-cap fit.
+- Allotment is first-in-first-out by Want creation time; the matched buyer gets a
+  time-boxed reservation before the listing opens to everyone else.
+- Sellers can sell directly into a Want ("Buyer waiting" instant sell).
+- Want states: open, matched, reserved, fulfilled, expired, cancelled.
+- Matching and allotment transitions are explicit, internal-only mutations with
+  audit logs. No client-exposed matching mutations.
+- Wants follow the same source rule engine: a Want for a blocked category cannot
+  be posted; DEMAND_ONLY sources are want-only by definition.
 
 ## Architecture Decisions
 
@@ -69,14 +94,15 @@ Older Buy/Sell split tab drafts are not active unless the user explicitly revive
 6. Upload-first seller flow.
 7. Source rule engine.
 8. Listing marketplace.
-9. Buyer checkout.
-10. Order timeline.
-11. Transfer workflow.
-12. Dispute/refund workflow.
-13. Internal settlement hold/release workflow.
-14. Admin dashboard.
-15. Demand discovery.
-16. Category expansion.
+9. Demand-first wants and catalog groundwork.
+10. Buyer checkout.
+11. Order timeline.
+12. Transfer workflow.
+13. Dispute/refund workflow.
+14. Internal settlement hold/release workflow.
+15. Admin dashboard.
+16. Demand discovery analytics.
+17. Category expansion.
 
 Do not skip ahead to payments, admin, or category expansion before the visible mock flow and core state model exist.
 
@@ -217,6 +243,10 @@ Use friendly language:
 - Buy with Protection
 - Transfer needed
 - Payout waiting
+- Request a ticket
+- We'll match you
+- Buyer waiting
+- You're #N in line
 
 Avoid user-facing terms:
 - escrow
@@ -229,6 +259,9 @@ Avoid user-facing terms:
 - linked account
 - AMBER
 - settlement hold
+- demand
+- allotment
+- reverse listing
 
 ## Do Not Build Yet
 
