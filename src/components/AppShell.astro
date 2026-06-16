@@ -36,7 +36,9 @@ const { tab, accent, showFab } = resolveNav(routeId);
         </header>
       )
     }
-    <slot />
+    <div class:list={[{ "app-content": !hideHeader }]}>
+      <slot />
+    </div>
     <div class="spacer-nav"></div>
     <BottomNav tab={tab} showFab={showFab} />
   </div>

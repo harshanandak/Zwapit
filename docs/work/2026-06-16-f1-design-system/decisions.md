@@ -63,3 +63,23 @@
 ### Decision gate count: 2 (1 PROCEED, 1 BLOCKED). Plan-quality note: the BLOCKED gate is
 the design.md D7 forward-links decision colliding with a pre-existing first-slice guard that
 planning didn't reconcile — worth catching earlier next time.
+
+---
+
+## /validate (2026-06-16)
+
+All CI gates reproduced locally + green: type-check, convex tsc, build (15 routes),
+route-coverage, 159 tests, acceptance, buyer/seller smoke, `bun audit` (no vulnerabilities).
+
+Adversarial multi-lens review (6 lenses × verify, 16 agents) → 7 confirmed real, 4
+F1-actionable (all minor, all fixed in the adaptation block / AppShell — LOCK untouched):
+1. `.app-shell` `100dvh` → added `100vh` fallback (iOS <15.4 / Chromium <108 self-heal).
+2. Keyboard a11y → added `:focus-visible` accent ring on `.app-shell a` (nav tabs + FAB).
+3. Edge-to-edge regression → restored a content gutter via `.app-content` (transitional
+   pages only; v5 screens with `hideHeader` self-pad).
+4. `.spacer-nav` vs notch → `height:calc(124px + env(safe-area-inset-bottom))` so the
+   clearance tracks the fixed nav's safe-area padding.
+
+Deferred (not F1-actionable): `--faint` contrast on `--bg` (inside the LOCKED verbatim
+palette), `color-mix` two-layer-shorthand robustness (moot — the locked design already
+depends on color-mix/oklch broadly), and a docs-only focus-state nit.
