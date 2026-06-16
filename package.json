@@ -27,7 +27,7 @@
     "@fontsource/fraunces": "^5.2.9",
     "@fontsource/space-grotesk": "^5.2.10",
     "@tailwindcss/postcss": "^4.1.17",
-    "astro": "^6.3.1",
+    "astro": "^6.4.6",
     "convex": "^1.39.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
