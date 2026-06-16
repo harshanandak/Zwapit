@@ -1,226 +1,356 @@
 # Zwapit Product Revamp — Design
 
-- **Date:** 2026-06-12
-- **Status:** Approved direction (user), execution not started
-- **Scope:** Demand-first marketplace mechanic + full UI revamp (glass & metal, District-informed, premium pass)
-- **Artifacts:** `zwapit-ui-revamp-preview.html` (v4 visual concept, 6 screens), `convex/schema.ts` (groundwork landed in commit `2a04da8`)
+- **Date:** 2026-06-12 · **Revised:** 2026-06-16 (pivot to Alerts + Requests)
+- **Status:** Approved direction (user). Design + UI concept landed; backend/schema is Codex's next step.
+- **Scope:** Reframe Zwapit as an **Alerts + Requests** marketplace; full UI revamp in the v4
+  premium glass & metal language (District-informed).
+- **Artifacts:** `zwapit-ui-revamp-preview.html` (v5 visual concept, 10 screens),
+  `alerts-requests-screen-spec.md` (build-ready screen spec), `convex/schema.ts`
+  (wants/catalog groundwork landed in `2a04da8`, to be extended — see §6).
 
 ---
 
-## 1. Why this revamp
+## 1. The core idea
 
-Two decisions landed on 2026-06-12:
+> **Tell us what you want, and we'll notify you when it becomes available.**
 
-1. **Demand-first wants (reverse listings).** Buyers can post what they want
-   before any seller lists it. Recorded in `CLAUDE.md` → "Demand-First Wants
-   (Reverse Listings)". This changes Zwapit from a one-way listing feed into a
-   two-sided matching marketplace.
-2. **Visual revamp.** The current UI (flat token cards in
-   `src/components/buyer/ListingCard.astro`, `src/pages/app/*.astro`) is a
-   wireframe. The approved direction is the District-informed glass & metal
-   system in the preview, refined to a premium register (see §5).
+This single promise is the product. It applies to movies, live events, bus tickets,
+vouchers, passes, resale tickets, price drops, and future categories. The earlier
+"demand-first wants" decision (2026-06-12) was the seed; this revision makes the
+**alert** — not the listing — the primary object users create and return for.
 
-The v1 proof gains a fourth question: *can a buyer request what they want
-before supply exists and get matched automatically?*
-
----
-
-## 2. The two-sided loop (user flows)
-
-### 2.1 Buyer — supply path (exists today as mock)
-
-```
-Home (browse live listings)
-  → Listing detail (trust grid: mode · payout shield · deadline · recourse)
-  → Protection summary → phone OTP → pay (mock)
-  → My Tickets stub (Paid ✓ → Seller transfers → You confirm → Done)
-  → confirm receipt → dispute window → completed
-```
-
-### 2.2 Buyer — demand path (new)
-
-```
-Home ("Can't find it?" CTA) or empty search result
-  → Request a ticket:
-      pick canonical catalog item (movie / live event / bus route)
-      + quantity + max price per unit + expiry
-  → instant check: live listings already matching? show them now
-  → otherwise: Want = open, "You're #N in line"
-  → on new matching listing: auto-reserve (time-boxed, e.g. 30 min)
-      + push notification
-  → buyer accepts → same protected checkout as supply path
-  → declined/expired → reservation passes to next Want in line
-```
-
-### 2.3 Seller path
-
-```
-Sell tab
-  → "Buyer waiting" banner (open Wants with budgets — instant-sell pull)
-  → upload-first (screenshot/PDF) → confirm details → price → promise transfer
-  → rule engine decision (AUTO_APPROVE / BLOCK / WAITLIST / MANUAL)
-  → live → matched-to-want or open-market order
-  → transfer task → buyer confirms → payout (after dispute window)
-```
-
-### 2.4 Matching engine (system actor, internal-only)
-
-```
-listing transitions to `live`
-  → query open wants: same catalogItemId, qty fit, maxPricePerUnit ≥ listing price
-  → order FIFO by want.createdAt
-  → create want_match (state=reserved, allocationRank, reservedUntil)
-  → notify buyer; on accept → order; on decline/timeout → next rank
-  → all transitions audited (audit_logs entityType want / want_match)
-```
-
-### 2.5 The flywheel (stickiness model)
-
-- Open requests render on Home as **“Most wanted right now”** → pulls sellers
-  (“12 waiting · top budget ₹4,000 · Sell to them”).
-- Every new listing can trigger a match → push notification → buyer returns.
-- An open request is a standing reason to come back; My Tickets holds both
-  what you **have** and what you're **hunting** (Tickets | Requests | Past).
-- No dark patterns: reservation windows are honest, queues are real FIFO.
+Why this is the right shape: a normal marketplace is dead until sellers arrive.
+Zwapit captures **demand first** (a private request + an alert), then fills it from
+either supply source. An open request is a standing reason to come back, and every
+new piece of supply is a push notification. That is a stronger network effect than a
+plain buy/sell board.
 
 ---
 
-## 3. Data relations (as landed in `convex/schema.ts`)
+## 2. Two supply sources
 
-```
-catalog_items (:323)        ←  canonical things people want or sell
-   │ 1:N
-   ├── wants (:346)              buyer demand (catalogItemId :349,
-   │      │                      by_catalog_state index :365)
-   │      │ 1:N
-   │      └── want_matches (:370)   want × listing pairing,
-   │              │ N:1              allocationRank + reservedUntil
-   ├── listings (:235) ─────────────┘
-   │      catalogItemId (:272, optional — required to match)
-   │      by_catalog_item index (:277)
-   │      │ 1:N
-   │      └── orders (:279) ── 1:1 transfer_tasks (:296)
-   │                          ── 1:N issues (:308)
-   ├── source_rules (:184)   gate both listings and wants
-   └── audit_logs (:385)     all transitions incl. want / want_match
-users (:155) / auth_identities / user_verifications / seller_payment_accounts
-```
+### 2.1 Official supply (availability alerts)
+Tickets that have not yet opened on official platforms (BookMyShow "BMS",
+District by Zomato). The user asks to be told the moment a specific
+**movie + theatre + date + showtime** opens for booking.
 
-Want states: `open → matched → reserved → fulfilled | expired | cancelled`.
-Match states: `proposed → reserved → accepted | declined | expired`.
+- Zwapit runs its **own backend**; the frontend never calls BMS/District directly.
+- A **shared watch** model: many users wanting the same show subscribe to **one**
+  internal monitor; one checker notifies all subscribers (500 users → 1 watcher).
+- The alert deep-links the user **out to the official platform to book** — Zwapit
+  does not resell official inventory and never touches that money. This is both the
+  truthful model and the lowest-risk one (see §8.4).
+- MVP checking can be a **manual admin "mark live"** trigger; later, source adapters
+  (`bmsMonitor`, `districtMonitor`) read public availability. Pursue official
+  affiliate/deep-link partnerships so monitoring is contractually permitted.
 
-Not yet built (deliberately): wants/match mutations, matching engine,
-reservation expiry job, catalog sync actions, notifications. See §6.
+### 2.2 Community supply (resale listings + match alerts)
+A user resells their own ticket/pass. The matching engine notifies requesters whose
+request fits, and the purchase runs through Zwapit's **protected payment** flow.
+This is where Zwapit actually transacts and earns its service fee.
 
 ---
 
-## 4. Screen system (preview v4)
+## 3. Mechanics
+
+### 3.1 Requests (private)
+A request = category + canonical catalog item + date + budget + preferences + the
+alert types the user wants. Requests are **private**, not a public board.
+
+- **States:** `Active → Matched → Purchased | Expired` (also `Cancelled`).
+- **Quota by tier** (see §3.4): Free = **3 active requests**; the UI shows a
+  "2 / 3 active" meter so users self-manage. A request stops counting when
+  purchased / expired / cancelled.
+
+### 3.2 Alert types
+- **Availability** — tell me the moment tickets are live.
+- **Discount** — tell me when the price drops below my budget.
+- **Price-drop** — tell me when a seller's price decreases (incl. scheduled drops).
+- **Last-minute** — alert me close to showtime/departure.
+
+### 3.3 Matching = alert waves, not a hard queue (v1)
+No paid holds and no exact queue numbers in v1. When supply appears:
+
+```
+Supply appears (official goes live  OR  community listing created)
+  → find matching requests (catalog id + budget + qty/format fit)
+  → Wave 1: priority/referral/best-match users
+  → +3–5 min → Wave 2: all matching requesters
+  → Wave 3: public Browse (Listings tab)
+First valid buyer to complete protected payment wins (community).
+```
+
+- User-facing status is **Standard / Priority / High Priority** — never "#N in line".
+- Priority is earned by referrals / Plus and is honestly framed as *"you may hear
+  earlier — never a guaranteed booking."*
+- Wave size is **scaled to known supply** (a 1-ticket listing alerts a small Wave 1,
+  not every priority user — avoids "alert spam for nothing"). See §8.5 for the
+  correctness rules (single-winner, dedup, idempotent notifications).
+
+### 3.4 Tiers & referrals (discovery, not guaranteed access)
+Tiers limit **request count and alert speed**, never guarantee a ticket.
+
+| Tier | Active requests | Alerts | Hold token |
+|---|---|---|---|
+| Free | 3 | Standard | — |
+| Verified | 5 | Standard | — |
+| Referral Boost | 10 (temp) | Earlier | 1 (limited) |
+| Plus | 20 | Earlier + discount + price-drop | Limited |
+| Power (later) | 50 | Advanced | Category-capped |
+
+Referrals are rewarded **only for meaningful actions** (phone-verify / first request /
+first list / first buy) — never raw installs — with abuse controls (§8.7). Launch
+leans on **referrals before paid subscriptions** to build liquidity first.
+
+### 3.5 Seller side
+Upload-first. The seller sees a **people-looking signal** ("52 people looking ·
+high interest") with **no buyer identity, no budgets, no priority numbers**. Seller
+sets price, optional original price, optional discount, an urgent toggle, and an
+optional **auto price-drop schedule** (drop ₹X every N min before start). A
+**"X% off" badge renders only when the original price is verified** from the uploaded
+artifact; otherwise the UI shows a plain "Seller price" (§8.6).
+
+### 3.6 Notifications
+- **v1:** Email + Web Push (both consent-gated).
+- **Later:** Telegram, then WhatsApp.
+- Consent is **per-channel and per-alert-type, unchecked by default**, with
+  per-request and global opt-out, frequency caps, and quiet hours (§8.3).
+
+---
+
+## 4. User flows
+
+**Buyer — official availability alert**
+```
+Home / Search → "Set an alert" → pick movie + theatre + date + showtime + format
+  → choose alert types + budget → request Active ("you + 124 others waiting")
+  → tickets open → "Tickets are live" alert → Open booking (out to official site)
+```
+
+**Buyer — community match**
+```
+Open request (Active)
+  → a matching listing is created → alert wave → "A match for your request"
+  → Buy with Protection (phone OTP → pay) → My purchases
+  → seller transfers → buyer confirms → completed
+```
+
+**Seller**
+```
+Sell (FAB / Profile) → upload ticket → confirm parsed details
+  → see "52 people looking" → set price (+ optional discount / auto-drop)
+  → rule engine decision → live → matched requesters alerted
+  → first protected payment wins → transfer → buyer confirms → payout
+```
+
+**Matching engine (system actor, internal-only, audited)**
+```
+supply event → resolve canonical catalog id → find fitting requests
+  → emit alert waves (idempotent per user/target/event/type)
+  → single-winner atomic transition on the listing → order → audit log
+```
+
+---
+
+## 5. Navigation & screen system
+
+**Bottom tabs (5):** Home · Search · Requests · Listings · Profile.
+Selling has **no center tab** — it's a prominent **"List a ticket" FAB** above the nav
+(Home/Search/Listings) plus a **Selling hub in Profile**. (Decision: keeps the spec's
+5 tabs intact; the v4 elevated-center Sell button is replaced by the FAB. A buy/sell
+*mode* toggle was considered and rejected as heavier than needed.)
 
 | # | Screen | Ambient | Job |
 |---|--------|---------|-----|
-| 01 | Home | violet | discover supply + see demand signals + request entry |
-| 02 | Listing detail | rose | trust before pay; price with no surprises |
-| 03 | My Tickets | gold | stub wallet; transfer journey; confirm action |
-| 04 | Sell | steel | upload-first; buyer-waiting instant sell; eligibility |
-| 05 | Request | bronze | catalog pick + 3 fields; instant matches |
-| 06 | Matches | bronze | reservations, queue position, raise budget |
+| 01 | Home | violet | official-vs-community zones; alert entry; trust |
+| 02 | Search | steel | universal search + filters; empty → create a request |
+| 03 | Create Request / Set an alert | bronze | catalog pick + budget + alert types |
+| 04 | Requests | bronze | request states, quota meter, alerts, priority |
+| 05 | Alert payoff / Match | jade + rose | "Tickets are live" + community match → Buy |
+| 06 | Listings | rose | resale marketplace (Latest/Trending/Discounted/…) |
+| 07 | Listing detail | rose | trust grid + verified discount + protected buy |
+| 08 | Sell / List a ticket | steel | upload-first; people-looking; price + auto-drop |
+| 09 | Profile | gold | Buying + Selling hubs; tier card; channel toggles |
+| 10 | Plans & Referrals | gold | Free vs Plus; referral ladder; alert-wave explainer |
 
-Per-screen ambient identity is District's signature and stays; the premium
-pass (§5) lowers its intensity.
-
----
-
-## 5. Visual language — premium pass (v3 → v4)
-
-Diagnosis of "AI-ish" in v3: emoji used as iconography, saturated neon
-gradients, glossy bevelled buttons, animated light sweeps everywhere,
-letter-glyph posters, playful copy ("🪄 we'll hunt for you").
-
-v4 rules:
-
-- **Iconography:** stroke SVG icons only (1.8px stroke, rounded caps).
-  Emojis are banned from chrome; allowed nowhere except actual content.
-- **Type:** Space Grotesk for UI; Fraunces (serif) reserved for display
-  moments — prices, headline numerals, the wordmark. No Unbounded.
-- **Color:** one action color (rose `#F23D7F`) everywhere money moves;
-  jade = protection, gold = deadlines/tickets, steel = transfer modes,
-  bronze = requests. Saturation pulled down ~20% from v3; neon lime and
-  cyan retired.
-- **Glass:** fixed chrome only (nav dock, search, sticky bars) + hero cards.
-  Scrolling list items use solid translucent fills (also a Capacitor WebView
-  performance rule — `backdrop-filter` is GPU-expensive on low-end Android).
-- **Metal:** reserved for money moments only (buyer-waiting, payout rows).
-  Static sheen; the animated sweep survives only on the primary CTA.
-- **Buttons:** flat premium — solid fill, hairline border, subtle top
-  highlight; no candy bevels, no big colored drop shadows.
-- **Chips:** hairline outline, 9.5px uppercase letterspaced, dot indicators.
-- **Copy:** composed, short, benefit-first. "Reserved for you · 28:43".
-  No wizard metaphors, no exclamation marks.
+Per-screen ambient identity is District's signature; the v4 premium pass keeps its
+intensity low. Full per-screen section/copy/icon spec: `alerts-requests-screen-spec.md`.
 
 ---
 
-## 6. Execution plan
+## 6. Data model
 
-Order respects `CLAUDE.md` Build Order (8 → 9 → 10 …) and Agent Ownership
-(Codex: backend/state machines; Claude: UI/flows). Shared files
-(`convex/schema.ts`, `src/lib/types.ts`, routing) need explicit user approval
-before parallel edits.
+### 6.1 Landed groundwork (`convex/schema.ts`, commit `2a04da8`)
+`catalog_items`, `wants`, `want_matches`, optional `catalogItemId` + `by_catalog_item`
+index on `listings`, and want/want_match audit entity types.
 
-### Phase 0 — Design tokens (Claude, small)
-Port v4 tokens into `src/styles/global.css` (replace the current mixed
-oklch theme — orange borders and 3px offset shadows go away). Rebuild
-`BottomNav.astro` (glass dock + center Sell action) and `AppShell.astro`
-(ambient per-route accent). Gate: visual check on all existing routes,
-`bun test`, `npm run check`.
+### 6.2 Target schema for the Alerts + Requests model
+This **supersedes/extends** the wants groundwork. Schema work is **Codex-owned**
+(`convex/schema.ts` is a shared file requiring explicit approval); documented here so
+implementation is unambiguous.
 
-### Phase 1 — Listing marketplace (Build order 8)
-- Codex: `listings.list` Convex query (live + waitlist_only, by_state index),
-  seed 4–6 fixture listings with catalogItemId.
-- Claude: Home browse (poster cards, dividers, story-ring genre filters),
-  ListingCard v2, listing detail trust grid.
-- Gate: home renders N listings from Convex; tests for query filters.
+```
+users
+catalog_movies / catalog_venues / catalog_events / catalog_routes   (canonical, source-tagged)
+alert_requests        ← was `wants`: + alertTypes[], channels[], tier/priority, status
+monitor_targets       ← shared watch: collapse key = catalog id + theatre + date + showtime + format
+                        many alert_requests : one monitor_target
+availability_events   ← a monitor_target going "live" (one row per drop)
+notification_queue    ← idempotent per (userId, targetId, eventId, alertType); pending/sent/failed
+listings              ← + discount fields, originalPriceVerified, autoPriceDrop schedule
+want_matches → matches ← listing × alert_request pairing, alert-wave rank
+orders / transactions ← protected payment + ₹10 service fee
+subscriptions / referrals
+source_snapshots      ← adapter read cache + snapshotHash for change detection
+audit_logs            ← all internal transitions
+```
 
-### Phase 2 — Demand-first slice (Build order 9)
-- Codex: catalog seed (manual fixtures first), internal mutations
-  `wants.create/cancel`, matching engine on listing→live transition,
-  reservation expiry handling, audit events. All internal; no client-exposed
-  matching mutations.
-- Claude: Request screen (catalog search UI, 3-field form, instant-match
-  bar), Requests segment in My Tickets, Most-Wanted strip + Buyer-waiting
-  banner fed by real wants.
-- Gate: end-to-end mock — post want → list matching ticket → reservation
-  appears with deadline → accept → order created. State-transition tests.
+Relations (essentials):
+```
+catalog_*  1─N  alert_requests  N─1  monitor_targets  1─N  availability_events
+                     │                                        │
+                     └────────── matches ──────── listings ───┘  1─N orders 1─N transactions
+```
+Migration note: `wants → alert_requests` (add alertTypes/channels/status), `want_matches
+→ matches`, `catalog_items → catalog_movies/venues/events/routes` (or keep `catalog_items`
+with a `kind` discriminator — Codex's call). `monitor_targets`, `availability_events`,
+`notification_queue`, `source_snapshots`, `subscriptions`, `referrals` are new.
 
-### Phase 3 — Checkout + timeline binding (Build order 10–11)
-Bind checkout and the stub timeline to live order state (replaces the
-hardcoded `displayState` in `src/pages/app/tickets.astro`).
-
-### Phase 4 — Catalog connections (after Phase 2 works on manual data)
-- TMDB sync action for movies (region IN, daily; attribution required;
-  IMDB has no usable public API — verified 2026-06-12).
-- Events: curated + `user_submission` review queue (no public
-  BookMyShow/District API; scraping is out).
-- Bus routes: curated corridors; Google Places only for stop/location
-  metadata if needed.
-
-### Phase 5 — Notifications
-Push on match/reservation (Capacitor push). Without this the demand loop
-loses most of its stickiness — schedule directly after Phase 2 proves out.
+### 6.3 API shape (own backend; never call BMS/District from the client)
+```
+GET  /api/catalog/movies?source=BMS      GET /api/catalog/venues?source=BMS&city=…
+GET  /api/catalog/regions?source=BMS
+POST /api/alerts   GET /api/alerts   GET /api/alerts/count
+GET  /api/subscription/status   GET /api/notifications/status   GET /api/referral-code
+```
+Use `source` (`BMS` / `DISTRICT`), not `app`. Source adapters return
+`{ isLive, bookingUrl, showtimes?, priceRange?, snapshotHash }`.
 
 ---
 
-## 7. Risks & open questions
+## 7. Visual language (v4 premium — unchanged, extended)
 
-1. **Reservation window length** — 30 min default; needs a real decision
-   (too short = missed matches, too long = starves the open market).
-2. **Price caps vs wants** — source_rules price rules (face_value_cap) must
-   also clamp `maxPricePerUnit` on wants, or wants become a gouging signal.
-3. **Catalog dedup** — user submissions will collide with TMDB/manual rows;
-   needs a merge rule before Phase 4.
-4. **Multi-quantity fairness** — a 4-qty listing vs three 2-qty wants:
-   v1 rule = exact-or-greater qty fit only, no splitting.
-5. **WebView performance** — cap concurrent `backdrop-filter` surfaces
-   (§5); test on a low-end Android device in Phase 0.
-6. **Beads tracking** — `bd` is currently broken in this worktree (Dolt
-   database not found); issues for Phases 1–5 should be filed once sync is
-   repaired.
+Base system is the approved v4 pass and stays exactly: charcoal `#0D0C0F`; Fraunces
+serif for display/prices/wordmark only; Space Grotesk for UI; **one** action color rose
+`#F23D7F` (anything that moves money); jade = protection, gold = deadlines/tickets/plans,
+steel = transfer/sell, bronze = requests, violet = home. Stroke SVG icons only (no
+emoji). Glass (`.gl`) for fixed chrome + hero cards; `.solid` translucent fills for
+scrolling lists (Capacitor WebView perf); `.metal` sheen for money moments; animated
+`.sweep` **only** on the "Buy with Protection" CTA. Per-screen ambient glow + metallic
+phone frame; letterspaced dividers; notched ticket stubs.
+
+New components introduced for this model: `.quota` (request meter), `.alert-card`
+(payoff card with accent rail), `.wave-pill` (Standard/Priority status), `.notify-btn`
+(bell affordance on official items), `.demand-band` (people-looking banner), `.drop-sched`
+(auto price-drop control), `.tier-card`, `.compare` (Free vs Plus), `.ladder` (referral
+rewards), `.chan-row` (channel toggles), `.disc` (verified-only discount badge).
+
+---
+
+## 8. Monetization & compliance
+
+Source: adversarial review (2026-06-16). App-store sections cite the live guidelines;
+**CCPA dark-pattern and TRAI section numbers are the established framework and must be
+re-verified against the primary gazette/PDF before legal sign-off.**
+
+### 8.1 Launch monetization = service fee only
+The ticket purchase (movie/event/bus/resale) is a **physical good/service consumed
+outside the app** — exempt from in-app purchase under **Apple 3.1.3(e)** and Google
+Play's physical-goods/transport exemption. So Razorpay + the **₹10 + GST** service fee
+is compliant in-app on both stores.
+
+### 8.2 Do NOT sell tiers / hold tokens / alert-speed inside the native app (P0)
+Subscriptions or extra-request/alert-speed unlocks are "app functionality" → **IAP
+mandatory (Apple 3.1.1, Play Billing)**. Selling them via Razorpay in-app risks
+account removal. Safe path: **ship no in-app tier sale in v1**; later sell Plus on
+**web/PWA**, grant entitlement server-side, and have the app merely reflect it (no
+in-app upgrade CTA on iOS). Keep ticket payment and any premium-access payment as
+**separate** flows — never bundle.
+
+### 8.3 Dark patterns (India CCPA Guidelines, 2023)
+- **"X people looking" must be a true, labelled, real-time count** (e.g. "52 set alerts
+  in 24h"); never seed/round/freeze. If too few, show "New listing".
+- **No fake countdowns** — timers only for real deadlines (event start, real
+  reservation expiry).
+- **Full price up front**: item + ₹10 + GST + total at checkout entry, not only at
+  final confirm (avoids drip-pricing).
+- **Honest priority**: no "#N in line"; show Standard/Priority with the disclosure that
+  paying/referring affects alert order, "not a guaranteed booking".
+- **No pre-ticked consent**; **symmetric, neutral cancel/downgrade** (no confirm-shaming).
+
+### 8.4 Official-source ToS & brand (P1)
+Scraping/Playwright against BMS/District likely breaches ToS and can be silently
+IP-blocked. Prefer **manual-trigger MVP + official affiliate/deep-link partnerships**;
+throttle and degrade gracefully if blocked. **Text-only** source references, **no
+logos**, explicit "Zwapit is not affiliated with BookMyShow/District" disclaimer; frame
+official supply as **"availability alerts that send you to the official site to book."**
+
+### 8.5 Matching correctness (P0/P1)
+- **Single-winner**: atomic compare-and-set on listing state; first captured payment
+  wins; any second simultaneous capture is **auto-refunded** ("Already sold — fully
+  refunded"). Add a 90–120s pre-payment soft lock so the loser sees "Reserved" before
+  paying.
+- **Dedup key is exact** (catalog id + theatre + date + showtime + screen/format);
+  preferences filter *who is notified*, not which target is checked; re-validate on send.
+- **Idempotent notifications** keyed `(userId, targetId, eventId, alertType)`; cap
+  per-user-per-drop to stop triple-notify.
+- **Refund/timeout**: explicit timeout → auto-refund; payout only after buyer confirms +
+  report window closes. (Consistent with existing custody rules — provider holds money.)
+
+### 8.6 Discount integrity (P1)
+"X% off" renders **only** when original price is verified from the uploaded artifact;
+cap implied discount at verified face value. Seller-typed original price (unverified)
+may show as muted plain text, never a strikethrough/% badge. Surface above-face resale
+honestly and check per-state reselling laws before enabling.
+
+### 8.7 Trust & abuse (P1)
+Referral reward only after distinct verified phone + device/IP heuristics + a real
+non-reversible action; cap/day; flag clusters. Count only **phone-verified** requests
+toward the people-looking signal. Seller reliability score; payout setup required
+before a listing is purchasable; penalties for confirmed no-shows.
+
+---
+
+## 9. Execution plan
+
+Respects `CLAUDE.md` Build Order and Agent Ownership (Codex: backend/state machines/
+schema; Claude: UI/flows). Shared files (`convex/schema.ts`, `src/lib/types.ts`,
+routing) need explicit approval before parallel edits.
+
+- **Phase 0 — Design tokens (Claude).** Port v4 tokens + new components into
+  `src/styles/global.css`; rebuild `BottomNav.astro` (5 tabs + Sell FAB) and
+  `AppShell.astro` (per-route ambient accent). Gate: visual check all routes,
+  `bun test`, `npm run check`.
+- **Phase 1 — Movies + alerts + community + requests (P1 in the user's plan).**
+  - Codex: `catalog_movies/venues`, `alert_requests`, `monitor_targets`,
+    `availability_events`, `notification_queue` (email + web push), admin "mark live"
+    trigger, matching/alert-wave engine (single-winner, idempotent), listings query.
+  - Claude: Home (zones), Search, Create Request, Requests, Alert payoff, Listings,
+    Listing detail, Sell, Profile, Plans screens wired to Convex.
+  - Gate: end-to-end mock — create request → admin marks live → alert fires; create
+    community listing → match alert → protected buy. State + matching tests.
+- **Phase 2.** Bus tickets; discount + price-drop alerts; Telegram; referrals;
+  subscriptions (web/PWA per §8.2).
+- **Phase 3.** WhatsApp; auto price drops; priority alerts; (optional) queue numbers;
+  advanced matching; partner/affiliate integrations.
+
+---
+
+## 10. Risks & open questions (prioritized)
+
+1. **P0 — App-store billing**: never sell tiers/tokens in-app (§8.2). Decide the
+   web/PWA subscription path before building Plus.
+2. **P0 — Dark-pattern exposure**: real-time people-looking count, full price up front,
+   honest priority, no pre-ticked consent (§8.3). Re-verify CCPA section text.
+3. **P0 — Double-pay race**: single-winner atomic transition + auto-refund (§8.5).
+4. **P1 — Official-source ToS/brand**: partnerships over scraping; no logos; "not
+   affiliated" disclaimer (§8.4).
+5. **P1 — Notification consent/spam**: per-channel/per-type opt-in, caps, quiet hours;
+   keep SMS/WhatsApp off until DLT/Meta compliance is built (§8.3, TRAI verify).
+6. **P1 — Discount integrity & state reselling laws** (§8.6).
+7. **P1 — Referral/demand-signal fraud** (§8.7).
+8. **P2 — Reservation/soft-lock window length** (90–120s lock; alert-wave 3–5 min) —
+   needs tuning against real conversion.
+9. **P2 — Catalog dedup** across TMDB/manual/user submissions before Phase 2.
+10. **Ops — Beads tracking** is broken in this worktree (Dolt DB not found); file
+    Phase issues once sync is repaired.

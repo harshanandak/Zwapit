@@ -71,6 +71,39 @@ exists. This is a core marketplace mechanic, not a later phase.
 - Wants follow the same source rule engine: a Want for a blocked category cannot
   be posted; DEMAND_ONLY sources are want-only by definition.
 
+## Alerts And Requests Model
+
+Decision (2026-06-16): the product's primary object is an **alert/request**, not a
+listing. Core promise: "Tell us what you want, and we'll notify you when it becomes
+available." A Want (above) is the request; alerts are how it pays off. Full design in
+`docs/work/2026-06-12-ui-revamp/design.md`.
+
+- Two supply sources fill one demand:
+  - Official availability alerts — Zwapit watches official platforms (BookMyShow,
+    District) and notifies users when a specific show opens, then deep-links them
+    OUT to the official site to book. Zwapit does not resell official inventory and
+    never touches that money. The frontend never calls those platforms directly.
+  - Community resale — matching requesters get a protected-payment match; this is
+    where Zwapit transacts and earns its service fee.
+- Alert types: Availability, Discount, Price-drop, Last-minute.
+- Shared watch (internal `monitor_targets`): many requests for the same
+  show collapse to one watcher; the collapse key is exact (catalog id + venue +
+  date + showtime + format). One watcher notifies all subscribers.
+- Matching uses alert waves, not a hard queue: Priority/best-match first, then all
+  matching requesters, then public browse. No exact queue numbers and no paid holds
+  in v1. User-facing status is Standard/Priority/High Priority.
+- Tiers/referrals buy earlier alerts and more requests — never guaranteed access.
+  Referral rewards unlock only on verified-friend actions, not installs.
+- Sellers see a "people looking" interest signal only: no buyer identity, no
+  budgets, no priority numbers.
+- Notifications: Email + Web Push first; Telegram, then WhatsApp later (kept off
+  until TRAI/DLT and WhatsApp opt-in compliance is built).
+- v1 monetization is the success-fee only (INR 10 + GST). Do not sell tiers, hold
+  tokens, or alert-speed subscriptions inside the native app (Apple/Google in-app
+  purchase rules); sell any subscription on web/PWA later. See design.md §8.
+- Matching, monitor, availability, and notification mutations are internal-only and
+  audited. No client-exposed matching mutations.
+
 ## Architecture Decisions
 
 - Use Astro + React for the frontend.
@@ -244,9 +277,13 @@ Use friendly language:
 - Transfer needed
 - Payout waiting
 - Request a ticket
+- Set an alert
+- Notify me
 - We'll match you
+- Tickets are live
 - Buyer waiting
-- You're #N in line
+- People looking
+- Priority
 
 Avoid user-facing terms:
 - escrow
@@ -262,6 +299,9 @@ Avoid user-facing terms:
 - demand
 - allotment
 - reverse listing
+- queue
+- #N in line
+- monitor target
 
 ## Do Not Build Yet
 
