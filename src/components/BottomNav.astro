@@ -1,34 +1,37 @@
 ---
+import Icon from "./Icon.astro";
+import { TABS, type TabKey } from "../lib/ui/navMap";
+
 interface Props {
-  activeTab?: "home" | "sell" | "tickets" | "me";
+  /** Active tab to highlight (derived from routeId by AppShell). */
+  tab?: TabKey | null;
+  /** Show the "List a ticket" FAB (Sell is a FAB, not a tab). */
+  showFab?: boolean;
 }
 
-const { activeTab } = Astro.props;
-
-const items = [
-  { label: "Home", href: "/app/home", key: "home" },
-  { label: "Sell", href: "/app/sell", key: "sell" },
-  { label: "My Tickets", href: "/app/tickets", key: "tickets" },
-  { label: "Me", href: "/app/me", key: "me" },
-] as const;
+const { tab = null, showFab = false } = Astro.props;
+const SELL_HREF = "/app/sell";
 ---
 
-<nav class="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-card/95 px-3 pb-3 pt-2 backdrop-blur">
-  <div class="mx-auto grid max-w-md grid-cols-4 gap-1">
-    {
-      items.map((item) => (
-        <a
-          class:list={[
-            "rounded-md px-2 py-2 text-center text-sm font-medium",
-            activeTab === item.key
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground",
-          ]}
-          href={item.href}
-        >
-          {item.label}
-        </a>
-      ))
-    }
-  </div>
+<nav class="bnav" aria-label="Primary">
+  {
+    TABS.map((t) => (
+      <a
+        href={t.href}
+        class:list={[{ on: t.key === tab }]}
+        aria-current={t.key === tab ? "page" : undefined}
+      >
+        <Icon name={t.icon} />
+        {t.label}
+      </a>
+    ))
+  }
 </nav>
+{
+  showFab && (
+    <a class="fab" href={SELL_HREF} aria-label="List a ticket">
+      <Icon name="plus" />
+      List a ticket
+    </a>
+  )
+}

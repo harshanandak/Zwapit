@@ -1,0 +1,19 @@
+---
+/**
+ * Renders a stroke icon from the v5 sprite (see IconSprite.astro).
+ * Usage: <Icon name="home" /> · <Icon name="shield" size="s" />
+ * `name` is the sprite id without the `i-` prefix (e.g. "home" -> #i-home).
+ */
+interface Props {
+  /** Sprite id suffix, e.g. "home" for #i-home. */
+  name: string;
+  /** Optional size variant: small (.ic.s) or large (.ic.l). */
+  size?: "s" | "l";
+  /** Extra class names to merge onto the icon. */
+  class?: string;
+}
+
+const { name, size, class: className } = Astro.props;
+---
+
+<svg class:list={["ic", size, className]} aria-hidden="true"><use href={`#i-${name}`} /></svg>
