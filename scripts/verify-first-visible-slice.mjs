@@ -37,6 +37,16 @@ const routes = [
 
 const routeDistPaths = new Map(routes);
 
+// The v5 bottom nav links to canonical tab routes that ship in later waves
+// (U1-U7). They are intentionally not in the first-slice contract yet, so links
+// to them are known-forward navigation, not scope drift.
+const knownForwardRoutes = new Set([
+  "/app/search",
+  "/app/requests",
+  "/app/listings",
+  "/app/profile",
+]);
+
 const allowedTask10Paths = new Set([
   "scripts/verify-first-visible-slice.mjs",
   "tests/acceptance/firstVisibleSlice.test.ts",
@@ -74,7 +84,7 @@ const allowedFirstSlicePaths = [
   /^tests\//,
   /^src\/components\//,
   /^src\/layouts\//,
-  /^src\/lib\/(auth|convex|flow|mock|rules|state|types|validation)/,
+  /^src\/lib\/(auth|convex|flow|mock|rules|state|types|ui|validation)/,
   /^src\/pages\/(admin|app|index\.astro)/,
   /^src\/styles\//,
 ];
@@ -199,6 +209,7 @@ export function verifyRouteCoverage() {
     const hrefs = [...html.matchAll(/\shref="([^"#?]+)(?:[#?][^"]*)?"/g)].map((match) => match[1]);
     for (const href of hrefs) {
       if (!href.startsWith("/")) continue;
+      if (knownForwardRoutes.has(href)) continue;
       const builtTarget = routeHrefToBuiltFile(href);
       if (!builtTarget) {
         failures.push(`${route}: link ${href} is not part of the first-slice route contract`);
@@ -222,7 +233,7 @@ export async function verifyAcceptanceCriteria() {
 
   const appRoutes = ["/app/home", "/app/sell", "/app/tickets", "/app/me"];
   for (const route of appRoutes) {
-    mustContain(route, built.get(route) ?? "", ["Home", "Sell", "My Tickets", "Me"], failures);
+    mustContain(route, built.get(route) ?? "", ["Home", "Search", "Requests", "Listings", "Profile"], failures);
   }
 
   mustContain("/app/home", built.get("/app/home") ?? "", [

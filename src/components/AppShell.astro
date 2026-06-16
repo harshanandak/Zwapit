@@ -6,8 +6,14 @@ import { resolveNav } from "../lib/ui/navMap";
 interface Props {
   /** The `/app/...` route id; drives the ambient accent + active tab. */
   routeId: string;
-  /** Document title (shown in the browser tab). */
+  /** Document title; also rendered as the page heading unless `hideHeader`. */
   title: string;
+  /**
+   * Hide the generic title header. The v5 screens render their own top bar
+   * (.home-top / .pbar / .hero) and pass `hideHeader`; the transitional existing
+   * pages rely on this header for their on-screen heading.
+   */
+  hideHeader?: boolean;
   /**
    * Legacy 4-tab hint ("home" | "sell" | "tickets" | "me"), accepted for
    * backward-compatibility with the existing pages but ignored — the active
@@ -17,12 +23,19 @@ interface Props {
   activeTab?: string;
 }
 
-const { routeId, title } = Astro.props;
+const { routeId, title, hideHeader = false } = Astro.props;
 const { tab, accent, showFab } = resolveNav(routeId);
 ---
 
 <AppLayout title={`${title} | Zwapit`}>
   <div class="app-shell" data-route-id={routeId} style={`--acc:${accent}`}>
+    {
+      !hideHeader && (
+        <header class="pbar">
+          <h1>{title}</h1>
+        </header>
+      )
+    }
     <slot />
     <div class="spacer-nav"></div>
     <BottomNav tab={tab} showFab={showFab} />

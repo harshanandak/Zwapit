@@ -54,7 +54,7 @@ for (const route of routes) {
 const homeHtmlPath = routeToFile("/app/home");
 if (existsSync(homeHtmlPath)) {
   const homeHtml = readFileSync(homeHtmlPath, "utf8");
-  for (const label of ["Home", "Sell", "My Tickets", "Me"]) {
+  for (const label of ["Home", "Search", "Requests", "Listings", "Profile"]) {
     const labelPattern = new RegExp(`>\\s*${label.replace(" ", "\\s+")}\\s*<`);
     if (!labelPattern.test(homeHtml)) {
       failures.push(`Bottom nav missing ${label}`);
