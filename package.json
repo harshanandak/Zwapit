@@ -20,29 +20,29 @@
     "cf:dry-run": "bun run build && wrangler deploy --dry-run"
   },
   "dependencies": {
-    "@astrojs/react": "^4.4.0",
+    "@astrojs/react": "^4.4.2",
     "@capacitor/android": "7.6.6",
     "@capacitor/core": "7.6.6",
     "@capacitor/ios": "7.6.6",
     "@fontsource/fraunces": "^5.2.9",
     "@fontsource/space-grotesk": "^5.2.10",
-    "@tailwindcss/postcss": "^4.1.17",
-    "astro": "^6.4.6",
-    "convex": "^1.39.1",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "tailwindcss": "^4.1.17"
+    "@tailwindcss/postcss": "^4.3.1",
+    "astro": "^6.4.7",
+    "convex": "^1.41.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwindcss": "^4.3.1"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@astrojs/ts-plugin": "^1.10.4",
+    "@astrojs/check": "^0.9.9",
+    "@astrojs/ts-plugin": "^1.10.9",
     "@capacitor/cli": "7.6.6",
     "@types/bun": "latest",
-    "@types/react": "^19.2.7",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "lefthook": "^2.1.8",
+    "lefthook": "^2.1.9",
     "typescript": "^5.9.3",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.101.0"
   },
   "overrides": {
     "ws": "8.21.0",
