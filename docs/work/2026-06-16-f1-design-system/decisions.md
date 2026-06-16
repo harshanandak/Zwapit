@@ -83,3 +83,18 @@ F1-actionable (all minor, all fixed in the adaptation block / AppShell — LOCK 
 Deferred (not F1-actionable): `--faint` contrast on `--bg` (inside the LOCKED verbatim
 palette), `color-mix` two-layer-shorthand robustness (moot — the locked design already
 depends on color-mix/oklch broadly), and a docs-only focus-state nit.
+
+---
+
+## Follow-ups (cross-wave tracking)
+
+Beads/Dolt is down in this repo (`database "zwapit" not found`), so follow-ups are tracked
+here + in the PR until `bd` sync is repaired.
+
+- **Acceptance-harness rewrite (Codex).** `scripts/verify-first-visible-slice.mjs` and
+  `scripts/route-coverage.mjs` were updated to the v5 nav contract in commit `54e1201`
+  (label set, `knownForwardRoutes` allowlist, `src/lib/ui` path allowlist). They still
+  encode the *pre-revamp* product overall; a dedicated Codex pass should rewrite them to
+  the Alerts+Requests model (new routes/copy as U1–U7 land). Owner: Codex. Status: open.
+- **Forward tab routes.** Search/Requests/Listings/Profile land in U1–U7; their nav links
+  404 by design until then (design.md D7).
