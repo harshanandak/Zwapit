@@ -538,7 +538,10 @@
    Mostly-solid scrim (vs the preview's 55% fade) so scrolling content disappears
    cleanly behind the fixed bar instead of ghosting through its translucent top —
    the glass pill (.bnav::before) + soft top edge are preserved. */
-.app-shell .bnav{position:fixed;left:calc(50% - min(50%, 224px));right:calc(50% - min(50%, 224px));padding-bottom:calc(20px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 80%, transparent)}
+.app-shell .bnav{position:fixed;left:calc(50% - min(50%, 224px));right:calc(50% - min(50%, 224px));padding-bottom:calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 80%, transparent)}
+/* center the tab icons+labels within the glass pill (10px bottom padding aligns the
+   align-end tabs with the pill); lift the pill itself by the notch inset so both stay aligned */
+.app-shell .bnav::before{bottom:calc(10px + env(safe-area-inset-bottom))}
 .app-shell .fab{position:fixed;left:auto;right:calc(50% - min(50%, 224px) + 16px);bottom:calc(110px + env(safe-area-inset-bottom))}
 /* keep the nav clearance in lockstep with the fixed nav's safe-area padding */
 .app-shell .spacer-nav{height:calc(124px + env(safe-area-inset-bottom))}
