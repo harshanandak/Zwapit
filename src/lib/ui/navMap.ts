@@ -69,6 +69,7 @@ function isUnder(path: string, base: string): boolean {
   return path === base || path.startsWith(`${base}/`);
 }
 
+/** Build a {@link NavState} result. */
 function state(tab: TabKey | null, accent: string, showFab: boolean): NavState {
   return { tab, accent, showFab };
 }
