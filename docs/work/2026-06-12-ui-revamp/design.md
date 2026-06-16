@@ -115,6 +115,30 @@ artifact; otherwise the UI shows a plain "Seller price" (§8.6).
 - **Later:** Telegram, then WhatsApp.
 - Consent is **per-channel and per-alert-type, unchecked by default**, with
   per-request and global opt-out, frequency caps, and quiet hours (§8.3).
+- India onboarding before launch: TRAI **DLT** header/template registration for SMS,
+  and explicit prior **opt-in + approved templates** for WhatsApp Business (P2
+  prerequisite — these channels stay off until then).
+
+### 3.7 Matching levels & referral rewards
+
+The alert-wave system (§3.3) exposes three named matching levels, introduced in order:
+
+- **Open Alert (v1 default):** notify all matching requesters; first valid buyer wins.
+  Used for low/medium demand — most listings.
+- **Early Alert (v1, earned):** Priority / Plus / referral users are notified a few
+  minutes earlier (Wave 1). No lock — just a head start.
+- **Private Hold (later):** a short, time-boxed hold of one listing for one buyer.
+  Rare; limited to high-value/high-demand items and trusted users; framed as "up to
+  N minutes" because time-sensitive tickets can't always be held.
+
+Referral rewards (earned; before paid subscriptions; unlock only on a verified friend's
+meaningful action — phone verify / first request / first list / first buy — never raw
+installs; abuse controls in §8.7):
+
+- 1 verified friend → +1 active request
+- 3 verified friends → Early Alert for 7 days
+- 5 verified friends → 1 Private Hold token (used rarely)
+- 10 verified friends → Plus for 30 days
 
 ---
 
@@ -173,6 +197,17 @@ Selling has **no center tab** — it's a prominent **"List a ticket" FAB** above
 | 09 | Profile | gold | Buying + Selling hubs; tier card; channel toggles |
 | 10 | Plans & Referrals | gold | Free vs Plus; referral ladder; alert-wave explainer |
 
+**Per-screen specifics** (full copy/icon spec in `alerts-requests-screen-spec.md`):
+- **Home** rails: Official tickets (Movies / Events / Bus, each with a Notify-me
+  affordance) and Community listings (Latest · Discounted · Trending).
+- **Search** scope: Movie / Event / Bus / Voucher / Pass; filters: price, date,
+  location, source, category; an empty result offers "Create a request instead".
+- **Listings** sections: Latest · Trending · Discounted · Ending Soon · Near Me.
+- **Profile** hubs — Buying: My Requests · Saved · Purchases · Notifications;
+  Selling: My Listings · Sales · Payouts · History.
+- **Sell FAB** ("List a ticket") appears on Home, Search, Requests, and Listings;
+  selling is also reachable from the Profile Selling hub. No center Sell tab.
+
 Per-screen ambient identity is District's signature; the v4 premium pass keeps its
 intensity low. Full per-screen section/copy/icon spec: `alerts-requests-screen-spec.md`.
 
@@ -216,6 +251,11 @@ Migration note: `wants → alert_requests` (add alertTypes/channels/status), `wa
 with a `kind` discriminator — Codex's call). `monitor_targets`, `availability_events`,
 `notification_queue`, `source_snapshots`, `subscriptions`, `referrals` are new.
 
+Scope notes: **voucher/pass** catalogs are a future catalog kind (Phase 2+) — §1's
+promise states the full vision, not the v1 data model. Seller **payout-setup**
+readiness lives in the existing `seller_payment_accounts`; a seller **reliability
+score** (§8.7) is a future field there.
+
 ### 6.3 API shape (own backend; never call BMS/District from the client)
 ```
 GET  /api/catalog/movies?source=BMS      GET /api/catalog/venues?source=BMS&city=…
@@ -225,6 +265,36 @@ GET  /api/subscription/status   GET /api/notifications/status   GET /api/referra
 ```
 Use `source` (`BMS` / `DISTRICT`), not `app`. Source adapters return
 `{ isLive, bookingUrl, showtimes?, priceRange?, snapshotHash }`.
+
+### 6.4 Admin & ops surface (internal)
+- **Catalogs:** movies, venues, cities, events, routes — curated / seeded / synced,
+  reviewed before going live.
+- **Monitor targets:** status `Watching → Live → Closed`, with subscriber count.
+- **Alert requests:** per-target waiting count ("125 users waiting").
+- **Notification queue:** rows `pending → sent | failed`, retryable.
+
+All admin actions are internal-only and audited; no client-exposed matching or monitor
+mutations.
+
+### 6.5 Source adapters & MVP sequence
+`snapshotHash` lets a cron detect change cheaply (cached in `source_snapshots`). Get
+availability by, in order of preference: (1) official partner/affiliate feed,
+(2) documented public JSON endpoint, (3) rendered check — last resort, see ToS risk
+§8.4. **Build-first order:** manual admin "mark live" → one BMS checker → one District
+checker. Do not overbuild monitoring before the demand loop is proven.
+
+Alert payload (per request; extensible to events / bus / vouchers / resale):
+```
+{ source:"BMS"|"DISTRICT", type:"movie", movie_name, venue_id, screen_type,
+  seat_types:[], target_date, time_window_start, time_window_end,
+  notification_channels:["email","push"], selected_language, selected_format,
+  is_premium, plan_type }
+```
+Notification copy (official): title "Tickets are live", body "Dune · PVR Orion ·
+Sat 9:30 PM — book now", action "Open booking" (deep-links to the official site).
+
+The alert payload mirrors the external source contract (snake_case); internal Convex
+tables and fields stay camelCase — adapters translate at the boundary.
 
 ---
 
@@ -245,6 +315,14 @@ New components introduced for this model: `.quota` (request meter), `.alert-card
 (auto price-drop control), `.tier-card`, `.compare` (Free vs Plus), `.ladder` (referral
 rewards), `.chan-row` (channel toggles), `.disc` (verified-only discount badge).
 
+**UI style is LOCKED to v5.** The 10-screen `zwapit-ui-revamp-preview.html` is the
+canonical visual reference and the approved style. Implementation must reuse this exact
+system — tokens, components, per-screen ambient identities, and the restraint rules —
+and **build on it without degrading it**: no reverting to flat token cards, no new
+fonts, no extra accent colors, no emoji in chrome, no candy bevels or neon, and keep
+`.sweep` on the Buy CTA only. New surfaces extend the existing component vocabulary
+rather than inventing parallel styles.
+
 ---
 
 ## 8. Monetization & compliance
@@ -252,6 +330,17 @@ rewards), `.chan-row` (channel toggles), `.disc` (verified-only discount badge).
 Source: adversarial review (2026-06-16). App-store sections cite the live guidelines;
 **CCPA dark-pattern and TRAI section numbers are the established framework and must be
 re-verified against the primary gazette/PDF before legal sign-off.**
+
+### 8.0 Business model
+- **Primary revenue:** success fee on a completed purchase (mock ₹10 + GST).
+- **Growth engine:** referrals (earned requests + earlier alerts) before paid tiers.
+- **Liquidity engine:** seller discounts + buyer discount/price-drop alerts pull both
+  sides of the market together.
+- **Future revenue:** Plus subscription (more requests, earlier alerts) — sold on
+  web/PWA per §8.2, never positioned as guaranteed access.
+
+Launch on success-fee + referrals to build liquidity; introduce subscriptions only
+after the loop works. Collect demand data throughout (a partnership/operator story).
 
 ### 8.1 Launch monetization = service fee only
 The ticket purchase (movie/event/bus/resale) is a **physical good/service consumed
