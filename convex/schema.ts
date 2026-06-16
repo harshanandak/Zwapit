@@ -11,8 +11,10 @@ import { v } from "convex/values";
 // transferTaskKey, sourceRuleKey, issueKey) so current UI routes and tests can
 // keep mapping by the same ids.
 //
-// Scope: persistence for the accepted first visible mock flow only. No real
-// auth, payment, payout, refund, admin, demand, or category-expansion tables.
+// Scope: persistence for the accepted first visible mock flow, plus the
+// demand-first wants groundwork (catalog_items, wants, want_matches — decision
+// 2026-06-12). No real auth, payment, payout, refund, admin, or
+// category-expansion tables.
 
 // ---- Reusable enum validators (kept identical to src/lib/types.ts) ----
 
@@ -91,6 +93,38 @@ const issueReasonCode = v.union(
   v.literal("details_do_not_match"),
   v.literal("eligibility_problem"),
   v.literal("cannot_access_ticket"),
+);
+
+// ---- Demand-first wants groundwork (CLAUDE.md "Demand-First Wants") ----
+
+const catalogKind = v.union(
+  v.literal("movie"),
+  v.literal("live_event"),
+  v.literal("bus_route"),
+);
+
+const catalogSource = v.union(
+  v.literal("tmdb"),
+  v.literal("manual"),
+  v.literal("google_places"),
+  v.literal("user_submission"),
+);
+
+const wantState = v.union(
+  v.literal("open"),
+  v.literal("matched"),
+  v.literal("reserved"),
+  v.literal("fulfilled"),
+  v.literal("expired"),
+  v.literal("cancelled"),
+);
+
+const wantMatchState = v.union(
+  v.literal("proposed"),
+  v.literal("reserved"),
+  v.literal("accepted"),
+  v.literal("declined"),
+  v.literal("expired"),
 );
 
 const actorRole = v.union(v.literal("buyer"), v.literal("seller"), v.literal("system"));
@@ -233,10 +267,14 @@ export default defineSchema({
     state: listingState,
     ruleDecision,
     duplicateFingerprint: v.string(),
+    // Canonical catalog reference. Optional for existing manual-upload listings;
+    // required by the matching engine — a listing without it never matches a Want.
+    catalogItemId: v.optional(v.string()),
   })
     .index("by_key", ["listingKey"])
     .index("by_state", ["state"])
-    .index("by_seller", ["sellerId"]),
+    .index("by_seller", ["sellerId"])
+    .index("by_catalog_item", ["catalogItemId", "state"]),
 
   orders: defineTable({
     orderKey: v.string(),
@@ -279,6 +317,76 @@ export default defineSchema({
     .index("by_key", ["issueKey"])
     .index("by_order", ["orderId"]),
 
+  // Canonical catalog of things people can want or list: movies (TMDB), live
+  // events (curated/manual), bus routes (curated, Google Places-assisted).
+  // Wants and listings both point here so matching is exact, never free-text.
+  catalog_items: defineTable({
+    catalogKey: v.string(),
+    kind: catalogKind,
+    externalSource: catalogSource,
+    externalId: v.optional(v.string()),
+    title: v.string(),
+    // movie: language/format · event: artist or organiser · bus: operator
+    subtitle: v.optional(v.string()),
+    city: v.optional(v.string()),
+    // event venue, or bus destination; origin lives in `city` for bus routes
+    venueOrDestination: v.optional(v.string()),
+    startAt: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    isActive: v.boolean(),
+    lastSyncedAt: v.string(),
+  })
+    .index("by_key", ["catalogKey"])
+    .index("by_kind_active", ["kind", "isActive"])
+    .index("by_external", ["externalSource", "externalId"]),
+
+  // Buyer demand posted before (or independent of) supply. Matching engine
+  // pairs open wants with live listings on the same catalog item, FIFO by
+  // creation time, within quantity and max-price fit.
+  wants: defineTable({
+    wantKey: v.string(),
+    buyerId: v.string(),
+    catalogItemId: v.string(),
+    // Catalog-backed categories only. Every Want has a mandatory catalogItemId,
+    // and catalog_items.kind covers movie/live_event/bus_route — so watcher /
+    // future_category (which have no catalog kind) are not valid Want categories.
+    category: v.union(
+      v.literal("event_ticket"),
+      v.literal("movie_ticket"),
+      v.literal("bus_travel"),
+    ),
+    // quantity must be a positive integer and maxPricePerUnit non-negative;
+    // createdAt/expiresAt must be ISO-8601. Convex validators have no numeric or
+    // string-format bounds, so these are enforced at mutation time (F2/B2).
+    quantity: v.number(),
+    maxPricePerUnit: v.number(),
+    state: wantState,
+    expiresAt: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_key", ["wantKey"])
+    .index("by_buyer", ["buyerId"])
+    .index("by_catalog_state", ["catalogItemId", "state"])
+    .index("by_state_created", ["state", "createdAt"]),
+
+  // One proposed pairing of a want and a listing. `reservedUntil` bounds the
+  // matched buyer's exclusive window before the listing reopens to everyone.
+  want_matches: defineTable({
+    matchKey: v.string(),
+    wantId: v.string(),
+    listingId: v.string(),
+    state: wantMatchState,
+    allocationRank: v.number(),
+    reservedUntil: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_key", ["matchKey"])
+    .index("by_want", ["wantId"])
+    .index("by_listing", ["listingId"])
+    // Pairwise lookup for idempotent match creation/dedup under concurrent workers.
+    .index("by_want_listing", ["wantId", "listingId"])
+    .index("by_state", ["state"]),
+
   // Append-only audit log for visible state transitions.
   audit_logs: defineTable({
     actorId: v.string(),
@@ -289,6 +397,8 @@ export default defineSchema({
       v.literal("order"),
       v.literal("transfer_task"),
       v.literal("issue"),
+      v.literal("want"),
+      v.literal("want_match"),
     ),
     entityId: v.string(),
     fromState: v.optional(v.string()),

@@ -30,6 +30,7 @@ The v1 proof is:
 - Can a seller list a transferable item easily?
 - Can a buyer understand protection and buy safely?
 - Can the platform protect payment until transfer/completion without taking custody of the item?
+- Can a buyer request what they want before supply exists and get matched automatically?
 
 ## Current UX Baseline
 
@@ -45,6 +46,63 @@ The v1 proof is:
 - Trust details must show transfer mode and payout rule upfront.
 
 Older Buy/Sell split tab drafts are not active unless the user explicitly revives them.
+
+## Demand-First Wants (Reverse Listings)
+
+Decision (2026-06-12): buyers can post what they want before any matching listing
+exists. This is a core marketplace mechanic, not a later phase.
+
+- A Want is a buyer request for a specific catalog item: quantity, max price per
+  unit, and expiry.
+- Wants must reference canonical catalog items, not free text, so matching is exact.
+- Catalog sources: TMDB for movies (IMDB has no usable public API), curated or
+  manually seeded live events, curated bus routes (Google Places/Routes may assist
+  with location data). User-submitted catalog entries are allowed but reviewed.
+- When a buyer posts a Want and live listings already match, show those matches
+  immediately (instant path).
+- When a new listing goes live, it is matched against open Wants on the same
+  catalog item with quantity and price-cap fit.
+- Allotment is first-in-first-out by Want creation time; the matched buyer gets a
+  time-boxed reservation before the listing opens to everyone else.
+- Sellers can sell directly into a Want ("Buyer waiting" instant sell).
+- Want states: open, matched, reserved, fulfilled, expired, cancelled.
+- Matching and allotment transitions are explicit, internal-only mutations with
+  audit logs. No client-exposed matching mutations.
+- Wants follow the same source rule engine: a Want for a blocked category cannot
+  be posted; DEMAND_ONLY sources are want-only by definition.
+
+## Alerts And Requests Model
+
+Decision (2026-06-16): the product's primary object is an **alert/request**, not a
+listing. Core promise: "Tell us what you want, and we'll notify you when it becomes
+available." A Want (above) is the request; alerts are how it pays off. Full design in
+`docs/work/2026-06-12-ui-revamp/design.md`.
+
+- Two supply sources fill one demand:
+  - Official availability alerts — Zwapit watches official platforms (BookMyShow,
+    District) and notifies users when a specific show opens, then deep-links them
+    OUT to the official site to book. Zwapit does not resell official inventory and
+    never touches that money. The frontend never calls those platforms directly.
+  - Community resale — matching requesters get a protected-payment match; this is
+    where Zwapit transacts and earns its service fee.
+- Alert types: Availability, Discount, Price-drop, Last-minute.
+- Shared watch (internal `monitor_targets`): many requests for the same
+  show collapse to one watcher; the collapse key is exact (catalog id + venue +
+  date + showtime + format). One watcher notifies all subscribers.
+- Matching uses alert waves, not a hard queue: Priority/best-match first, then all
+  matching requesters, then public browse. No exact queue numbers and no paid holds
+  in v1. User-facing status is Standard/Priority/High Priority.
+- Tiers/referrals buy earlier alerts and more requests — never guaranteed access.
+  Referral rewards unlock only on verified-friend actions, not installs.
+- Sellers see a "people looking" interest signal only: no buyer identity, no
+  budgets, no priority numbers.
+- Notifications: Email + Web Push first; Telegram, then WhatsApp later (kept off
+  until TRAI/DLT and WhatsApp opt-in compliance is built).
+- v1 monetization is the success-fee only (INR 10 + GST). Do not sell tiers, hold
+  tokens, or alert-speed subscriptions inside the native app (Apple/Google in-app
+  purchase rules); sell any subscription on web/PWA later. See design.md §8.
+- Matching, monitor, availability, and notification mutations are internal-only and
+  audited. No client-exposed matching mutations.
 
 ## Architecture Decisions
 
@@ -69,14 +127,15 @@ Older Buy/Sell split tab drafts are not active unless the user explicitly revive
 6. Upload-first seller flow.
 7. Source rule engine.
 8. Listing marketplace.
-9. Buyer checkout.
-10. Order timeline.
-11. Transfer workflow.
-12. Dispute/refund workflow.
-13. Internal settlement hold/release workflow.
-14. Admin dashboard.
-15. Demand discovery.
-16. Category expansion.
+9. Demand-first wants and catalog groundwork.
+10. Buyer checkout.
+11. Order timeline.
+12. Transfer workflow.
+13. Dispute/refund workflow.
+14. Internal settlement hold/release workflow.
+15. Admin dashboard.
+16. Demand discovery analytics.
+17. Category expansion.
 
 Do not skip ahead to payments, admin, or category expansion before the visible mock flow and core state model exist.
 
@@ -217,6 +276,14 @@ Use friendly language:
 - Buy with Protection
 - Transfer needed
 - Payout waiting
+- Request a ticket
+- Set an alert
+- Notify me
+- We'll match you
+- Tickets are live
+- Buyer waiting
+- People looking
+- Priority
 
 Avoid user-facing terms:
 - escrow
@@ -229,6 +296,12 @@ Avoid user-facing terms:
 - linked account
 - AMBER
 - settlement hold
+- demand
+- allotment
+- reverse listing
+- queue
+- #N in line
+- monitor target
 
 ## Do Not Build Yet
 
