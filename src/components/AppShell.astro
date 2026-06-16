@@ -15,10 +15,10 @@ interface Props {
    */
   hideHeader?: boolean;
   /**
-   * Legacy 4-tab hint ("home" | "sell" | "tickets" | "me"), accepted for
-   * backward-compatibility with the existing pages but ignored — the active
-   * tab and ambient accent are derived from `routeId`. Falls away as each page
-   * migrates to the v5 screens (U1-U7).
+   * Legacy 4-tab hint from the old nav. NOT read at runtime — declared only so
+   * `astro check` accepts the existing pages that still pass `activeTab=...`.
+   * The active tab and ambient accent are derived from `routeId`. Drop once
+   * every page has migrated to the v5 screens (U1-U7).
    */
   activeTab?: string;
 }

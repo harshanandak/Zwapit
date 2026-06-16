@@ -7,12 +7,6 @@ interface Props {
   tab?: TabKey | null;
   /** Show the "List a ticket" FAB (Sell is a FAB, not a tab). */
   showFab?: boolean;
-  /**
-   * @deprecated Legacy 4-tab prop ("home" | "sell" | "tickets" | "me").
-   * Accepted for backward-compatibility but ignored — AppShell drives `tab`
-   * from the routeId. Remove once all callers pass `tab`.
-   */
-  activeTab?: string;
 }
 
 const { tab = null, showFab = false } = Astro.props;
