@@ -132,7 +132,7 @@ Type per CLAUDE.md classification. "Wire" = flip a mock to the real Convex query
   channel (after DLT/opt-in groundwork); subscriptions *purchase* on web/PWA (app-store
   rule); real source adapters (BMS/District) behind partnerships; auto price-drop
   execution job; basic admin dashboard UI.
-- **Phase 3:** WhatsApp; advanced matching; Private Hold tokens; optional queue numbers;
+- **Phase 3:** WhatsApp; advanced matching; Private Hold tokens;
   partner/affiliate integrations.
 - Do-not-build (CLAUDE.md) unless asked: chat, wallet, full ledger, real OCR/KYC, etc.
 
@@ -153,6 +153,8 @@ Type per CLAUDE.md classification. "Wire" = flip a mock to the real Convex query
   reviewer can check fidelity to the locked UI.
 - **v1 vs Phase 2 delivery:** Availability + Last-minute alerts deliver in v1; **Discount
   and Price-drop alert *delivery*, and auto price-drop *execution*, are Phase 2** — but
-  their capture UI (U3/U5) and data fields (B3) ship now and are labelled "coming soon".
+  their capture UI (U3/U5) and data fields (B3) ship now. UX pattern: those toggles are
+  **interactive and saved**, with an inline "Delivers in Phase 2" caption — not greyed
+  out and never faking functionality (this is U3/U5's acceptance criterion).
 - **Sequence U4 before U5** (both consume B3's listing/order types) to avoid concurrent
   reconciliation of the shared `types.ts`.

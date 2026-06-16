@@ -71,7 +71,7 @@ alert types the user wants. Requests are **private**, not a public board.
 ### 3.3 Matching = alert waves, not a hard queue (v1)
 No paid holds and no exact queue numbers in v1. When supply appears:
 
-```
+```text
 Supply appears (official goes live  OR  community listing created)
   → find matching requests (catalog id + budget + qty/format fit)
   → Wave 1: priority/referral/best-match users
@@ -145,14 +145,14 @@ installs; abuse controls in §8.7):
 ## 4. User flows
 
 **Buyer — official availability alert**
-```
+```text
 Home / Search → "Set an alert" → pick movie + theatre + date + showtime + format
   → choose alert types + budget → request Active ("you + 124 others waiting")
   → tickets open → "Tickets are live" alert → Open booking (out to official site)
 ```
 
 **Buyer — community match**
-```
+```text
 Open request (Active)
   → a matching listing is created → alert wave → "A match for your request"
   → Buy with Protection (phone OTP → pay) → My purchases
@@ -160,7 +160,7 @@ Open request (Active)
 ```
 
 **Seller**
-```
+```text
 Sell (FAB / Profile) → upload ticket → confirm parsed details
   → see "52 people looking" → set price (+ optional discount / auto-drop)
   → rule engine decision → live → matched requesters alerted
@@ -168,7 +168,7 @@ Sell (FAB / Profile) → upload ticket → confirm parsed details
 ```
 
 **Matching engine (system actor, internal-only, audited)**
-```
+```text
 supply event → resolve canonical catalog id → find fitting requests
   → emit alert waves (idempotent per user/target/event/type)
   → single-winner atomic transition on the listing → order → audit log
@@ -224,7 +224,7 @@ This **supersedes/extends** the wants groundwork. Schema work is **Codex-owned**
 (`convex/schema.ts` is a shared file requiring explicit approval); documented here so
 implementation is unambiguous.
 
-```
+```text
 users
 catalog_movies / catalog_venues / catalog_events / catalog_routes   (canonical, source-tagged)
 alert_requests        ← was `wants`: + alertTypes[], channels[], tier/priority, status
@@ -241,7 +241,7 @@ audit_logs            ← all internal transitions
 ```
 
 Relations (essentials):
-```
+```text
 catalog_*  1─N  alert_requests  N─1  monitor_targets  1─N  availability_events
                      │                                        │
                      └────────── matches ──────── listings ───┘  1─N orders 1─N transactions
@@ -257,7 +257,7 @@ readiness lives in the existing `seller_payment_accounts`; a seller **reliabilit
 score** (§8.7) is a future field there.
 
 ### 6.3 API shape (own backend; never call BMS/District from the client)
-```
+```text
 GET  /api/catalog/movies?source=BMS      GET /api/catalog/venues?source=BMS&city=…
 GET  /api/catalog/regions?source=BMS
 POST /api/alerts   GET /api/alerts   GET /api/alerts/count
@@ -284,7 +284,7 @@ availability by, in order of preference: (1) official partner/affiliate feed,
 checker. Do not overbuild monitoring before the demand loop is proven.
 
 Alert payload (per request; extensible to events / bus / vouchers / resale):
-```
+```json
 { source:"BMS"|"DISTRICT", type:"movie", movie_name, venue_id, screen_type,
   seat_types:[], target_date, time_window_start, time_window_end,
   notification_channels:["email","push"], selected_language, selected_format,
@@ -398,6 +398,36 @@ non-reversible action; cap/day; flag clusters. Count only **phone-verified** req
 toward the people-looking signal. Seller reliability score; payout setup required
 before a listing is purchasable; penalties for confirmed no-shows.
 
+### 8.8 OWASP security analysis (Top 10)
+Threat analysis for the alerts / matching / payment surfaces (complements §8.1–8.7):
+
+- **A01 Broken Access Control** — matching, monitor, availability, payout, and refund
+  mutations are **internal-only**; clients never call them. Orders/listings are scoped to
+  the internal app user id (never a provider id). Enforce server-side auth + actor checks
+  on every mutation.
+- **A02 Cryptographic Failures** — no card data/PII stored; Razorpay holds the money; no
+  internal wallet. Secrets (Convex/Clerk/Cloudflare) live in env, never in client bundles.
+- **A03 Injection** — Convex validators on all args; catalog comes from typed adapters,
+  not free text; no raw SQL. Sanitize user-submitted catalog entries before review.
+- **A04 Insecure Design** — single-winner atomic transition + idempotent notifications
+  (§8.5) prevent double-pay/double-notify; alert waves avoid queue gaming.
+- **A05 Security Misconfiguration** — static-asset Worker; least-privilege Cloudflare
+  token; no debug endpoints; `bun audit` gate in CI.
+- **A06 Vulnerable & Outdated Components** — `bun audit` gate; transitive CVEs pinned via
+  `overrides`.
+- **A07 Identification & Auth Failures** — Clerk + phone-verification gates for buy/sell;
+  internal app user id kept separate from provider identity (`auth_identities`).
+- **A08 Software & Data Integrity** — verified-only discount badge (§8.6); append-only
+  audit logs on transitions; webhook signature + idempotency for payments (later).
+- **A09 Logging & Monitoring** — append-only `audit_logs`; Cloudflare observability on;
+  `notification_queue` tracks pending/sent/failed.
+- **A10 SSRF** — source adapters fetch only allowlisted official hosts, server-side and
+  throttled; the client never issues those requests (§8.4).
+
+Decision rationale & alternatives are recorded inline per section (e.g., service-fee-only
+vs in-app subscriptions §8.1–8.2; alert waves vs hard queue §3.3; static assets vs edge
+SSR — deferred unless server endpoints are needed).
+
 ---
 
 ## 9. Execution plan
@@ -420,8 +450,8 @@ routing) need explicit approval before parallel edits.
     community listing → match alert → protected buy. State + matching tests.
 - **Phase 2.** Bus tickets; discount + price-drop alerts; Telegram; referrals;
   subscriptions (web/PWA per §8.2).
-- **Phase 3.** WhatsApp; auto price drops; priority alerts; (optional) queue numbers;
-  advanced matching; partner/affiliate integrations.
+- **Phase 3.** WhatsApp; auto price drops; priority alerts; advanced matching;
+  partner/affiliate integrations.
 
 ---
 

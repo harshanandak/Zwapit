@@ -347,13 +347,17 @@ export default defineSchema({
     wantKey: v.string(),
     buyerId: v.string(),
     catalogItemId: v.string(),
+    // Catalog-backed categories only. Every Want has a mandatory catalogItemId,
+    // and catalog_items.kind covers movie/live_event/bus_route — so watcher /
+    // future_category (which have no catalog kind) are not valid Want categories.
     category: v.union(
       v.literal("event_ticket"),
       v.literal("movie_ticket"),
       v.literal("bus_travel"),
-      v.literal("watcher"),
-      v.literal("future_category"),
     ),
+    // quantity must be a positive integer and maxPricePerUnit non-negative;
+    // createdAt/expiresAt must be ISO-8601. Convex validators have no numeric or
+    // string-format bounds, so these are enforced at mutation time (F2/B2).
     quantity: v.number(),
     maxPricePerUnit: v.number(),
     state: wantState,
@@ -379,6 +383,8 @@ export default defineSchema({
     .index("by_key", ["matchKey"])
     .index("by_want", ["wantId"])
     .index("by_listing", ["listingId"])
+    // Pairwise lookup for idempotent match creation/dedup under concurrent workers.
+    .index("by_want_listing", ["wantId", "listingId"])
     .index("by_state", ["state"]),
 
   // Append-only audit log for visible state transitions.
