@@ -534,8 +534,11 @@
   color:var(--text);
   font-family:var(--font-b);
 }
-/* pin the fixed nav + FAB to the centered phone-width column, not the full viewport */
-.app-shell .bnav{position:fixed;left:calc(50% - min(50%, 224px));right:calc(50% - min(50%, 224px));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+/* pin the fixed nav + FAB to the centered phone-width column, not the full viewport.
+   Mostly-solid scrim (vs the preview's 55% fade) so scrolling content disappears
+   cleanly behind the fixed bar instead of ghosting through its translucent top —
+   the glass pill (.bnav::before) + soft top edge are preserved. */
+.app-shell .bnav{position:fixed;left:calc(50% - min(50%, 224px));right:calc(50% - min(50%, 224px));padding-bottom:calc(20px + env(safe-area-inset-bottom));background:linear-gradient(to top, var(--bg) 80%, transparent)}
 .app-shell .fab{position:fixed;left:auto;right:calc(50% - min(50%, 224px) + 16px);bottom:calc(88px + env(safe-area-inset-bottom))}
 /* keep the nav clearance in lockstep with the fixed nav's safe-area padding */
 .app-shell .spacer-nav{height:calc(124px + env(safe-area-inset-bottom))}
