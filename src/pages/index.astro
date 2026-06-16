@@ -3,9 +3,17 @@ import AppLayout from "../layouts/AppLayout.astro";
 ---
 
 <AppLayout title="Zwapit">
-  <main data-route-id="/" class="mx-auto flex min-h-dvh max-w-md flex-col justify-center bg-background px-5 text-foreground">
-    <h1 class="text-2xl font-semibold">Zwapit</h1>
-    <p class="mt-2 text-sm text-muted-foreground">App entry placeholder.</p>
-    <a class="mt-5 rounded-md bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" href="/app/home">Open app</a>
+  <main data-route-id="/" class="app-shell" style="--acc:#8E7BC9">
+    <div class="app-content flex min-h-dvh flex-col justify-center gap-3">
+      <p class="text-[10.5px] font-bold uppercase tracking-[0.3em] text-[var(--bronze)]">
+        Protected tickets &amp; alerts
+      </p>
+      <h1 class="wordmark text-[42px] leading-none">Zwapit</h1>
+      <p class="max-w-[32ch] text-[13px] leading-relaxed text-[var(--dim)]">
+        Tell us what you want — we'll notify you the moment it's available, and protect
+        every payment.
+      </p>
+      <a class="btn btn-ghost mt-3 self-start" href="/app/home">Open app</a>
+    </div>
   </main>
 </AppLayout>

@@ -523,6 +523,9 @@
    switch from position:absolute (inside the phone) to position:fixed (viewport),
    honoring the notch via env(safe-area-inset-bottom). --acc is set per route. */
 .app-shell{
+  max-width:448px;        /* phone-width column, centered (restores the old max-w-md) */
+  margin-inline:auto;
+  position:relative;
   min-height:100vh; /* fallback for WebKit <15.4 / Chromium <108 (no dvh) */
   min-height:100dvh;
   background:
@@ -531,11 +534,14 @@
   color:var(--text);
   font-family:var(--font-b);
 }
-.app-shell .bnav{position:fixed;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
-.app-shell .fab{position:fixed;bottom:calc(88px + env(safe-area-inset-bottom))}
+/* pin the fixed nav + FAB to the centered phone-width column, not the full viewport */
+.app-shell .bnav{position:fixed;left:calc(50% - min(50%, 224px));right:calc(50% - min(50%, 224px));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.app-shell .fab{position:fixed;left:auto;right:calc(50% - min(50%, 224px) + 16px);bottom:calc(88px + env(safe-area-inset-bottom))}
 /* keep the nav clearance in lockstep with the fixed nav's safe-area padding */
 .app-shell .spacer-nav{height:calc(124px + env(safe-area-inset-bottom))}
 /* horizontal gutter for transitional (non-v5) screens; v5 screens self-pad */
 .app-shell .app-content{padding-inline:20px}
 /* visible keyboard focus ring on chrome, keyed to the per-route accent */
 .app-shell a:focus-visible{outline:2px solid var(--acc, var(--violet));outline-offset:2px;border-radius:12px}
+/* v5 charcoal fills the whole viewport behind the centered phone-width column */
+body{background:var(--bg)}
