@@ -551,3 +551,69 @@
 .app-shell a:focus-visible{outline:2px solid var(--acc, var(--violet));outline-offset:2px;border-radius:12px}
 /* v5 charcoal fills the whole viewport behind the centered phone-width column */
 body{background:var(--bg)}
+
+/* ---- v5 premium finishing touches (additive — does NOT alter the locked v5 port) ----
+   Native-app tactility, soft glass depth, and a gentle entrance, layered on top of the
+   v5 styles. All motion is gated behind prefers-reduced-motion. */
+
+/* Smooth state changes on every interactive surface; remove the mobile tap-flash. */
+.app-shell a,
+.app-shell button,
+.app-shell .rowcard,
+.app-shell .poster-card,
+.app-shell .gchip,
+.app-shell .notify-btn,
+.app-shell .seg button,
+.app-shell .chip,
+.app-shell .city,
+.app-shell .fab{
+  -webkit-tap-highlight-color:transparent;
+  transition:transform .18s cubic-bezier(.4,0,.2,1),
+             background-color .2s ease, border-color .2s ease,
+             box-shadow .25s ease, color .2s ease, opacity .2s ease;
+}
+
+/* Tactile press — tappable surfaces give under the finger like a native control. */
+.app-shell .rowcard:active,
+.app-shell .poster-card:active,
+.app-shell .gchip:active,
+.app-shell .notify-btn:active,
+.app-shell .seg button:active,
+.app-shell .req-cta .go:active,
+.app-shell .city:active,
+.app-shell .fab:active{transform:scale(.972)}
+.app-shell .bnav a:active{transform:scale(.9);opacity:.85}
+
+/* Soft depth so cards read as lifted glass, not flat fills (v5 glow, not neobrutalist). */
+.app-shell .rowcard.solid,
+.app-shell .poster-card.solid{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045), 0 12px 26px -18px rgba(0,0,0,.75);
+}
+.app-shell .rowcard.solid:active,
+.app-shell .poster-card.solid:active{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 7px 16px -16px rgba(0,0,0,.75);
+}
+
+/* Home hero — the focal headline gets a touch more presence + editorial finish. */
+.app-shell[data-route-id="/app/home"] .hero-copy{padding-top:12px}
+.app-shell[data-route-id="/app/home"] .hero-copy h2{font-size:26px;line-height:1.16;letter-spacing:-.012em}
+
+/* Primary "Create a request" CTA lifts; the live "Alert on" state earns a jade glow. */
+.app-shell .req-cta .go{box-shadow:0 8px 20px -10px rgba(0,0,0,.6)}
+.app-shell .notify-btn.on{box-shadow:0 0 0 1px rgba(111,191,154,.12), 0 5px 16px -9px rgba(111,191,154,.55)}
+
+/* Entrance choreography — home sections rise + fade in, gently staggered, on load. */
+@media (prefers-reduced-motion: no-preference){
+  @keyframes zw-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *{
+    animation:zw-rise .52s cubic-bezier(.22,.61,.36,1) both;
+  }
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(1){animation-delay:.02s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(2){animation-delay:.06s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(3){animation-delay:.10s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(4){animation-delay:.14s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(5){animation-delay:.18s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(6){animation-delay:.22s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
+  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
+}

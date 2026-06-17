@@ -31,6 +31,6 @@ export interface DiscountBadge {
 export function discountBadge(listing: DiscountInput): DiscountBadge | null {
   const { listingPrice, originalPrice, originalPriceVerified } = listing;
   if (!originalPriceVerified || originalPrice == null) return null;
-  if (!(originalPrice > listingPrice)) return null;
+  if (originalPrice <= listingPrice) return null;
   return { percent: Math.round((1 - listingPrice / originalPrice) * 100) };
 }
