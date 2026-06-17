@@ -602,27 +602,29 @@ body{background:var(--bg)}
 .app-shell .req-cta .go{box-shadow:0 8px 20px -10px rgba(0,0,0,.6)}
 .app-shell .notify-btn.on{box-shadow:0 0 0 1px rgba(111,191,154,.12), 0 5px 16px -9px rgba(111,191,154,.55)}
 
-/* Entrance choreography — home sections rise + fade in, gently staggered, on load. */
+/* Entrance choreography — main tab screens rise + fade in, gently staggered, on load.
+   Opt a screen in by adding its route id to the :is() list below. */
 @media (prefers-reduced-motion: no-preference){
   @keyframes zw-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *{
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *{
     animation:zw-rise .52s cubic-bezier(.22,.61,.36,1) both;
   }
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(1){animation-delay:.02s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(2){animation-delay:.06s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(3){animation-delay:.10s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(4){animation-delay:.14s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(5){animation-delay:.18s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(6){animation-delay:.22s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
-  .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(1){animation-delay:.02s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(2){animation-delay:.06s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(3){animation-delay:.10s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(4){animation-delay:.14s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(5){animation-delay:.18s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(6){animation-delay:.22s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"]) > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
 }
 
 /* a11y (CodeRabbit #19): the Home category chips and Listings browse tabs are
    placeholder filter controls with no destination yet — they are <button>, not
    hrefless <a> (not focusable / not announced as controls). Normalise the native
    button chrome so they render identically to the v5 chip/tab look. */
-.app-shell .gchip{font-family:var(--font-b);cursor:pointer;-webkit-appearance:none;appearance:none}
+.app-shell .gchip,
+.app-shell .fchip{font-family:var(--font-b);cursor:pointer;-webkit-appearance:none;appearance:none}
 .app-shell .tabrow button{
   flex:0 0 auto;padding:0 0 11px;font-size:12.5px;font-weight:600;color:var(--faint);
   background:none;border:none;cursor:pointer;-webkit-appearance:none;appearance:none;
