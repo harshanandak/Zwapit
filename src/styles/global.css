@@ -617,3 +617,17 @@ body{background:var(--bg)}
   .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
   .app-shell[data-route-id="/app/home"] > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
 }
+
+/* a11y (CodeRabbit #19): the Home category chips and Listings browse tabs are
+   placeholder filter controls with no destination yet — they are <button>, not
+   hrefless <a> (not focusable / not announced as controls). Normalise the native
+   button chrome so they render identically to the v5 chip/tab look. */
+.app-shell .gchip{font-family:var(--font-b);cursor:pointer;-webkit-appearance:none;appearance:none}
+.app-shell .tabrow button{
+  flex:0 0 auto;padding:0 0 11px;font-size:12.5px;font-weight:600;color:var(--faint);
+  background:none;border:none;cursor:pointer;-webkit-appearance:none;appearance:none;
+  font-family:var(--font-b);position:relative;display:flex;align-items:center;gap:6px;
+}
+.app-shell .tabrow button .ic{width:13px;height:13px}
+.app-shell .tabrow button.on{color:var(--text)}
+.app-shell .tabrow button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:var(--acc)}

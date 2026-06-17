@@ -30,6 +30,12 @@ marketplace tab (which currently 404s as a forward nav link).
    and the now-real `/app/listings` route.
 5. Fidelity to the locked frames; reuse F1's CSS/sprite/shell verbatim — **no new CSS**.
 
+> **Amendment (2026-06-17):** criterion 5's "no new CSS" was deliberately relaxed at
+> the user's request to add *premium finishing touches* on Home (tactile press states,
+> soft glass depth, hero finish, staggered entrance) plus an a11y normalisation
+> (placeholder filter `<a>`→`<button>`). All additive — appended **below** the verbatim
+> v5 region in `global.css`, never editing it, so the F1 port stays byte-identical.
+
 ## Out of scope
 - Search, Requests, Listing detail redesign, Sell redesign, Profile (U2–U7).
 - Real catalog / Notify-me wiring (backend, Codex) — Official rail uses demo content.
