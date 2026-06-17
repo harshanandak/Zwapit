@@ -1,65 +1,114 @@
 ---
 import AppShell from "../../components/AppShell.astro";
-import AuthActionGate from "../../components/AuthActionGate.astro";
-import ListingCard from "../../components/buyer/ListingCard.astro";
-import { createCurrentAuthState, getAuthActionState } from "../../lib/auth/authAdapter";
+import Icon from "../../components/Icon.astro";
+import { formatDateTime, formatInr, transferModeLabel } from "../../components/buyer/format";
+import { discountBadge } from "../../lib/ui/listingBadges";
+import { isLiveResale } from "../../lib/ui/resaleListings";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
-const authState = createCurrentAuthState();
-const sellAction = getAuthActionState("sell", "/app/sell", authState, { requirePhoneVerified: true });
-
-// First slice ships one fixture listing. Blocked / draft / under-review listings
-// are hidden from the marketplace; live and waitlist-only listings are shown.
-const catalogue = [listing];
-const visible = catalogue.filter(
-  (item) => item.state === "live" || item.state === "waitlist_only",
-);
+// Community resale rail = live/waitlist listings from the mock data adapter.
+const community = [listing].filter(isLiveResale);
 ---
 
-<AppShell routeId="/app/home" title="Home" activeTab="home">
-  <div class="space-y-4">
+<AppShell routeId="/app/home" title="Home" hideHeader>
+  <div class="home-top">
+    <span class="city gl" style="gap:7px"><Icon name="pin" />Bengaluru<Icon name="chevd" size="s" /></span>
+    <a class="city gl" href="/app/requests" aria-label="Your alerts"><Icon name="bell" /></a>
+  </div>
+
+  <div class="hero-copy">
+    <h2>We'll notify you when it's available.</h2>
+    <p>Track official tickets and community resale in one place.</p>
+  </div>
+
+  <div class="req-cta">
+    <span class="bdg"><Icon name="bell" size="l" /></span>
+    <div><b>Set an alert</b><span>Pick a show, a budget, the alerts you want.</span></div>
+    <a class="go" href="/app/requests">Create a request</a>
+  </div>
+
+  <div class="trust-band">
+    <span class="bdg"><Icon name="shield" size="l" /></span>
     <div>
-      <h2 class="text-lg font-semibold text-foreground">Tickets you can buy safely</h2>
-      <p class="mt-1 text-sm text-muted-foreground">
-        Every listing uses protected payment — your money is held until the transfer is done.
-      </p>
-    </div>
-
-    <div
-      id="home-empty-state"
-      class={visible.length === 0 ? "rounded-xl border border-dashed border-border bg-card p-6 text-center" : "hidden rounded-xl border border-dashed border-border bg-card p-6 text-center"}
-    >
-      <p class="text-sm font-medium text-foreground">No tickets available yet</p>
-      <p class="mt-1 text-xs text-muted-foreground">Check back soon, or list one of your own.</p>
-      <AuthActionGate
-        state={sellAction}
-        label="Upload to Sell"
-        class="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
-      />
-    </div>
-
-    <div id="home-listing-card" class={visible.length === 0 ? "hidden space-y-3" : "space-y-3"}>
-      {visible.map((item) => (
-        <ListingCard listing={item} />
-      ))}
+      <b>Protected payment on every purchase</b>
+      <span>Your money is held safely until the transfer is confirmed.</span>
     </div>
   </div>
+
+  <div class="seg gl" style="margin-top:18px">
+    <button type="button" class="on">Official tickets</button>
+    <button type="button">Community listings</button>
+  </div>
+
+  <div class="gchips">
+    <button type="button" class="gchip on"><Icon name="film" />Movies</button>
+    <button type="button" class="gchip"><Icon name="music" />Events</button>
+    <button type="button" class="gchip"><Icon name="bus" />Bus</button>
+  </div>
+
+  {/* Official rail — catalog + Notify-me wiring lands with the catalog backend; demo content for now. */}
+  <div class="carousel">
+    <span class="poster-card solid">
+      <div class="poster p1"><div class="art"></div><div class="glyph">D</div><span class="when">NOT YET OPEN</span></div>
+      <div class="body">
+        <h4>Dune: Part Three</h4>
+        <div class="venue">PVR Orion · opens for Sat 21 Jun</div>
+        <div class="meta"><span class="chip wait"><Icon name="people" />You + 124 waiting</span></div>
+        <div class="pricerow">
+          <div class="venue" style="margin:0">Booking opens soon</div>
+          <span class="notify-btn on"><Icon name="bell" />Alert on</span>
+        </div>
+      </div>
+    </span>
+    <span class="poster-card solid">
+      <div class="poster p4"><div class="art"></div><div class="glyph">C</div><span class="when">DROPS FRI</span></div>
+      <div class="body">
+        <h4>Coldplay — Music of the Spheres</h4>
+        <div class="venue">Official sale not open yet</div>
+        <div class="meta"><span class="chip wait"><Icon name="people" />312 waiting</span></div>
+        <div class="pricerow">
+          <div class="venue" style="margin:0">Notify me when live</div>
+          <span class="notify-btn"><Icon name="bell" />Notify me</span>
+        </div>
+      </div>
+    </span>
+  </div>
+
+  <div class="divider">Community listings</div>
+  {
+    community.length === 0 ? (
+      <div class="empty gl" style="border-radius:var(--r-lg)">
+        <span class="eic"><Icon name="search" /></span>
+        <b>Nothing on resale yet</b>
+        <p>We can watch this for you and alert you the moment it appears.</p>
+        <a class="btn btn-ghost" style="color:var(--acc)" href="/app/requests">Create a request</a>
+      </div>
+    ) : (
+      community.map((item, i) => {
+        const disc = discountBadge(item);
+        return (
+          <a class="rowcard solid" href={`/app/listings/${item.id}`}>
+            <span class={`mini m${(i % 3) + 1}`}>{item.title.charAt(0)}</span>
+            <div class="info">
+              <h5>{item.title}</h5>
+              <div class="sub">{item.venueOrRoute} · {formatDateTime(item.eventOrTripStartAt)}</div>
+              <div class="meta">
+                {disc ? (
+                  <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
+                ) : (
+                  <span class="seller-price">Seller price</span>
+                )}
+                <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
+              </div>
+            </div>
+            <div class="right">
+              <span class="seller-tick"><Icon name="check" />Verified</span>
+              <span class="price price-d">{formatInr(item.listingPrice)}</span>
+            </div>
+          </a>
+        );
+      })
+    )
+  }
 </AppShell>
-
-<script>
-  import { loadListingFlowView } from "../../lib/convex/dataAdapter";
-
-  void loadListingFlowView()
-    .then(({ listing }) => {
-      const listingCard = document.getElementById("home-listing-card");
-      const emptyState = document.getElementById("home-empty-state");
-      const shouldShow = listing.state === "live" || listing.state === "waitlist_only";
-      const hasRenderedCard = (listingCard?.children.length ?? 0) > 0;
-      listingCard?.classList.toggle("hidden", !shouldShow || !hasRenderedCard);
-      emptyState?.classList.toggle("hidden", shouldShow && hasRenderedCard);
-    })
-    .catch(() => {
-      // Keep the static fallback state.
-    });
-</script>

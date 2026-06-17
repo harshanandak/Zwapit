@@ -1,0 +1,113 @@
+---
+import AppShell from "../../../components/AppShell.astro";
+import Icon from "../../../components/Icon.astro";
+import { formatDateTime, formatInr, transferModeLabel } from "../../../components/buyer/format";
+import { discountBadge } from "../../../lib/ui/listingBadges";
+import { isLiveResale } from "../../../lib/ui/resaleListings";
+import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
+
+const { listing } = await loadListingFlowView();
+// Real resale listings from the mock data adapter (live/waitlist only).
+const listings = [listing].filter(isLiveResale);
+
+// Browse section tabs (visual filters; wiring lands with the listings backend).
+const sections = [
+  { label: "Latest", icon: "clock" },
+  { label: "Trending", icon: "trend" },
+  { label: "Discounted", icon: "tag" },
+  { label: "Ending soon", icon: "zap" },
+  { label: "Near me", icon: "pin" },
+];
+const posterArt = ["p1", "p2", "p3", "p4", "p5"];
+---
+
+<AppShell routeId="/app/listings" title="Listings" hideHeader>
+  <div class="home-top">
+    <div class="wordmark" style="font-size:18px">Community listings</div>
+    <a class="city gl" href="/app/search" aria-label="Search listings"><Icon name="search" /></a>
+  </div>
+
+  <div class="tabrow">
+    {
+      sections.map((s, i) => (
+        <button type="button" class:list={[{ on: i === 0 }]}>
+          <Icon name={s.icon} />
+          {s.label}
+        </button>
+      ))
+    }
+  </div>
+
+  {/* Featured: real mock listings (linked). Sample cards fill the rail until the
+      listings backend supplies more — display-only, no faked interactivity. */}
+  <div class="carousel">
+    {
+      listings.map((item, i) => {
+        const disc = discountBadge(item);
+        return (
+          <a class="poster-card solid" href={`/app/listings/${item.id}`}>
+            <div class={`poster ${posterArt[i % posterArt.length]}`}>
+              <div class="art" />
+              <div class="glyph">{item.title.charAt(0)}</div>
+              <span class="when">{formatDateTime(item.eventOrTripStartAt)}</span>
+            </div>
+            <div class="body">
+              <h4>{item.title}</h4>
+              <div class="venue">{item.venueOrRoute} · Qty {item.quantity}</div>
+              <div class="meta">
+                {disc ? (
+                  <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
+                ) : (
+                  <span class="seller-price">Seller price</span>
+                )}
+                <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
+              </div>
+              <div class="pricerow">
+                <div class="price price-d"><small>per ticket</small>{formatInr(item.listingPrice)}</div>
+                <span class="go"><Icon name="chev" /></span>
+              </div>
+            </div>
+          </a>
+        );
+      })
+    }
+    <span class="poster-card solid">
+      <div class="poster p5"><div class="art" /><div class="glyph">S</div><span class="when">SUN · 6:00 PM</span></div>
+      <div class="body">
+        <h4>Sunburn — DJ Snake</h4>
+        <div class="venue">Novotel HICC · Qty 1</div>
+        <div class="meta"><span class="seller-price">Seller price</span><span class="chip mode">Code reveal</span></div>
+        <div class="pricerow"><div class="price price-d"><small>per ticket</small>{formatInr(2100)}</div><span class="go"><Icon name="chev" /></span></div>
+      </div>
+    </span>
+  </div>
+
+  {listings.length === 0 && (
+    <div class="empty gl" style="border-radius:var(--r-lg)">
+      <span class="eic"><Icon name="search" /></span>
+      <b>No live listings yet</b>
+      <p>We can watch this for you and alert you the moment one appears.</p>
+      <a class="btn btn-ghost" style="color:var(--acc)" href="/app/requests">Create a request</a>
+    </div>
+  )}
+
+  <div class="divider">More near you</div>
+  <span class="rowcard solid">
+    <span class="mini m2">I</span>
+    <div class="info">
+      <h5>IPL Qualifier — SRH v RCB</h5>
+      <div class="sub">Uppal Stadium · Tue 24 Jun · 7:30 PM</div>
+      <div class="meta"><span class="seller-price">Seller price</span><span class="chip mode">Official transfer</span></div>
+    </div>
+    <div class="right"><span class="seller-tick"><Icon name="check" />Verified</span><span class="price price-d">{formatInr(3400)}</span></div>
+  </span>
+  <span class="rowcard solid">
+    <span class="mini m1">P</span>
+    <div class="info">
+      <h5>Peddi — IMAX 2D</h5>
+      <div class="sub">PVR Nexus · Fri · 9:15 PM</div>
+      <div class="meta"><span class="seller-price">Seller price</span><span class="chip mode">Verify &amp; Redeem</span></div>
+    </div>
+    <div class="right"><span class="seller-tick"><Icon name="check" />Verified</span><span class="price price-d">{formatInr(280)}</span></div>
+  </span>
+</AppShell>

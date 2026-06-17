@@ -28,6 +28,7 @@ const routes = [
   ["/app/sell/promise", "app/sell/promise/index.html"],
   ["/app/sell/orders", "app/sell/orders/index.html"],
   ["/app/tickets", "app/tickets/index.html"],
+  ["/app/listings", "app/listings/index.html"],
   ["/app/listings/:listingId", "app/listings/listing_bms_event_1/index.html"],
   ["/app/checkout/:listingId", "app/checkout/listing_bms_event_1/index.html"],
   ["/app/orders/:orderId", "app/orders/order_demo_1/index.html"],
@@ -43,7 +44,6 @@ const routeDistPaths = new Map(routes);
 const knownForwardRoutes = new Set([
   "/app/search",
   "/app/requests",
-  "/app/listings",
   "/app/profile",
 ]);
 
@@ -71,6 +71,7 @@ const allowedFirstSlicePaths = [
   "wrangler.jsonc",
   ".env.example",
   "docs/DATA_MODEL.md",
+  "docs/IMPLEMENTATION_CONTRACT.md",
   "docs/deploy/clerk-auth.md",
   "docs/deploy/cloudflare-workers.md",
   "docs/deploy/convex-local-dev.md",
@@ -237,12 +238,37 @@ export async function verifyAcceptanceCriteria() {
   }
 
   mustContain("/app/home", built.get("/app/home") ?? "", [
+    "We'll notify you when it's available.",
+    "Set an alert",
+    "Community listings",
     "Arijit Singh Live - Silver Pass",
     "Bengaluru Arena",
     "Official Transfer",
     "Protected payment",
-    "Buy with Protection",
+    "Seller price",
   ], failures);
+
+  mustContain("/app/listings", built.get("/app/listings") ?? "", [
+    "Community listings",
+    "Latest",
+    "Trending",
+    "Discounted",
+    "Ending soon",
+    "Near me",
+    "Seller price",
+  ], failures);
+
+  // Discount-integrity (success criterion #3): no mock listing carries a verified
+  // original price, so the wired cards must show "Seller price" (asserted above) and
+  // must NEVER render a fabricated "% off" badge. This pins the helper-to-render
+  // contract so an inverted/hardcoded badge fails the gate instead of passing green.
+  for (const route of ["/app/home", "/app/listings"]) {
+    if ((built.get(route) ?? "").includes("% off")) {
+      failures.push(
+        `${route}: rendered a "% off" discount badge, but no mock listing has a verified original price (discount-integrity violation)`,
+      );
+    }
+  }
 
   mustContain("/app/listings/:listingId", built.get("/app/listings/:listingId") ?? "", [
     "Arijit Singh Live - Silver Pass",
