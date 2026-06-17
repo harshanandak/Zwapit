@@ -3,13 +3,12 @@ import AppShell from "../../../components/AppShell.astro";
 import Icon from "../../../components/Icon.astro";
 import { formatDateTime, formatInr, transferModeLabel } from "../../../components/buyer/format";
 import { discountBadge } from "../../../lib/ui/listingBadges";
+import { isLiveResale } from "../../../lib/ui/resaleListings";
 import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
 // Real resale listings from the mock data adapter (live/waitlist only).
-const listings = [listing].filter(
-  (item) => item.state === "live" || item.state === "waitlist_only",
-);
+const listings = [listing].filter(isLiveResale);
 
 // Browse section tabs (visual filters; wiring lands with the listings backend).
 const sections = [
@@ -47,7 +46,7 @@ const posterArt = ["p1", "p2", "p3", "p4", "p5"];
         const disc = discountBadge(item);
         return (
           <a class="poster-card solid" href={`/app/listings/${item.id}`}>
-            <div class={`poster ${posterArt[i % 5]}`}>
+            <div class={`poster ${posterArt[i % posterArt.length]}`}>
               <div class="art" />
               <div class="glyph">{item.title.charAt(0)}</div>
               <span class="when">{formatDateTime(item.eventOrTripStartAt)}</span>
@@ -82,6 +81,15 @@ const posterArt = ["p1", "p2", "p3", "p4", "p5"];
       </div>
     </span>
   </div>
+
+  {listings.length === 0 && (
+    <div class="empty gl" style="border-radius:var(--r-lg)">
+      <span class="eic"><Icon name="search" /></span>
+      <b>No live listings yet</b>
+      <p>We can watch this for you and alert you the moment one appears.</p>
+      <a class="btn btn-ghost" style="color:var(--acc)" href="/app/requests">Create a request</a>
+    </div>
+  )}
 
   <div class="divider">More near you</div>
   <span class="rowcard solid">

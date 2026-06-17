@@ -3,13 +3,12 @@ import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
 import { formatDateTime, formatInr, transferModeLabel } from "../../components/buyer/format";
 import { discountBadge } from "../../lib/ui/listingBadges";
+import { isLiveResale } from "../../lib/ui/resaleListings";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
 // Community resale rail = live/waitlist listings from the mock data adapter.
-const community = [listing].filter(
-  (item) => item.state === "live" || item.state === "waitlist_only",
-);
+const community = [listing].filter(isLiveResale);
 ---
 
 <AppShell routeId="/app/home" title="Home" hideHeader>
@@ -78,29 +77,38 @@ const community = [listing].filter(
 
   <div class="divider">Community listings</div>
   {
-    community.map((item, i) => {
-      const disc = discountBadge(item);
-      return (
-        <a class="rowcard solid" href={`/app/listings/${item.id}`}>
-          <span class={`mini m${(i % 3) + 1}`}>{item.title.charAt(0)}</span>
-          <div class="info">
-            <h5>{item.title}</h5>
-            <div class="sub">{item.venueOrRoute} · {formatDateTime(item.eventOrTripStartAt)}</div>
-            <div class="meta">
-              {disc ? (
-                <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
-              ) : (
-                <span class="seller-price">Seller price</span>
-              )}
-              <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
+    community.length === 0 ? (
+      <div class="empty gl" style="border-radius:var(--r-lg)">
+        <span class="eic"><Icon name="search" /></span>
+        <b>Nothing on resale yet</b>
+        <p>We can watch this for you and alert you the moment it appears.</p>
+        <a class="btn btn-ghost" style="color:var(--acc)" href="/app/requests">Create a request</a>
+      </div>
+    ) : (
+      community.map((item, i) => {
+        const disc = discountBadge(item);
+        return (
+          <a class="rowcard solid" href={`/app/listings/${item.id}`}>
+            <span class={`mini m${(i % 3) + 1}`}>{item.title.charAt(0)}</span>
+            <div class="info">
+              <h5>{item.title}</h5>
+              <div class="sub">{item.venueOrRoute} · {formatDateTime(item.eventOrTripStartAt)}</div>
+              <div class="meta">
+                {disc ? (
+                  <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
+                ) : (
+                  <span class="seller-price">Seller price</span>
+                )}
+                <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
+              </div>
             </div>
-          </div>
-          <div class="right">
-            <span class="seller-tick"><Icon name="check" />Verified</span>
-            <span class="price price-d">{formatInr(item.listingPrice)}</span>
-          </div>
-        </a>
-      );
-    })
+            <div class="right">
+              <span class="seller-tick"><Icon name="check" />Verified</span>
+              <span class="price price-d">{formatInr(item.listingPrice)}</span>
+            </div>
+          </a>
+        );
+      })
+    )
   }
 </AppShell>

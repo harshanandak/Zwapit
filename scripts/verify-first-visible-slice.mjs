@@ -245,6 +245,7 @@ export async function verifyAcceptanceCriteria() {
     "Bengaluru Arena",
     "Official Transfer",
     "Protected payment",
+    "Seller price",
   ], failures);
 
   mustContain("/app/listings", built.get("/app/listings") ?? "", [
@@ -254,7 +255,20 @@ export async function verifyAcceptanceCriteria() {
     "Discounted",
     "Ending soon",
     "Near me",
+    "Seller price",
   ], failures);
+
+  // Discount-integrity (success criterion #3): no mock listing carries a verified
+  // original price, so the wired cards must show "Seller price" (asserted above) and
+  // must NEVER render a fabricated "% off" badge. This pins the helper-to-render
+  // contract so an inverted/hardcoded badge fails the gate instead of passing green.
+  for (const route of ["/app/home", "/app/listings"]) {
+    if ((built.get(route) ?? "").includes("% off")) {
+      failures.push(
+        `${route}: rendered a "% off" discount badge, but no mock listing has a verified original price (discount-integrity violation)`,
+      );
+    }
+  }
 
   mustContain("/app/listings/:listingId", built.get("/app/listings/:listingId") ?? "", [
     "Arijit Singh Live - Silver Pass",
