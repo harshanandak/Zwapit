@@ -601,6 +601,9 @@ body{background:var(--bg)}
 /* Primary "Create a request" CTA lifts; the live "Alert on" state earns a jade glow. */
 .app-shell .req-cta .go{box-shadow:0 8px 20px -10px rgba(0,0,0,.6)}
 .app-shell .notify-btn.on{box-shadow:0 0 0 1px rgba(111,191,154,.12), 0 5px 16px -9px rgba(111,191,154,.55)}
+/* Empty-state ghost CTA tints to the route accent (the v5 frame's "ghost steel button",
+   generalised so Home/Listings/Search each match their own accent). */
+.app-shell .empty .btn-ghost{color:var(--acc);border-color:color-mix(in srgb,var(--acc) 40%,transparent)}
 
 /* Entrance choreography — main tab screens rise + fade in, gently staggered, on load.
    Opt a screen in by adding its route id to the :is() list below. */

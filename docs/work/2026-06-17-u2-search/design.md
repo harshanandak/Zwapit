@@ -59,8 +59,11 @@ result, with a display-only sample for the official side. Reuse every U1 helper;
 
 ## Edge cases (decided)
 - **No community match** (mock listing not live/waitlist): show the v5 `.empty` "Nothing on
-  resale yet → Create a request instead" card (reuse the U1 empty pattern); the results
-  count reads "No matches yet". (Latent in the mock today — the fixture is `live`.)
+  resale yet → Create a request instead" card (reuse the U1 empty pattern) below the
+  still-counted official result. The "Results · N found" count reflects all displayed
+  results (the official sample + community), matching the v5 frame's "Results · 1 found"
+  shown above an empty resale section — so an empty community reads "1 found", not "No
+  matches yet". (Latent in the mock today — the fixture is `live`, so the count is "2 found".)
 - **Results-label grammar:** 0 → "No matches yet"; 1 → "1 found"; n → "N found"; negative/NaN
   → "No matches yet".
 - **Discount-integrity:** the wired result shows "Seller price" unless a verified original
