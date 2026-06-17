@@ -73,7 +73,7 @@ must("/app/home", home, [
   "Official Transfer",
   "Protected payment",
   "₹2,400",
-  "Buy with Protection",
+  "Set an alert",
 ]);
 
 const listing = read("/app/listings/:listingId", "app/listings/listing_bms_event_1");

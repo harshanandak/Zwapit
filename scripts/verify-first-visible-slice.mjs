@@ -71,6 +71,7 @@ const allowedFirstSlicePaths = [
   "wrangler.jsonc",
   ".env.example",
   "docs/DATA_MODEL.md",
+  "docs/IMPLEMENTATION_CONTRACT.md",
   "docs/deploy/clerk-auth.md",
   "docs/deploy/cloudflare-workers.md",
   "docs/deploy/convex-local-dev.md",
