@@ -28,6 +28,7 @@ const routes = [
   ["/app/sell/promise", "app/sell/promise/index.html"],
   ["/app/sell/orders", "app/sell/orders/index.html"],
   ["/app/tickets", "app/tickets/index.html"],
+  ["/app/listings", "app/listings/index.html"],
   ["/app/listings/:listingId", "app/listings/listing_bms_event_1/index.html"],
   ["/app/checkout/:listingId", "app/checkout/listing_bms_event_1/index.html"],
   ["/app/orders/:orderId", "app/orders/order_demo_1/index.html"],
@@ -43,7 +44,6 @@ const routeDistPaths = new Map(routes);
 const knownForwardRoutes = new Set([
   "/app/search",
   "/app/requests",
-  "/app/listings",
   "/app/profile",
 ]);
 
@@ -237,11 +237,22 @@ export async function verifyAcceptanceCriteria() {
   }
 
   mustContain("/app/home", built.get("/app/home") ?? "", [
+    "We'll notify you when it's available.",
+    "Set an alert",
+    "Community listings",
     "Arijit Singh Live - Silver Pass",
     "Bengaluru Arena",
     "Official Transfer",
     "Protected payment",
-    "Buy with Protection",
+  ], failures);
+
+  mustContain("/app/listings", built.get("/app/listings") ?? "", [
+    "Community listings",
+    "Latest",
+    "Trending",
+    "Discounted",
+    "Ending soon",
+    "Near me",
   ], failures);
 
   mustContain("/app/listings/:listingId", built.get("/app/listings/:listingId") ?? "", [

@@ -17,6 +17,7 @@ Use real routes for top-level app surfaces and detail flows.
 - `/app/sell/promise` -> seller promise.
 - `/app/sell/orders` -> seller-side Orders.
 - `/app/tickets` -> buyer-side My Tickets.
+- `/app/listings` -> resale marketplace (Listings tab).
 - `/app/listings/:listingId` -> listing detail.
 - `/app/checkout/:listingId` -> checkout preview.
 - `/app/orders/:orderId` -> shared order/transfer timeline.
