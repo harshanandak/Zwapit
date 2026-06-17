@@ -76,6 +76,20 @@ must("/app/home", home, [
   "Set an alert",
 ]);
 
+const search = read("/app/search", "app/search");
+must("/app/search", search, [
+  'data-route-id="/app/search"',
+  "Search",
+  "Movie",
+  "Event",
+  "Bus",
+  "Bengaluru",
+  "Results",
+  "Oppenheimer",
+  "Notify me",
+  "Seller price",
+]);
+
 const listing = read("/app/listings/:listingId", "app/listings/listing_bms_event_1");
 must("/app/listings/:listingId", listing, [
   'data-route-id="/app/listings/:listingId"',
@@ -136,6 +150,7 @@ must("/app/orders/:orderId", orders, [
 
 for (const [route, html] of [
   ["/app/home", home],
+  ["/app/search", search],
   ["/app/listings/:listingId", listing],
   ["/app/checkout/:listingId", checkout],
   ["/app/tickets", tickets],
@@ -149,4 +164,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("Buyer UI smoke check passed for 5 buyer routes.");
+console.log("Buyer UI smoke check passed for 6 buyer routes.");
