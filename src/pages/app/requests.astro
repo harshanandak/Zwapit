@@ -138,7 +138,7 @@ const requests: MockRequest[] = [
             </div>
             <span class:list={["wave-pill", wave.cls]}>{wave.label}</span>
             {r.matchListingId && (
-              <a class="buy" href={`/app/listings/${r.matchListingId}`}>Buy</a>
+              <a id="req-buy-link" class="buy" href={`/app/listings/${r.matchListingId}`}>Buy with Protection</a>
             )}
           </div>
 
@@ -160,3 +160,19 @@ const requests: MockRequest[] = [
     <button type="button" class="btn btn-ghost">See referrals</button>
   </div>
 </AppShell>
+
+<script>
+  import { loadListingFlowView } from "../../lib/convex/dataAdapter";
+
+  // The Buy link's purchasability is computed at build time, but the app ships as
+  // static assets. Re-check on load (same as the listing/checkout pages) so a match
+  // that became unavailable since the build — sold/expired/payout-blocked — no longer
+  // shows a Buy link that would dead-end on the listing page.
+  void loadListingFlowView()
+    .then(({ purchasable }) => {
+      document.getElementById("req-buy-link")?.classList.toggle("hidden", !purchasable);
+    })
+    .catch(() => {
+      // Keep the static fallback state.
+    });
+</script>

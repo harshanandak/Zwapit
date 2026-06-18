@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { requestQuota, requestStateMeta } from "../requests";
 
 describe("requestQuota (Requests quota meter, U3)", () => {
-  test("should render the count label and clamped fill percent for any used/total", () => {
+  test("should render the count label and clamped fill percent when used and total values vary", () => {
     // [used, total, expected] — covers valid, zero, clamp, negative/non-finite, zero-total.
     const cases: Array<[number, number, { label: string; percent: number }]> = [
       [2, 3, { label: "2 / 3 active requests", percent: 67 }],
@@ -21,7 +21,7 @@ describe("requestQuota (Requests quota meter, U3)", () => {
 });
 
 describe("requestStateMeta (Requests state chip, U3)", () => {
-  test("should map each request state to its label and chip variant, defaulting to active", () => {
+  test("should map each request state to its label and chip variant when the state is known or unknown", () => {
     const cases: Array<[string, { label: string; chip: string }]> = [
       ["active", { label: "Active", chip: "req" }],
       ["matched", { label: "Matched", chip: "live" }],
