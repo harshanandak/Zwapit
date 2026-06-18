@@ -237,40 +237,92 @@ export async function verifyAcceptanceCriteria() {
     mustContain(route, built.get(route) ?? "", ["Home", "Search", "Requests", "Listings", "Profile"], failures);
   }
 
-  mustContain("/app/home", built.get("/app/home") ?? "", [
-    "We'll notify you when it's available.",
-    "Set an alert",
-    "Community listings",
-    "Arijit Singh Live - Silver Pass",
-    "Bengaluru Arena",
-    "Official Transfer",
-    "Protected payment",
-    "Seller price",
-  ], failures);
-
-  mustContain("/app/listings", built.get("/app/listings") ?? "", [
-    "Community listings",
-    "Latest",
-    "Trending",
-    "Discounted",
-    "Ending soon",
-    "Near me",
-    "Seller price",
-  ], failures);
-
-  mustContain("/app/search", built.get("/app/search") ?? "", [
-    "Search",
-    "Movie",
-    "Event",
-    "Bus",
-    "Bengaluru",
-    "Results",
-    "2 found",
-    "Oppenheimer",
-    "Notify me",
-    "Arijit Singh Live - Silver Pass",
-    "Seller price",
-  ], failures);
+  // Per-route required copy/state. Data-driven (one entry per route) so the
+  // assertion structure lives once in the loop below, not copy-pasted per route.
+  const routeContentChecks = [
+    ["/app/home", [
+      "We'll notify you when it's available.",
+      "Set an alert",
+      "Community listings",
+      "Arijit Singh Live - Silver Pass",
+      "Bengaluru Arena",
+      "Official Transfer",
+      "Protected payment",
+      "Seller price",
+    ]],
+    ["/app/listings", [
+      "Community listings",
+      "Latest",
+      "Trending",
+      "Discounted",
+      "Ending soon",
+      "Near me",
+      "Seller price",
+    ]],
+    ["/app/search", [
+      "Search",
+      "Movie",
+      "Event",
+      "Bus",
+      "Bengaluru",
+      "Results",
+      "2 found",
+      "Oppenheimer",
+      "Notify me",
+      "Arijit Singh Live - Silver Pass",
+      "Seller price",
+    ]],
+    ["/app/listings/:listingId", [
+      "Arijit Singh Live - Silver Pass",
+      "Official Transfer",
+      "Protected payment",
+      "Item price",
+      "2,400",
+      "10 + GST",
+      "GST on fee",
+      "1.80",
+      "Total payable",
+      "2,411.80",
+      "Transfer by",
+      "20 Dec 2026, 6:00 PM",
+      "Protected until",
+      "21 Dec 2026, 11:59 PM",
+    ]],
+    ["/app/sell/upload", ["Upload to Sell", "Add your ticket or pass", "Continue"]],
+    ["/app/sell/confirm", ["Confirm Details", "Detected details", "Looks right"]],
+    ["/app/sell/price", ["Set your price", "Payout", "2,400", "Continue"]],
+    ["/app/sell/promise", ["seller promise", "Approved", "now live", "Go to Orders"]],
+    ["/app/tickets", [
+      "My Tickets",
+      "Payment confirmed",
+      "Transfer needed",
+      "Confirm receipt",
+      "Protection active",
+      "Completed",
+      "Report issue",
+    ]],
+    ["/app/sell/orders", [
+      "Orders",
+      "Arijit Singh Live - Silver Pass",
+      "Transfer needed",
+      "Waiting for buyer",
+      "Payout waiting",
+      "Completed",
+    ]],
+    ["/app/orders/:orderId", [
+      "Complete checkout first",
+      "Report issue",
+      "Ticket wasn't transferred",
+      "Wrong ticket",
+      "Code already used",
+      "Details don't match",
+      "Eligibility problem",
+      "Can't access the ticket",
+    ]],
+  ];
+  for (const [route, needles] of routeContentChecks) {
+    mustContain(route, built.get(route) ?? "", needles, failures);
+  }
 
   // Discount-integrity (success criterion #3): no mock listing carries a verified
   // original price, so the wired cards must show "Seller price" (asserted above) and
@@ -283,62 +335,6 @@ export async function verifyAcceptanceCriteria() {
       );
     }
   }
-
-  mustContain("/app/listings/:listingId", built.get("/app/listings/:listingId") ?? "", [
-    "Arijit Singh Live - Silver Pass",
-    "Official Transfer",
-    "Protected payment",
-    "Item price",
-    "2,400",
-    "10 + GST",
-    "GST on fee",
-    "1.80",
-    "Total payable",
-    "2,411.80",
-    "Transfer by",
-    "20 Dec 2026, 6:00 PM",
-    "Protected until",
-    "21 Dec 2026, 11:59 PM",
-  ], failures);
-
-  for (const [route, needles] of [
-    ["/app/sell/upload", ["Upload to Sell", "Add your ticket or pass", "Continue"]],
-    ["/app/sell/confirm", ["Confirm Details", "Detected details", "Looks right"]],
-    ["/app/sell/price", ["Set your price", "Payout", "2,400", "Continue"]],
-    ["/app/sell/promise", ["seller promise", "Approved", "now live", "Go to Orders"]],
-  ]) {
-    mustContain(route, built.get(route) ?? "", needles, failures);
-  }
-
-  mustContain("/app/tickets", built.get("/app/tickets") ?? "", [
-    "My Tickets",
-    "Payment confirmed",
-    "Transfer needed",
-    "Confirm receipt",
-    "Protection active",
-    "Completed",
-    "Report issue",
-  ], failures);
-
-  mustContain("/app/sell/orders", built.get("/app/sell/orders") ?? "", [
-    "Orders",
-    "Arijit Singh Live - Silver Pass",
-    "Transfer needed",
-    "Waiting for buyer",
-    "Payout waiting",
-    "Completed",
-  ], failures);
-
-  mustContain("/app/orders/:orderId", built.get("/app/orders/:orderId") ?? "", [
-    "Complete checkout first",
-    "Report issue",
-    "Ticket wasn't transferred",
-    "Wrong ticket",
-    "Code already used",
-    "Details don't match",
-    "Eligibility problem",
-    "Can't access the ticket",
-  ], failures);
 
   const fixture = createMockFixture();
   const listingFlow = connectMockListingFlow();
