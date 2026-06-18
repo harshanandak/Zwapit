@@ -7,9 +7,13 @@ import { requestQuota, requestStateMeta, type RequestState } from "../../lib/ui/
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
 const { listing } = await loadListingFlowView();
-// One wired Matched request points at the live mock listing; everything else on
-// this slice is display content. Real request state + matching is backend (Codex).
+// One wired Matched request mirrors a live/waitlist resale listing; everything else
+// on this slice is display content. Real request state + matching is backend (Codex).
 const match = [listing].filter(isLiveResale)[0] ?? null;
+// Only a *live* (purchasable) listing gets a Buy link. isLiveResale also accepts
+// waitlist_only, where the listing page hides its buy CTA — so a waitlist match must
+// not advertise a Buy that dead-ends. Gate the Buy on state === "live".
+const buyableMatchId = match && match.state === "live" ? match.id : null;
 
 interface MockRequest {
   id: string;
@@ -54,7 +58,7 @@ const requests: MockRequest[] = [
     alerts: ["availability", "discount", "price-drop"],
     matchesThisWeek: 3,
     wave: "priority",
-    matchListingId: match?.id ?? null,
+    matchListingId: buyableMatchId,
   },
   {
     id: "req_active_1",
