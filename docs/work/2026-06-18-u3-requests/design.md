@@ -87,7 +87,7 @@ so the screen markup never counts — the verification scripts are the only dupl
 ## Edge cases (decided)
 - **Quota math:** `requestQuota(used,total)` clamps `percent` to 0–100 (used>total → 100;
   used<0 or non-finite or total≤0 → label still renders, percent 0). Guarded with
-  `Number.isNaN`. Mock shows "2 / 3 active requests" (66% fill).
+  `Number.isNaN`. Mock shows "2 / 3 active requests" (67% fill).
 - **State → chip mapping (spec line 104):** Active→`chip req` (bronze), Matched→`chip live`
   (gold), Purchased→`chip protect` (jade), Expired→`chip mut` (faint). Total map; unknown →
   Active styling as the safe default.

@@ -16,7 +16,7 @@ guards, all non-nav controls as `<button type="button">`, `.reqcard` list via `.
     `"active"|"matched"|"purchased"|"expired"` → `{Active,req} {Matched,live} {Purchased,protect}
     {Expired,mut}`; unknown → Active default.
 - **TDD (names in `should…when…`):**
-  1. Write tests: quota label+percent for (2,3)→66, (0,3)→0, (5,3)→100 clamp, (-1,0)/`Number.NaN`
+  1. Write tests: quota label+percent for (2,3)→67, (0,3)→0, (5,3)→100 clamp, (-1,0)/`Number.NaN`
      → percent 0; stateMeta for each of the 4 states + unknown default.
   2. Run → fails (module missing).
   3. Implement helpers.

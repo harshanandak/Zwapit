@@ -6,14 +6,15 @@ import { isLiveResale } from "../../lib/ui/resaleListings";
 import { requestQuota, requestStateMeta, type RequestState } from "../../lib/ui/requests";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
-const { listing } = await loadListingFlowView();
+const { listing, purchasable } = await loadListingFlowView();
 // One wired Matched request mirrors a live/waitlist resale listing; everything else
 // on this slice is display content. Real request state + matching is backend (Codex).
 const match = [listing].filter(isLiveResale)[0] ?? null;
-// Only a *live* (purchasable) listing gets a Buy link. isLiveResale also accepts
-// waitlist_only, where the listing page hides its buy CTA — so a waitlist match must
-// not advertise a Buy that dead-ends. Gate the Buy on state === "live".
-const buyableMatchId = match && match.state === "live" ? match.id : null;
+// Only a genuinely purchasable match gets a Buy link. `purchasable` is the full
+// checkout-validation result (AUTO_APPROVE + checkout.ok), so it also stays false for
+// an expired transfer deadline or a seller payout not ready — the same cases where the
+// listing page hides its own buy CTA. Gating on it avoids a Buy that dead-ends.
+const buyableMatchId = match && purchasable ? match.id : null;
 
 interface MockRequest {
   id: string;
