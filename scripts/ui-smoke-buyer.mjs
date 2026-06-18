@@ -1,6 +1,8 @@
-// Buyer UI smoke check (Task 4).
+// Buyer UI smoke check.
 // Reads the built dist/ HTML for the buyer routes and asserts the required
 // copy/states are server-rendered, and that no user-facing forbidden terms leak.
+// Data-driven: one entry per route in `routeChecks` (route label, dist path,
+// required needles) so the read/assert structure lives once in the loop below.
 // Run after `bun run build`:  bun scripts/ui-smoke-buyer.mjs
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,98 +68,33 @@ const mustNot = (route, html) => {
   }
 };
 
-const home = read("/app/home", "app/home");
-must("/app/home", home, [
-  "Arijit Singh Live - Silver Pass",
-  "Bengaluru Arena",
-  "Official Transfer",
-  "Protected payment",
-  "₹2,400",
-  "Set an alert",
-]);
+// One entry per buyer route: [routeLabel, distRelPath, requiredNeedles].
+// This is a SMOKE check: a few route-distinctive needles to prove each route
+// renders, plus the forbidden-term sweep below. The exhaustive per-route copy
+// contract lives in scripts/verify-first-visible-slice.mjs (acceptance), so we
+// deliberately do NOT mirror its full needle lists here.
+const routeChecks = [
+  ["/app/home", "app/home", ['data-route-id="/app/home"', "Set an alert"]],
+  ["/app/search", "app/search", ['data-route-id="/app/search"', "Oppenheimer", "2 found"]],
+  ["/app/requests", "app/requests", ['data-route-id="/app/requests"', "Your requests", "See referrals"]],
+  ["/app/listings/:listingId", "app/listings/listing_bms_event_1", [
+    'data-route-id="/app/listings/:listingId"',
+    "Buy with Protection",
+  ]],
+  ["/app/checkout/:listingId", "app/checkout/listing_bms_event_1", [
+    'data-route-id="/app/checkout/:listingId"',
+    "Pay ₹2,411.80",
+  ]],
+  ["/app/tickets", "app/tickets", ['data-route-id="/app/tickets"', "My Tickets", "Confirm receipt"]],
+  ["/app/orders/:orderId", "app/orders/order_demo_1", [
+    'data-route-id="/app/orders/:orderId"',
+    "Complete checkout first",
+  ]],
+];
 
-const search = read("/app/search", "app/search");
-must("/app/search", search, [
-  'data-route-id="/app/search"',
-  "Search",
-  "Movie",
-  "Event",
-  "Bus",
-  "Bengaluru",
-  "Results",
-  "2 found",
-  "Oppenheimer",
-  "Notify me",
-  "Arijit Singh Live - Silver Pass",
-  "Seller price",
-]);
-
-const listing = read("/app/listings/:listingId", "app/listings/listing_bms_event_1");
-must("/app/listings/:listingId", listing, [
-  'data-route-id="/app/listings/:listingId"',
-  "Arijit Singh Live - Silver Pass",
-  "Official Transfer",
-  "Protected payment",
-  "Item price",
-  "₹2,400",
-  "₹10 + GST",
-  "GST on fee",
-  "₹1.80",
-  "Total payable",
-  "₹2,411.80",
-  "Transfer by",
-  "20 Dec 2026, 6:00 PM",
-  "Protected until",
-  "21 Dec 2026, 11:59 PM",
-  "Buy with Protection",
-]);
-
-const checkout = read("/app/checkout/:listingId", "app/checkout/listing_bms_event_1");
-must("/app/checkout/:listingId", checkout, [
-  'data-route-id="/app/checkout/:listingId"',
-  "Protected payment",
-  "Total payable",
-  "₹2,411.80",
-  "₹10 + GST",
-  "Refund",
-  "Pay ₹2,411.80",
-  "Transfer by",
-  "20 Dec 2026, 6:00 PM",
-]);
-
-const tickets = read("/app/tickets", "app/tickets");
-must("/app/tickets", tickets, [
-  "My Tickets",
-  "Arijit Singh Live - Silver Pass",
-  "Payment confirmed",
-  "Transfer needed",
-  "Confirm receipt",
-  "Protection active",
-  "Completed",
-  "Report issue",
-]);
-
-const orders = read("/app/orders/:orderId", "app/orders/order_demo_1");
-must("/app/orders/:orderId", orders, [
-  'data-route-id="/app/orders/:orderId"',
-  "Complete checkout first",
-  "Transfer needed",
-  "Confirm receipt",
-  "Protection active",
-  "Completed",
-  "Report issue",
-  "Ticket wasn't transferred",
-  "Can't access the ticket",
-]);
-
-for (const [route, html] of [
-  ["/app/home", home],
-  ["/app/search", search],
-  ["/app/listings/:listingId", listing],
-  ["/app/checkout/:listingId", checkout],
-  ["/app/tickets", tickets],
-  ["/app/orders/:orderId", orders],
-]) {
+for (const [route, rel, needles] of routeChecks) {
+  const html = read(route, rel);
+  must(route, html, needles);
   mustNot(route, html);
 }
 
@@ -166,4 +103,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("Buyer UI smoke check passed for 6 buyer routes.");
+console.log(`Buyer UI smoke check passed for ${routeChecks.length} buyer routes.`);

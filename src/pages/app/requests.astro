@@ -1,0 +1,178 @@
+---
+import AppShell from "../../components/AppShell.astro";
+import Icon from "../../components/Icon.astro";
+import { formatDateTime, formatInr } from "../../components/buyer/format";
+import { isLiveResale } from "../../lib/ui/resaleListings";
+import { requestQuota, requestStateMeta, type RequestState } from "../../lib/ui/requests";
+import { loadListingFlowView } from "../../lib/convex/dataAdapter";
+
+const { listing, purchasable } = await loadListingFlowView();
+// One wired Matched request mirrors a live/waitlist resale listing; everything else
+// on this slice is display content. Real request state + matching is backend (Codex).
+const match = [listing].filter(isLiveResale)[0] ?? null;
+// Only a genuinely purchasable match gets a Buy link. `purchasable` is the full
+// checkout-validation result (AUTO_APPROVE + checkout.ok), so it also stays false for
+// an expired transfer deadline or a seller payout not ready — the same cases where the
+// listing page hides its own buy CTA. Gating on it avoids a Buy that dead-ends.
+const buyableMatchId = match && purchasable ? match.id : null;
+
+interface MockRequest {
+  id: string;
+  state: RequestState;
+  hot?: boolean;
+  icon: string;
+  title: string;
+  sub: string;
+  budget: number;
+  alerts: string[]; // armed alert types (subset of ALERT_GLYPHS keys)
+  matchesThisWeek: number;
+  wave: "standard" | "priority" | "high";
+  matchListingId?: string | null; // when set, the matchrow shows a real Buy link
+}
+
+// The four alert types a request can arm; lit when present on a request.
+const ALERT_GLYPHS = [
+  { key: "availability", icon: "bell" },
+  { key: "discount", icon: "tag" },
+  { key: "price-drop", icon: "drop" },
+  { key: "last-minute", icon: "bolt" },
+];
+
+// Alert-wave status — visual tier only, never a queue number (design.md §8).
+const WAVE = {
+  standard: { label: "Standard", cls: "" },
+  priority: { label: "Priority", cls: "priority" },
+  high: { label: "High Priority", cls: "high" },
+} as const;
+
+const quota = requestQuota(2, 3);
+
+const requests: MockRequest[] = [
+  {
+    id: "req_match_1",
+    state: "matched",
+    hot: true,
+    icon: "music",
+    title: match?.title ?? "Arijit Singh Live - Silver Pass",
+    sub: match ? `${match.venueOrRoute} · ${formatDateTime(match.eventOrTripStartAt)}` : "Bengaluru Arena",
+    budget: 2600,
+    alerts: ["availability", "discount", "price-drop"],
+    matchesThisWeek: 3,
+    wave: "priority",
+    matchListingId: buyableMatchId,
+  },
+  {
+    id: "req_active_1",
+    state: "active",
+    icon: "film",
+    title: "Dune: Part Three — IMAX",
+    sub: "PVR Orion · Sat 21 Jun",
+    budget: 700,
+    alerts: ["availability", "last-minute"],
+    matchesThisWeek: 0,
+    wave: "standard",
+    matchListingId: null,
+  },
+  {
+    id: "req_active_2",
+    state: "active",
+    icon: "bus",
+    title: "Bengaluru → Goa · Sleeper",
+    sub: "Fri 27 Jun · overnight",
+    budget: 1800,
+    alerts: ["availability", "price-drop"],
+    matchesThisWeek: 1,
+    wave: "standard",
+    matchListingId: null,
+  },
+];
+---
+
+<AppShell routeId="/app/requests" title="Requests" hideHeader>
+  <div class="home-top">
+    <div class="wordmark" style="font-size:18px">Your requests</div>
+    <button type="button" class="city gl" style="gap:7px"><Icon name="plus" />New</button>
+  </div>
+
+  <div class="quota gl">
+    <div class="qtop"><b>{quota.label}</b><span>Free plan</span></div>
+    <div class="track"><i style={`width:${quota.percent}%`}></i></div>
+    <div class="qsub">Alerts run on every active request — official and community.</div>
+  </div>
+
+  <div class="seg gl" style="margin-top:14px">
+    <button type="button" class="on">Active</button>
+    <button type="button">Matched</button>
+    <button type="button">Purchased</button>
+    <button type="button">Expired</button>
+  </div>
+
+  {
+    requests.map((r) => {
+      const meta = requestStateMeta(r.state);
+      const wave = WAVE[r.wave];
+      return (
+        <article class:list={["reqcard", r.hot ? "hot" : "solid"]}>
+          <div class="rhead">
+            <span class="icbx"><Icon name={r.icon} /></span>
+            <div>
+              <h5>{r.title}</h5>
+              <div class="sub">{r.sub}</div>
+            </div>
+            <span class:list={["chip", meta.chip]}>{meta.label}</span>
+          </div>
+
+          <div class="reqmeta">
+            <div class="b">Up to <b>{formatInr(r.budget)}</b></div>
+            <div class="alertglyphs">
+              {ALERT_GLYPHS.map((g) => (
+                <Icon name={g.icon} class={r.alerts.includes(g.key) ? "on" : undefined} />
+              ))}
+            </div>
+          </div>
+
+          <div class="matchrow">
+            <span class="p"><Icon name="spark" /></span>
+            <div class="d">
+              {r.matchesThisWeek > 0 ? `${r.matchesThisWeek} matches this week` : "No matches yet — we're watching"}
+            </div>
+            <span class:list={["wave-pill", wave.cls]}>{wave.label}</span>
+            {r.matchListingId && (
+              <a id="req-buy-link" class="buy" href={`/app/listings/${r.matchListingId}`}>Buy with Protection</a>
+            )}
+          </div>
+
+          <div class="reqactions">
+            <button type="button" class="btn btn-ghost"><Icon name="edit" />Edit</button>
+            <button type="button" class="btn btn-ghost">Pause</button>
+          </div>
+        </article>
+      );
+    })
+  }
+
+  <div class="nudge">
+    <span class="bdg"><Icon name="gift" /></span>
+    <div>
+      <b>Invite 3 verified friends → one extra request and earlier alerts.</b>
+      <span>Rewards unlock when a friend verifies — not on installs.</span>
+    </div>
+    <button type="button" class="btn btn-ghost">See referrals</button>
+  </div>
+</AppShell>
+
+<script>
+  import { loadListingFlowView } from "../../lib/convex/dataAdapter";
+
+  // The Buy link's purchasability is computed at build time, but the app ships as
+  // static assets. Re-check on load (same as the listing/checkout pages) so a match
+  // that became unavailable since the build — sold/expired/payout-blocked — no longer
+  // shows a Buy link that would dead-end on the listing page.
+  void loadListingFlowView()
+    .then(({ purchasable }) => {
+      document.getElementById("req-buy-link")?.classList.toggle("hidden", !purchasable);
+    })
+    .catch(() => {
+      // Keep the static fallback state.
+    });
+</script>
