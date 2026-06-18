@@ -10,6 +10,7 @@ Use real routes for top-level app surfaces and detail flows.
 - `/` -> marketing placeholder.
 - `/app` -> redirect or render `/app/home`.
 - `/app/home` -> Home marketplace.
+- `/app/search` -> universal Search (Search tab).
 - `/app/sell` -> Sell overview and upload entry.
 - `/app/sell/upload` -> upload mock ticket/pass.
 - `/app/sell/confirm` -> detected details confirmation.
