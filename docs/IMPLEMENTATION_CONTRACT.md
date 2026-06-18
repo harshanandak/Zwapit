@@ -11,6 +11,7 @@ Use real routes for top-level app surfaces and detail flows.
 - `/app` -> redirect or render `/app/home`.
 - `/app/home` -> Home marketplace.
 - `/app/search` -> universal Search (Search tab).
+- `/app/requests` -> Requests screen: alerts/requests with state, quota, and matches (Requests tab).
 - `/app/sell` -> Sell overview and upload entry.
 - `/app/sell/upload` -> upload mock ticket/pass.
 - `/app/sell/confirm` -> detected details confirmation.

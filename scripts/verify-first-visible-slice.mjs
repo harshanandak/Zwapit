@@ -22,6 +22,7 @@ const routes = [
   ["/app", "app/index.html"],
   ["/app/home", "app/home/index.html"],
   ["/app/search", "app/search/index.html"],
+  ["/app/requests", "app/requests/index.html"],
   ["/app/sell", "app/sell/index.html"],
   ["/app/sell/upload", "app/sell/upload/index.html"],
   ["/app/sell/confirm", "app/sell/confirm/index.html"],
@@ -43,7 +44,6 @@ const routeDistPaths = new Map(routes);
 // (U1-U7). They are intentionally not in the first-slice contract yet, so links
 // to them are known-forward navigation, not scope drift.
 const knownForwardRoutes = new Set([
-  "/app/requests",
   "/app/profile",
 ]);
 
@@ -272,6 +272,17 @@ export async function verifyAcceptanceCriteria() {
       "Arijit Singh Live - Silver Pass",
       "Seller price",
     ]],
+    ["/app/requests", [
+      "Your requests",
+      "active requests",
+      "Matched",
+      "Up to",
+      "matches this week",
+      "Standard",
+      "Priority",
+      "See referrals",
+      "Arijit Singh Live - Silver Pass",
+    ]],
     ["/app/listings/:listingId", [
       "Arijit Singh Live - Silver Pass",
       "Official Transfer",
@@ -328,7 +339,7 @@ export async function verifyAcceptanceCriteria() {
   // original price, so the wired cards must show "Seller price" (asserted above) and
   // must NEVER render a fabricated "% off" badge. This pins the helper-to-render
   // contract so an inverted/hardcoded badge fails the gate instead of passing green.
-  for (const route of ["/app/home", "/app/listings", "/app/search"]) {
+  for (const route of ["/app/home", "/app/listings", "/app/search", "/app/requests"]) {
     if ((built.get(route) ?? "").includes("% off")) {
       failures.push(
         `${route}: rendered a "% off" discount badge, but no mock listing has a verified original price (discount-integrity violation)`,
