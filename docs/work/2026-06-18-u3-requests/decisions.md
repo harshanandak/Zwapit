@@ -25,4 +25,32 @@ plan → dev → validate → ship → review → premerge.
    349-360, 418-437). Only an additive bronze entrance choreography scoped to `/app/requests`.
 
 ## Decisions (filled during /dev)
-_(none yet)_
+
+### Decision 1 — slim ui-smoke-buyer.mjs needles (exit-review finding)
+**Date:** 2026-06-18 · **Task:** 3/5 · **Score:** 3/14 (PROCEED) · **Status:** RESOLVED
+**Gap:** The /dev exit review (duplication lens) found that the new data-driven
+`routeChecks` array in `ui-smoke-buyer.mjs` re-asserted the SAME full per-route copy
+that `verify-first-visible-slice.mjs` (`routeContentChecks`) already checks — producing
+long verbatim cross-file runs (notably an 11-line `/app/search` block). Because the file
+was rewritten, those are "new" lines; SonarCloud's new-code duplication gate (the one
+check not runnable locally, doesn't parse `.astro`) could trip — the exact U2 trap. No
+`sonar-project.properties`/workflow sonar step exists (Automatic Analysis), so a CPD
+exclusion isn't reliably settable from the repo; a shared-needle module is invasive
+because the two scripts assert intentionally different lists.
+**Choice:** Trim ui-smoke to a true smoke check — a few route-distinctive,
+confirmed-rendering needles per route (each list starts with the route-unique
+`data-route-id`, so no 10+ line run can form) plus the full forbidden-term sweep. The
+exhaustive content contract stays in verify-acceptance (incl. the 9 `/app/requests`
+needles). Correct separation of concerns (smoke = render signal; acceptance = contract),
+lowest-risk certain fix, touches only the file U3 owns. Re-ran buyer smoke → 7 routes pass.
+
+### Exit-review summary (5 lenses, adversarially scoped)
+- Spec fidelity: faithful; 2 benign minors (—"Free plan" rendered in `.qtop` not `.qsub`;
+  `bolt` glyph used since the sprite has no `i-bolt-last` — code correct). No change needed.
+- a11y/CodeRabbit: clean (all non-nav controls `<button type="button">`, no unused imports,
+  `should…when…` test names, `Number.NaN` guards, `.map`-rendered cards, no `key=`).
+- Duplication/correctness: helper logic verified test-by-test; the one MAJOR (above) fixed.
+- Copy discipline: clean (no banned terms, zero exclamations on frame 04, honest referral,
+  rose only on the Buy action, no Create-Request/Match-screen scope leak).
+- Route-promotion integrity: empirically consistent — verify 18 routes, buyer smoke 7,
+  no vacuous passes; `dist/app/requests/index.html` present.
