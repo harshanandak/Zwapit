@@ -16,4 +16,8 @@ describe("resultsLabel (Search results count, U2)", () => {
     expect(resultsLabel(-1)).toBe("No matches yet");
     expect(resultsLabel(NaN)).toBe("No matches yet");
   });
+
+  test("truncates non-integer counts via Math.floor", () => {
+    expect(resultsLabel(1.7)).toBe("1 found");
+  });
 });

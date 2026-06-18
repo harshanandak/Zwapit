@@ -1,0 +1,43 @@
+---
+import Icon from "../Icon.astro";
+import { formatDateTime, formatInr, transferModeLabel } from "./format";
+import { discountBadge } from "../../lib/ui/listingBadges";
+import type { TransferMode } from "../../lib/types";
+
+interface Props {
+  listing: {
+    id: string;
+    title: string;
+    venueOrRoute: string;
+    eventOrTripStartAt: string;
+    transferMode: TransferMode;
+    listingPrice: number;
+    originalPrice?: number;
+    originalPriceVerified?: boolean;
+  };
+  index: number;
+}
+
+const { listing, index } = Astro.props;
+const disc = discountBadge(listing);
+---
+
+<a class="rowcard solid" href={`/app/listings/${listing.id}`}>
+  <span class={`mini m${(index % 3) + 1}`}>{listing.title.charAt(0)}</span>
+  <div class="info">
+    <h5>{listing.title}</h5>
+    <div class="sub">{listing.venueOrRoute} · {formatDateTime(listing.eventOrTripStartAt)}</div>
+    <div class="meta">
+      {disc ? (
+        <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
+      ) : (
+        <span class="seller-price">Seller price</span>
+      )}
+      <span class="chip mode">{transferModeLabel(listing.transferMode)}</span>
+    </div>
+  </div>
+  <div class="right">
+    <span class="seller-tick"><Icon name="check" />Verified</span>
+    <span class="price price-d">{formatInr(listing.listingPrice)}</span>
+  </div>
+</a>

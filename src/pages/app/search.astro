@@ -1,8 +1,7 @@
 ---
 import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
-import { formatDateTime, formatInr, transferModeLabel } from "../../components/buyer/format";
-import { discountBadge } from "../../lib/ui/listingBadges";
+import ResaleRowCard from "../../components/buyer/ResaleRowCard.astro";
 import { isLiveResale } from "../../lib/ui/resaleListings";
 import { resultsLabel } from "../../lib/ui/searchResults";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
@@ -69,7 +68,7 @@ const resultCount = 1 + community.length;
   <div class="divider">Results · {resultsLabel(resultCount)}</div>
 
   {/* Official availability sample — display-only; real catalog + Notify-me wiring is backend. */}
-  <span class="rowcard solid">
+  <div class="rowcard solid">
     <span class="mini m2">O</span>
     <div class="info">
       <h5>Oppenheimer — IMAX 70mm</h5>
@@ -77,7 +76,7 @@ const resultCount = 1 + community.length;
       <div class="meta"><span class="chip live"><Icon name="ticket" />Official</span></div>
     </div>
     <div class="right"><span class="notify-btn"><Icon name="bell" />Notify me</span></div>
-  </span>
+  </div>
 
   {/* Wired community resale results, or the create-a-request empty state when none. */}
   {
@@ -89,30 +88,7 @@ const resultCount = 1 + community.length;
         <a class="btn btn-ghost" href="/app/requests">Create a request instead</a>
       </div>
     ) : (
-      community.map((item, i) => {
-        const disc = discountBadge(item);
-        return (
-          <a class="rowcard solid" href={`/app/listings/${item.id}`}>
-            <span class={`mini m${(i % 3) + 1}`}>{item.title.charAt(0)}</span>
-            <div class="info">
-              <h5>{item.title}</h5>
-              <div class="sub">{item.venueOrRoute} · {formatDateTime(item.eventOrTripStartAt)}</div>
-              <div class="meta">
-                {disc ? (
-                  <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
-                ) : (
-                  <span class="seller-price">Seller price</span>
-                )}
-                <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
-              </div>
-            </div>
-            <div class="right">
-              <span class="seller-tick"><Icon name="check" />Verified</span>
-              <span class="price price-d">{formatInr(item.listingPrice)}</span>
-            </div>
-          </a>
-        );
-      })
+      community.map((item, i) => <ResaleRowCard listing={item} index={i} />)
     )
   }
 </AppShell>

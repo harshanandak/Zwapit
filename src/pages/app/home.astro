@@ -1,8 +1,7 @@
 ---
 import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
-import { formatDateTime, formatInr, transferModeLabel } from "../../components/buyer/format";
-import { discountBadge } from "../../lib/ui/listingBadges";
+import ResaleRowCard from "../../components/buyer/ResaleRowCard.astro";
 import { isLiveResale } from "../../lib/ui/resaleListings";
 import { loadListingFlowView } from "../../lib/convex/dataAdapter";
 
@@ -85,30 +84,7 @@ const community = [listing].filter(isLiveResale);
         <a class="btn btn-ghost" style="color:var(--acc)" href="/app/requests">Create a request</a>
       </div>
     ) : (
-      community.map((item, i) => {
-        const disc = discountBadge(item);
-        return (
-          <a class="rowcard solid" href={`/app/listings/${item.id}`}>
-            <span class={`mini m${(i % 3) + 1}`}>{item.title.charAt(0)}</span>
-            <div class="info">
-              <h5>{item.title}</h5>
-              <div class="sub">{item.venueOrRoute} · {formatDateTime(item.eventOrTripStartAt)}</div>
-              <div class="meta">
-                {disc ? (
-                  <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
-                ) : (
-                  <span class="seller-price">Seller price</span>
-                )}
-                <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
-              </div>
-            </div>
-            <div class="right">
-              <span class="seller-tick"><Icon name="check" />Verified</span>
-              <span class="price price-d">{formatInr(item.listingPrice)}</span>
-            </div>
-          </a>
-        );
-      })
+      community.map((item, i) => <ResaleRowCard listing={item} index={i} />)
     )
   }
 </AppShell>
