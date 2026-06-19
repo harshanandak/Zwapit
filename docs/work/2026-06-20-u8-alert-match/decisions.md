@@ -54,3 +54,13 @@ Workflow: plan → dev → validate → ship → review → premerge.
 - **Copy/discount/dup:** CLEAN — no forbidden terms, single exclamation, disc math
   (450→390 = 13%) correct and gate-exempt for `/app/alerts` (documented), script
   additions are single-line (CPD-safe), the two alert-cards are content-distinct.
+
+### CodeRabbit review (PR #25) — 2 actionable, outcome
+- **#3444378167 (Minor) — "Official transfer" -> "Official Transfer":** FIXED. Canonical
+  user-facing phrase per CLAUDE.md; chip text capitalised.
+- **#3444378156 (Major) — event-level deep-link for "Open booking":** DECLINED (with
+  reasoning). Mock-first / display-led slice; the real per-event official deep-link is
+  data from the internal availability watcher (internal-only, audited, out of scope per
+  CLAUDE.md). Fabricating a specific event URL would create an unverified / dead link
+  (violates the verification rule). Kept a real official-site URL + added a code comment
+  marking the watcher integration seam; the deep-link lands when that backend is built.

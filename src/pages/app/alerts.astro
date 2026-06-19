@@ -28,7 +28,10 @@ const earlier = [
   <div class="divider">Just now</div>
 
   <!-- Official availability alert: deep-links OUT to official booking (Zwapit never
-       resells official inventory or touches that money). -->
+       resells official inventory or touches that money). The per-event deep-link is
+       a mock placeholder here — the real one is supplied by the internal availability
+       watcher (out of scope); we keep a real official-site URL rather than fabricate
+       an unverified event URL that could dead-link. -->
   <div class="alert-card official">
     <div class="rail"></div>
     <div class="ac-body">
@@ -66,7 +69,7 @@ const earlier = [
       <div class="ac-foot" style="flex-wrap:wrap">
         <span class="pr">₹390</span>
         <span class="disc"><Icon name="tag" />13% off · was ₹450</span>
-        <span class="chip mode">Official transfer</span>
+        <span class="chip mode">Official Transfer</span>
       </div>
       <a class="btn btn-primary sweep" href="/app/checkout/listing_bms_event_1" style="width:100%;margin-top:12px">Buy with Protection</a>
     </div>
