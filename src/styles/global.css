@@ -634,22 +634,26 @@ body{background:var(--bg)}
 .ghostlink .ic{width:15px;height:15px}
 .ghostlink .arrow{margin-left:auto;color:var(--faint)}
 .tile .sub{font-size:9px;color:var(--faint);line-height:1.3}
+/* Create-request (U7): a label+benefit column inside .chan-row (alert toggles). Additive. */
+.chan-row .cn{flex:1;min-width:0}
+.chan-row .cn b{display:block;font-size:12.5px;font-weight:600}
+.chan-row .cn span{display:block;font-size:10.5px;color:var(--dim);margin-top:2px;line-height:1.4}
 
 /* Entrance choreography — main tab screens rise + fade in, gently staggered, on load.
    Opt a screen in by adding its route id to the :is() list below. */
 @media (prefers-reduced-motion: no-preference){
   @keyframes zw-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *{
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *{
     animation:zw-rise .52s cubic-bezier(.22,.61,.36,1) both;
   }
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(1){animation-delay:.02s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(2){animation-delay:.06s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(3){animation-delay:.10s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(4){animation-delay:.14s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(5){animation-delay:.18s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(6){animation-delay:.22s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"]) > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(1){animation-delay:.02s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(2){animation-delay:.06s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(3){animation-delay:.10s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(4){animation-delay:.14s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(5){animation-delay:.18s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(6){animation-delay:.22s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
+  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
 }
 
 /* a11y (CodeRabbit #19): the Home category chips and Listings browse tabs are
