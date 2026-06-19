@@ -89,7 +89,7 @@ const budget = 600;
       <div class="val">
         <div class="stepper">
           <button type="button" id="bud-dec" aria-label="Lower max price"><Icon name="minus" /></button>
-          <b id="bud-val">{formatInr(budget)}</b>
+          <b id="bud-val" data-start={budget}>{formatInr(budget)}</b>
           <button type="button" id="bud-inc" aria-label="Raise max price"><Icon name="plus" /></button>
         </div>
       </div>
@@ -111,7 +111,7 @@ const budget = 600;
   </div>
 
   <div class="divider">Alerts</div>
-  <div class="gl" style="margin:0 22px;border-radius:var(--r-lg);overflow:hidden">
+  <div class="gl" style="margin:0 22px;border-radius:var(--r-lg);overflow:hidden" role="group" aria-label="Alert types">
     {
       alerts.map((a) => (
         <div class="chan-row">
@@ -187,6 +187,9 @@ const budget = 600;
       render();
     });
   }
-  stepper("bud-dec", "bud-inc", "bud-val", { start: 600, step: 50, min: 0, format: (n) => formatInr(n) });
+  // Budget start comes from the SSR-rendered data-start (single source of truth); 600 is a defensive fallback.
+  const budStartRaw = Number(document.getElementById("bud-val")?.dataset.start);
+  const budStart = Number.isFinite(budStartRaw) ? budStartRaw : 600;
+  stepper("bud-dec", "bud-inc", "bud-val", { start: budStart, step: 50, min: 0, format: (n) => formatInr(n) });
   stepper("qty-dec", "qty-inc", "qty-val", { start: 1, step: 1, min: 1, format: (n) => String(n) });
 </script>
