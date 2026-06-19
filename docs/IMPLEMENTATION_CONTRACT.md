@@ -13,6 +13,7 @@ Use real routes for top-level app surfaces and detail flows.
 - `/app/search` -> universal Search (Search tab).
 - `/app/requests` -> Requests screen: alerts/requests with state, quota, and matches (Requests tab).
 - `/app/requests/new` -> Create Request / Set an alert: category + catalog item + budget + alert types.
+- `/app/alerts` -> Alert payoff / Match: official availability alert (deep-links out) + community resale match (Buy with Protection). Requests tab, jade accent.
 - `/app/sell` -> Sell: one upload-first screen (upload -> details -> price -> publish).
 - `/app/sell/orders` -> seller-side Orders.
 - `/app/tickets` -> buyer-side My Tickets.
