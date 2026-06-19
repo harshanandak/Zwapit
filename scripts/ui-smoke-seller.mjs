@@ -1,6 +1,8 @@
-// Seller UI smoke check (Task 5).
+// Seller UI smoke check.
 // Reads built dist/ HTML for the seller routes and asserts the required
 // copy/states are server-rendered, and that no forbidden terms leak.
+// Light smoke: a few route-distinctive needles + the Publish click-path; the
+// exhaustive per-route copy contract lives in verify-first-visible-slice.mjs.
 // Run after `bun run build`:  bun scripts/ui-smoke-seller.mjs
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,63 +68,23 @@ const mustNot = (route, html) => {
   }
 };
 
-const overview = read("/app/sell", "app/sell");
-must("/app/sell", overview, ["Upload to Sell", "Orders"]);
-
-const upload = read("/app/sell/upload", "app/sell/upload");
-must("/app/sell/upload", upload, [
-  'data-route-id="/app/sell/upload"',
-  "Upload your ticket",
-  "detect",
-  "Continue",
-]);
-
-const confirm = read("/app/sell/confirm", "app/sell/confirm");
-must("/app/sell/confirm", confirm, [
-  "Detected details",
-  "Arijit Singh Live - Silver Pass",
-  "Bengaluru Arena",
-  "Official Transfer",
-  "Looks right",
-]);
-
-const price = read("/app/sell/price", "app/sell/price");
-must("/app/sell/price", price, ["Set your price", "Payout", "₹2,400", "Continue"]);
-
-const promise = read("/app/sell/promise", "app/sell/promise");
-must("/app/sell/promise", promise, [
-  "seller promise",
-  "before the deadline",
-  "Approved",
-  "now live",
-  "Go to Orders",
-]);
-
+const sell = read("/app/sell", "app/sell");
 const orders = read("/app/sell/orders", "app/sell/orders");
-must("/app/sell/orders", orders, [
-  "Arijit Singh Live - Silver Pass",
-  "Transfer needed",
-  "Waiting for buyer",
-  "Payout waiting",
-  "Completed",
-  "Transfer by",
-  "20 Dec 2026, 6:00 PM",
-  "Payout setup",
-]);
+
+must("/app/sell", sell, ['data-route-id="/app/sell"', "List a ticket", "Publish listing"]);
+must("/app/sell/orders", orders, ['data-route-id="/app/sell/orders"', "Payout setup", "Waiting for buyer"]);
 
 for (const [route, html] of [
-  ["/app/sell", overview],
-  ["/app/sell/upload", upload],
-  ["/app/sell/confirm", confirm],
-  ["/app/sell/price", price],
-  ["/app/sell/promise", promise],
+  ["/app/sell", sell],
   ["/app/sell/orders", orders],
 ]) {
   mustNot(route, html);
 }
 
-const promiseScriptMatches = [...(promise ?? "").matchAll(/<script type="module" src="\/([^"]+)"><\/script>/g)];
-const promiseScriptPath = promiseScriptMatches.at(-1)?.[1];
+// The consolidated Sell screen owns the publish submit click-path (moved here
+// from the retired /app/sell/promise step). Exercise the built page module.
+const sellScriptMatches = [...(sell ?? "").matchAll(/<script type="module" src="\/([^"]+)"><\/script>/g)];
+const sellScriptPath = sellScriptMatches.at(-1)?.[1];
 
 class FakeElement {
   constructor({ textContent = "", hidden = false } = {}) {
@@ -146,7 +108,7 @@ class FakeElement {
 
 class FakeAnchor extends FakeElement {
   constructor() {
-    super({ textContent: "Go to Orders" });
+    super({ textContent: "Publish listing" });
     this.href = "/app/sell/orders";
   }
 
@@ -192,13 +154,13 @@ async function waitFor(predicate) {
   return false;
 }
 
-function installPromisePageDom({ checked }) {
+function installSellPageDom({ checked }) {
   const continueLink = new FakeAnchor();
   const warning = new FakeElement();
   const resultPanel = new FakeElement({ hidden: true });
   const resultTitle = new FakeElement();
   const resultDetail = new FakeElement();
-  const detectedDraft = new FakeElement({ textContent: /<script type="application\/json" id="seller-detected-draft">([\s\S]*?)<\/script>/.exec(promise ?? "")?.[1] ?? "" });
+  const detectedDraft = new FakeElement({ textContent: /<script type="application\/json" id="seller-detected-draft">([\s\S]*?)<\/script>/.exec(sell ?? "")?.[1] ?? "" });
   const promiseChecks = [0, 1, 2].map(() => ({ checked }));
   const elements = new Map([
     ["promise-continue", continueLink],
@@ -248,7 +210,7 @@ function installPromisePageDom({ checked }) {
   };
   globalThis.window = {
     __ZWAPIT_UI_SMOKE_PHONE_GATE_STATUS: "verified",
-    location: { hostname: "localhost", pathname: "/app/sell/promise", search: "", href: "" },
+    location: { hostname: "localhost", pathname: "/app/sell", search: "", href: "" },
   };
   globalThis.sessionStorage = createStorage();
   globalThis.localStorage = createStorage();
@@ -256,54 +218,54 @@ function installPromisePageDom({ checked }) {
   return { continueLink, warning, resultPanel, resultTitle, resultDetail, promiseChecks };
 }
 
-async function importPromiseScript(scenario) {
-  if (!promiseScriptPath) {
-    failures.push("/app/sell/promise: missing built Promise page module script");
+async function importSellScript(scenario) {
+  if (!sellScriptPath) {
+    failures.push("/app/sell: missing built Sell page module script");
     return;
   }
-  await import(`${pathToFileURL(join(dist, promiseScriptPath)).href}?scenario=${scenario}-${Date.now()}`);
+  await import(`${pathToFileURL(join(dist, sellScriptPath)).href}?scenario=${scenario}-${Date.now()}`);
   await waitFor(() => true);
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function verifyPromiseClickPath() {
-  const dom = installPromisePageDom({ checked: false });
-  await importPromiseScript("promise-click-path");
+async function verifyPublishClickPath() {
+  const dom = installSellPageDom({ checked: false });
+  await importSellScript("sell-publish-click-path");
 
   const uncheckedEvent = dom.continueLink.click();
   if (!uncheckedEvent.defaultPrevented) {
-    failures.push("/app/sell/promise: unchecked promise click did not prevent default navigation");
+    failures.push("/app/sell: unchecked promise click did not prevent default navigation");
   }
   if (dom.warning.textContent !== "Accept the seller promise to continue.") {
-    failures.push("/app/sell/promise: unchecked promise click did not show the acceptance warning");
+    failures.push("/app/sell: unchecked promise click did not show the acceptance warning");
   }
   if (globalThis.window.location.href === "/app/sell/orders") {
-    failures.push("/app/sell/promise: unchecked promise click navigated to Orders");
+    failures.push("/app/sell: unchecked promise click navigated to Orders");
   }
 
   for (const checkbox of dom.promiseChecks) checkbox.checked = true;
   const acceptedEvent = dom.continueLink.click();
   if (!acceptedEvent.defaultPrevented) {
-    failures.push("/app/sell/promise: accepted promise click did not own the submit event");
+    failures.push("/app/sell: accepted promise click did not own the submit event");
   }
   const navigated = await waitFor(() => globalThis.window.location.href === "/app/sell/orders");
   const published = globalThis.sessionStorage.value("zwapit:seller-published");
   if (!navigated) {
-    failures.push("/app/sell/promise: accepted promise click did not navigate to Orders");
+    failures.push("/app/sell: accepted promise click did not navigate to Orders");
   }
   if (!published?.includes('"kind":"submitted"') || !published.includes("Your listing is live")) {
-    failures.push("/app/sell/promise: accepted promise click did not persist the submitted banner state");
+    failures.push("/app/sell: accepted promise click did not persist the submitted banner state");
   }
   if (dom.resultPanel.hidden !== false || dom.resultTitle.textContent !== "Your listing is live") {
-    failures.push("/app/sell/promise: accepted promise click did not show the submitted UI state");
+    failures.push("/app/sell: accepted promise click did not show the submitted UI state");
   }
 }
 
-await verifyPromiseClickPath();
+await verifyPublishClickPath();
 
 if (failures.length > 0) {
   console.error("Seller UI smoke check FAILED:\n" + failures.map((f) => `  - ${f}`).join("\n"));
   process.exit(1);
 }
 
-console.log("Seller UI smoke check passed for 6 seller routes plus Promise submit click path.");
+console.log("Seller UI smoke check passed for 2 seller routes plus Publish submit click path.");
