@@ -19,16 +19,18 @@ Use real routes for top-level app surfaces and detail flows.
 - `/app/listings/:listingId` -> listing detail.
 - `/app/checkout/:listingId` -> checkout preview.
 - `/app/orders/:orderId` -> shared order/transfer timeline.
-- `/app/me` -> profile placeholder.
+- `/app/me` -> account / phone-verification step (the protected-action gate target).
+- `/app/profile` -> Profile hub (Profile tab): identity, plan/referrals, Buying + Selling hubs, channels.
 - `/admin` -> admin shell placeholder only.
 
-Bottom nav:
+Bottom nav (v5, 5 tabs):
 - Home -> `/app/home`
-- Sell -> `/app/sell`
-- My Tickets -> `/app/tickets`
-- Me -> `/app/me`
+- Search -> `/app/search`
+- Requests -> `/app/requests`
+- Listings -> `/app/listings`
+- Profile -> `/app/profile`
 
-Seller Orders are inside Sell, not bottom navigation.
+Selling is a "List a ticket" FAB (not a tab); Seller Orders are inside Sell.
 
 ## First Mock Fixture
 
