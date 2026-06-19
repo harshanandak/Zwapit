@@ -112,7 +112,7 @@ const eligibility = [
         <div class:list={["tile", "gl", { no: !e.ok }]}>
           <span class="icbx"><Icon name={e.ok ? "check" : "x"} /></span>
           <b>{e.label}</b>
-          <span class:list={["st", e.ok ? "ok" : "no"]}>{e.ok ? "Can list" : "Can't list"}</span>
+          <span class:list={["st", e.ok ? "ok" : "no"]}>{e.ok ? "Can list" : "Cannot List"}</span>
         </div>
       ))
     }
@@ -195,7 +195,10 @@ const eligibility = [
   }
 
   const base = readBaseDraft();
-  let currentPrice = base?.listingPrice ?? 0;
+  // Guard against a malformed/non-finite stored price so NaN never leaks into the
+  // display, the persisted draft, or the submission payload.
+  const initialPrice = Number(base?.listingPrice);
+  let currentPrice = Number.isFinite(initialPrice) && initialPrice > 0 ? Math.floor(initialPrice) : 0;
 
   function renderPrice(): void {
     if (priceVal) priceVal.textContent = formatInr(currentPrice);
@@ -259,10 +262,17 @@ const eligibility = [
   let submitting = false;
   let navigateAway = false;
 
-  void gateProtectedActionLink("#promise-continue").then((status) => {
-    phoneGateResolved = true;
-    phoneGated = status !== "verified";
-  });
+  void gateProtectedActionLink("#promise-continue")
+    .then((status) => {
+      phoneGateResolved = true;
+      phoneGated = status !== "verified";
+    })
+    .catch(() => {
+      // Gate failed to resolve: fail closed (treat as gated, so we never submit
+      // unverified) but still unblock the CTA so it isn't stuck "Checking…".
+      phoneGateResolved = true;
+      phoneGated = true;
+    });
 
   async function publish(): Promise<void> {
     if (!base) {

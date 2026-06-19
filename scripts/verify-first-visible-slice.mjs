@@ -289,7 +289,7 @@ export async function verifyAcceptanceCriteria() {
       "21 Dec 2026, 11:59 PM",
     ]],
     // Single-line entry: keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
-    ["/app/sell", ["List a ticket", "Upload your ticket", "people looking", "Your price", "Payout", "2,400", "Can list", "Can't list", "Publish listing", "Arijit Singh Live - Silver Pass"]],
+    ["/app/sell", ["List a ticket", "Upload your ticket", "people looking", "Your price", "Payout", "2,400", "Can list", "Cannot List", "Publish listing", "Arijit Singh Live - Silver Pass"]],
     ["/app/tickets", [
       "My Tickets",
       "Payment confirmed",

@@ -231,6 +231,9 @@ async function importSellScript(scenario) {
 async function verifyPublishClickPath() {
   const dom = installSellPageDom({ checked: false });
   await importSellScript("sell-publish-click-path");
+  // If the page module didn't load, importSellScript already recorded the failure;
+  // don't click (the listener was never attached — it would throw and mask the real error).
+  if (!sellScriptPath) return;
 
   const uncheckedEvent = dom.continueLink.click();
   if (!uncheckedEvent.defaultPrevented) {

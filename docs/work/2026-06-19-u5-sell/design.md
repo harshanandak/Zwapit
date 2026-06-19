@@ -2,7 +2,7 @@
 
 - **Slug:** u5-sell
 - **Date:** 2026-06-19
-- **Status:** PROPOSED — awaiting user sign-off before implementation (Critical change)
+- **Status:** IMPLEMENTED — design approved by the user, built, and in review (PR #22, Critical change)
 - **Branch / worktree:** `feat/u5-sell` · `.worktrees/u5-sell`
 - **Classification:** **Critical** (breaking: removes contract-listed routes + new screen architecture).
   Workflow: plan → dev → validate → ship → review → premerge → verify.
