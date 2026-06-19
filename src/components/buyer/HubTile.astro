@@ -1,0 +1,18 @@
+---
+// A Profile hub tile (§9). Renders as a real link when `href` is set, otherwise a
+// display-only button (so route-coverage stays green for not-yet-built destinations).
+import Icon from "../Icon.astro";
+
+interface Props {
+  tile: { label: string; icon: string; href?: string | null; sub?: string };
+}
+
+const { tile } = Astro.props;
+const Tag = tile.href ? "a" : "button";
+---
+
+<Tag class="tile gl" href={tile.href ?? undefined} type={tile.href ? undefined : "button"}>
+  <span class="icbx"><Icon name={tile.icon} /></span>
+  <b>{tile.label}</b>
+  {tile.sub && <span class="sub">{tile.sub}</span>}
+</Tag>

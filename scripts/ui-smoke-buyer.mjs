@@ -77,6 +77,7 @@ const routeChecks = [
   ["/app/home", "app/home", ['data-route-id="/app/home"', "Set an alert"]],
   ["/app/search", "app/search", ['data-route-id="/app/search"', "Oppenheimer", "2 found"]],
   ["/app/requests", "app/requests", ['data-route-id="/app/requests"', "Your requests", "See referrals"]],
+  ["/app/profile", "app/profile", ['data-route-id="/app/profile"', "Free plan", "Sign out"]],
   ["/app/listings/:listingId", "app/listings/listing_bms_event_1", [
     'data-route-id="/app/listings/:listingId"',
     "Buy with Protection",

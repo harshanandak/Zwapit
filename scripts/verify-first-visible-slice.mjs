@@ -31,17 +31,15 @@ const routes = [
   ["/app/checkout/:listingId", "app/checkout/listing_bms_event_1/index.html"],
   ["/app/orders/:orderId", "app/orders/order_demo_1/index.html"],
   ["/app/me", "app/me/index.html"],
+  ["/app/profile", "app/profile/index.html"],
   ["/admin", "admin/index.html"],
 ];
 
 const routeDistPaths = new Map(routes);
 
-// The v5 bottom nav links to canonical tab routes that ship in later waves
-// (U1-U7). They are intentionally not in the first-slice contract yet, so links
-// to them are known-forward navigation, not scope drift.
-const knownForwardRoutes = new Set([
-  "/app/profile",
-]);
+// Known-forward routes: v5 nav targets not yet in the contract. All five tabs
+// now ship, so this is empty — every in-app link must resolve to a real route.
+const knownForwardRoutes = new Set([]);
 
 const allowedTask10Paths = new Set([
   "scripts/verify-first-visible-slice.mjs",
@@ -228,7 +226,7 @@ export async function verifyAcceptanceCriteria() {
   const notes = [];
   const built = new Map(routes.map(([route, relPath]) => [route, readBuilt(route, relPath, failures)]));
 
-  const appRoutes = ["/app/home", "/app/sell", "/app/tickets", "/app/me"];
+  const appRoutes = ["/app/home", "/app/search", "/app/requests", "/app/listings", "/app/profile"];
   for (const route of appRoutes) {
     mustContain(route, built.get(route) ?? "", ["Home", "Search", "Requests", "Listings", "Profile"], failures);
   }
@@ -236,6 +234,8 @@ export async function verifyAcceptanceCriteria() {
   // Per-route required copy/state. Data-driven (one entry per route) so the
   // assertion structure lives once in the loop below, not copy-pasted per route.
   const routeContentChecks = [
+    // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
+    ["/app/profile", ["Free plan", "Invite", "active requests", "Buying", "Selling", "My Requests", "My Listings", "Orders", "Sign out"]],
     ["/app/home", [
       "We'll notify you when it's available.",
       "Set an alert",
