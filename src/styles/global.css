@@ -620,6 +620,10 @@ body{background:var(--bg)}
 .drop-sched .note{margin-top:9px;font-size:10.5px;color:var(--faint);line-height:1.5}
 .toggle{font-size:10.5px;font-weight:700;border-radius:99px;padding:5px 12px;cursor:pointer;color:var(--dim);border:1px solid var(--gb-strong);background:rgba(255,255,255,.04)}
 .toggle.on{color:var(--acc);border-color:color-mix(in srgb,var(--acc) 40%,transparent);background:color-mix(in srgb,var(--acc) 12%,transparent)}
+.val-faint{font-size:12px;color:var(--faint)}
+/* `.catres` forces display:flex, overriding the UA [hidden] rule; scope a hide so
+   the publish-result card stays collapsed until an outcome unhides it. */
+#promise-result[hidden]{display:none}
 
 /* Entrance choreography — main tab screens rise + fade in, gently staggered, on load.
    Opt a screen in by adding its route id to the :is() list below. */

@@ -81,15 +81,15 @@ const eligibility = [
     </div>
     <div class="formrow">
       <div class="lbl">Original price <small>Verify to show a discount badge.</small></div>
-      <div class="val" style="font-size:12px;color:var(--faint)">Optional</div>
+      <div class="val val-faint">Optional</div>
     </div>
     <div class="formrow">
       <div class="lbl">Discount</div>
-      <div class="val" style="font-size:12px;color:var(--faint)">Seller price</div>
+      <div class="val val-faint">Seller price</div>
     </div>
     <div class="formrow">
       <div class="lbl">Mark as urgent <small>Adds an "Ending soon" badge.</small></div>
-      <div class="val"><button type="button" class="toggle" data-toggle>Off</button></div>
+      <div class="val"><button type="button" class="toggle" data-toggle aria-label="Mark as urgent" aria-pressed="false">Off</button></div>
     </div>
     <div class="formrow">
       <div class="lbl">Payout <small>Paid after the buyer confirms.</small></div>
@@ -100,7 +100,7 @@ const eligibility = [
   <div class="drop-sched gl">
     <div class="ds-top">
       <b>Auto price-drop</b>
-      <button type="button" class="toggle" data-toggle>Off</button>
+      <button type="button" class="toggle" data-toggle aria-label="Auto price-drop" aria-pressed="false">Off</button>
     </div>
     <div class="note">Optional. Example: ₹390 now → ₹360 at 6:30 → ₹330 at 7:00, stopping at start.</div>
   </div>
@@ -137,11 +137,11 @@ const eligibility = [
   </label>
 
   <div style="padding:14px 22px 0">
-    <a id="promise-continue" href="/app/sell/orders" class="btn btn-primary sweep" style="width:100%">
+    <a id="promise-continue" href="/app/sell/orders" class="btn btn-primary" style="width:100%">
       Publish listing
     </a>
     <p id="promise-warning" style="margin-top:10px;text-align:center;font-size:11.5px;font-weight:600;color:var(--red)"></p>
-    <section id="promise-result" class="catres gl" style="margin:12px 0 0;display:block" data-tone="" hidden>
+    <section id="promise-result" class="catres gl" style="margin:12px 0 0" data-tone="" hidden>
       <div class="tx">
         <b id="promise-result-title"></b>
         <span class="s" id="promise-result-detail"></span>
@@ -228,6 +228,7 @@ const eligibility = [
     btn.addEventListener("click", () => {
       const on = btn.classList.toggle("on");
       btn.textContent = on ? "On" : "Off";
+      btn.setAttribute("aria-pressed", String(on));
     });
   });
 

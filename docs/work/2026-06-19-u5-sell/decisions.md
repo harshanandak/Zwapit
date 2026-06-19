@@ -23,4 +23,33 @@ plan → dev → validate → ship → review → premerge → verify.
    new verify entry, data-driven checks).
 
 ## Decisions (filled during /dev)
-_(none yet)_
+
+### Decision 1 — in-flow Publish (not position:absolute .stickybar)
+**Score:** 2/14 (PROCEED) · **Status:** RESOLVED. The §8 spec shows a `.stickybar` (position:absolute)
+Publish bar, but `.stickybar` is unused by any live screen and can't be visually QA'd from the
+worktree (the preview server runs on the main repo / master). To avoid shipping a bnav-overlap bug,
+the Publish lives in an in-flow block at the end of the screen (styled `.btn-primary`). Sticky
+positioning is deferred to a follow-up once it can be visually verified. All content/sections are
+spec-faithful; only the bar's positioning differs.
+
+### Decision 2 — "View orders" wording (not the spec's "View sales")
+**Status:** RESOLVED. The seller-orders surface is "Orders" throughout this product (CLAUDE.md UX
+baseline + the seller-smoke FORBIDDEN guardrail forbids "Sales"). The orders peek uses "Your orders"
+/ "See orders, transfers, and payouts." to keep terminology consistent and avoid tripping the
+guardrail.
+
+### Exit-review (5 lenses) — outcome
+- Spec fidelity: faithful; 1 nit (`.sweep` on Publish) — FIXED (dropped; shimmer reserved for Buy).
+- a11y/CodeRabbit: 1 MEDIUM + 2 LOW — all FIXED:
+  - MEDIUM: `#promise-result` inline `display:block` defeated `hidden` (empty card showed on load,
+    because `.catres{display:flex}` also overrides the UA `[hidden]`). Removed the inline display and
+    added a scoped `#promise-result[hidden]{display:none}` (id+attr beats `.catres`).
+  - LOW: `.toggle` buttons got `aria-label` ("Mark as urgent" / "Auto price-drop") + `aria-pressed`
+    (toggled in the handler).
+  - LOW: repeated inline `font-size:12px;color:var(--faint)` extracted to a `.val-faint` class.
+- Route-removal integrity: CLEAN — zero broken refs; the deleted routes appear only as sample
+  string args to pure functions in 3 unit tests (still pass, 170/170). FAB + all links resolve.
+- Publish-script correctness: CLEAN — no throw/dead-route/gate-failure path; cannot_list href fixed
+  to `/app/sell`; null-guards cover the smoke's partial DOM; click-path smoke passes.
+- Duplication/copy: CLEAN — verify `/app/sell` entry is single-line; ui-smoke-seller new code has no
+  ≥6-line dup; no forbidden terms (no "sales"); display-only scope confirmed.
