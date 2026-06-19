@@ -12,11 +12,7 @@ Use real routes for top-level app surfaces and detail flows.
 - `/app/home` -> Home marketplace.
 - `/app/search` -> universal Search (Search tab).
 - `/app/requests` -> Requests screen: alerts/requests with state, quota, and matches (Requests tab).
-- `/app/sell` -> Sell overview and upload entry.
-- `/app/sell/upload` -> upload mock ticket/pass.
-- `/app/sell/confirm` -> detected details confirmation.
-- `/app/sell/price` -> price and payout estimate.
-- `/app/sell/promise` -> seller promise.
+- `/app/sell` -> Sell: one upload-first screen (upload -> details -> price -> publish).
 - `/app/sell/orders` -> seller-side Orders.
 - `/app/tickets` -> buyer-side My Tickets.
 - `/app/listings` -> resale marketplace (Listings tab).
