@@ -44,6 +44,9 @@ export const ACCENTS: Record<TabKey, string> = {
 /** Accent for an unknown route — home's violet. */
 const DEFAULT_ACCENT = ACCENTS.home;
 
+/** Jade ambient for the Alerts payoff screen (§5) — protection lead; not a tab accent. */
+const ALERTS_ACCENT = "#6FBF9A"; // --jade
+
 /** Tabs that surface the "List a ticket" FAB on their landing screen. */
 const FAB_TABS: readonly TabKey[] = ["home", "search", "requests", "listings"];
 
@@ -84,6 +87,9 @@ export function resolveNav(routeId: string): NavState {
   // 1. Money / sell flows: no active tab.
   if (isUnder(path, "/app/checkout")) return state(null, ACCENTS.listings, false); // rose
   if (isUnder(path, "/app/sell")) return state(null, ACCENTS.search, false); // steel
+
+  // 1b. Alerts payoff (§5): the bell's inbox. Requests tab stays lit; jade ambient.
+  if (isUnder(path, "/app/alerts")) return state("requests", ALERTS_ACCENT, false);
 
   // 2. Legacy routes fold into the Profile tab (superseded in U7).
   if (path === "/app/me" || path === "/app/tickets" || isUnder(path, "/app/orders")) {

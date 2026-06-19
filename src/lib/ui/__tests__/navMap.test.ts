@@ -112,6 +112,20 @@ describe("resolveNav — dynamic / detail / flow routes", () => {
   });
 });
 
+describe("resolveNav — alerts payoff (U8 §5)", () => {
+  test("/app/alerts → requests tab lit, jade accent, no FAB", () => {
+    expect(resolveNav("/app/alerts")).toEqual({
+      tab: "requests",
+      accent: "#6FBF9A",
+      showFab: false,
+    });
+  });
+
+  test("/app/alerts/ trailing slash resolves identically", () => {
+    expect(resolveNav("/app/alerts/")).toEqual(resolveNav("/app/alerts"));
+  });
+});
+
 describe("resolveNav — legacy routes fold into Profile", () => {
   test.each(["/app/me", "/app/tickets", "/app/orders/o1"])(
     "%s → profile tab, gold, no FAB",
