@@ -1,0 +1,195 @@
+---
+import AppShell from "../../../components/AppShell.astro";
+import Icon from "../../../components/Icon.astro";
+import { formatInr } from "../../../components/buyer/format";
+
+// Mock-first "Set an alert" / create-request flow (spec §3). Real catalog search,
+// the want-creation mutation, and matching are backend (Codex) / internal-only and
+// out of scope; selections are visual-only and the CTA navigates to the list.
+const steps = ["Category", "Item", "Budget", "Alerts"];
+const categories = [
+  { label: "Movie", icon: "film", sel: true },
+  { label: "Event", icon: "music" },
+  { label: "Bus", icon: "bus" },
+  { label: "Voucher", icon: "voucher" },
+  { label: "Pass", icon: "pass" },
+];
+const catalog = [
+  { icon: "film", title: "Dune: Part Three", sub: "PVR Orion · Sat 21 Jun · 9:30 PM · English · IMAX 3D", src: "BMS", sel: true },
+  { icon: "film", title: "Dune: Part Three", sub: "Cinepolis Nexus · Sun 22 Jun · 6:15 PM · English · IMAX 2D", src: "BMS" },
+];
+const alerts = [
+  { label: "Availability", icon: "bell", sub: "Tell me the moment tickets are live", on: true },
+  { label: "Discount", icon: "tag", sub: "Tell me when the price drops below my budget", on: true },
+  { label: "Price-drop", icon: "drop", sub: "Track scheduled seller drops" },
+  { label: "Last-minute", icon: "zap", sub: "Alert me close to showtime" },
+];
+const budget = 600;
+---
+
+<AppShell routeId="/app/requests/new" title="Set an alert" hideHeader>
+  <div class="pbar">
+    <a class="bk" href="/app/requests" aria-label="Back to requests"><Icon name="back" /></a>
+    <h1>Set an alert</h1>
+  </div>
+
+  <div class="steps">
+    {
+      steps.map((s, i) => (
+        <>
+          <div class:list={["step", { now: i === 0 }]}>
+            <span class="nub">{i + 1}</span>
+            <span>{s}</span>
+          </div>
+          {i < steps.length - 1 && <div class="step-ln"></div>}
+        </>
+      ))
+    }
+  </div>
+
+  <div class="divider">Category</div>
+  <div class="tiles">
+    {
+      categories.map((c) => (
+        <button type="button" class:list={["tile", "gl", { sel: c.sel }]} data-cat aria-pressed={c.sel ? "true" : "false"}>
+          <span class="icbx"><Icon name={c.icon} /></span>
+          <b>{c.label}</b>
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="divider">Item</div>
+  <div class="searchbar gl live"><Icon name="search" />dune part three</div>
+  {
+    catalog.map((item) => (
+      <button type="button" class:list={["catres", "gl", { sel: item.sel }]} data-catitem aria-pressed={item.sel ? "true" : "false"}>
+        <span class="icbx"><Icon name={item.icon} /></span>
+        <span class="tx">
+          <b>{item.title}</b>
+          <span class="s">{item.sub}</span>
+        </span>
+        <span class="srcb">{item.src}</span>
+      </button>
+    ))
+  }
+
+  <div class="buyerwait">
+    <span class="bdg"><Icon name="people" size="l" /></span>
+    <div>
+      <b>You + 124 others waiting for this show</b>
+      <span>One alert, shared by everyone watching this show.</span>
+    </div>
+  </div>
+
+  <div class="divider">Budget</div>
+  <div class="gl" style="margin:0 22px;border-radius:var(--r-lg);overflow:hidden">
+    <div class="formrow">
+      <div class="lbl">Max price per ticket</div>
+      <div class="val">
+        <div class="stepper">
+          <button type="button" id="bud-dec" aria-label="Lower max price"><Icon name="minus" /></button>
+          <b id="bud-val" data-start={budget}>{formatInr(budget)}</b>
+          <button type="button" id="bud-inc" aria-label="Raise max price"><Icon name="plus" /></button>
+        </div>
+      </div>
+    </div>
+    <div class="formrow">
+      <div class="lbl">Tickets</div>
+      <div class="val">
+        <div class="stepper">
+          <button type="button" id="qty-dec" aria-label="Fewer tickets"><Icon name="minus" /></button>
+          <b id="qty-val">1</b>
+          <button type="button" id="qty-inc" aria-label="More tickets"><Icon name="plus" /></button>
+        </div>
+      </div>
+    </div>
+    <div class="formrow">
+      <div class="lbl">Alert me until</div>
+      <div class="val val-faint">20 Jun 2026</div>
+    </div>
+  </div>
+
+  <div class="divider">Alerts</div>
+  <div class="gl" style="margin:0 22px;border-radius:var(--r-lg);overflow:hidden" role="group" aria-label="Alert types">
+    {
+      alerts.map((a) => (
+        <div class="chan-row">
+          <Icon name={a.icon} />
+          <div class="cn">
+            <b>{a.label}</b>
+            <span>{a.sub}</span>
+          </div>
+          <button type="button" class:list={["toggle", { on: a.on }]} data-alert aria-label={`${a.label} alert`} aria-pressed={a.on ? "true" : "false"}>
+            {a.on ? "On" : "Off"}
+          </button>
+        </div>
+      ))
+    }
+  </div>
+
+  <p style="margin:14px 22px 0;font-size:10.5px;color:var(--faint);line-height:1.55;text-align:center">
+    We'll alert you when this becomes available — booking is never guaranteed.
+  </p>
+
+  <div style="padding:14px 22px 0">
+    <a class="btn btn-primary" href="/app/requests" style="width:100%">Create request &amp; alert me</a>
+  </div>
+</AppShell>
+
+<script>
+  import { formatInr } from "../../../components/buyer/format";
+
+  // Single-select within a group (category tiles, catalog rows). Mock/visual only.
+  function singleSelect(selector: string): void {
+    const items = Array.from(document.querySelectorAll<HTMLElement>(selector));
+    for (const el of items) {
+      el.addEventListener("click", () => {
+        for (const other of items) {
+          const selected = other === el;
+          other.classList.toggle("sel", selected);
+          other.setAttribute("aria-pressed", String(selected));
+        }
+      });
+    }
+  }
+  singleSelect("[data-cat]");
+  singleSelect("[data-catitem]");
+
+  // Alert toggles.
+  document.querySelectorAll<HTMLButtonElement>("[data-alert]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const on = btn.classList.toggle("on");
+      btn.textContent = on ? "On" : "Off";
+      btn.setAttribute("aria-pressed", String(on));
+    });
+  });
+
+  // Steppers (budget, quantity) — Number-safe, clamped. Visual only.
+  function stepper(
+    decId: string,
+    incId: string,
+    valId: string,
+    opts: { start: number; step: number; min: number; format: (n: number) => string },
+  ): void {
+    const val = document.getElementById(valId);
+    if (!val) return;
+    let current = opts.start;
+    const render = (): void => {
+      val.textContent = opts.format(current);
+    };
+    document.getElementById(decId)?.addEventListener("click", () => {
+      current = Math.max(opts.min, current - opts.step);
+      render();
+    });
+    document.getElementById(incId)?.addEventListener("click", () => {
+      current = current + opts.step;
+      render();
+    });
+  }
+  // Budget start comes from the SSR-rendered data-start (single source of truth); 600 is a defensive fallback.
+  const budStartRaw = Number(document.getElementById("bud-val")?.dataset.start);
+  const budStart = Number.isFinite(budStartRaw) ? budStartRaw : 600;
+  stepper("bud-dec", "bud-inc", "bud-val", { start: budStart, step: 50, min: 0, format: (n) => formatInr(n) });
+  stepper("qty-dec", "qty-inc", "qty-val", { start: 1, step: 1, min: 1, format: (n) => String(n) });
+</script>

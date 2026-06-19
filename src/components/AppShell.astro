@@ -25,6 +25,17 @@ interface Props {
 
 const { routeId, title, hideHeader = false } = Astro.props;
 const { tab, accent, showFab } = resolveNav(routeId);
+
+// Routes whose main screens play the staggered rise-in on load (see global.css zw-rise).
+const ENTRANCE_ROUTES = new Set([
+  "/app/home",
+  "/app/search",
+  "/app/requests",
+  "/app/sell",
+  "/app/profile",
+  "/app/requests/new",
+]);
+const animateEntrance = ENTRANCE_ROUTES.has(routeId);
 ---
 
 <AppLayout title={`${title} | Zwapit`}>
@@ -36,7 +47,7 @@ const { tab, accent, showFab } = resolveNav(routeId);
         </header>
       )
     }
-    <div class:list={[{ "app-content": !hideHeader }]}>
+    <div class:list={[{ "app-content": !hideHeader }]} data-entrance={animateEntrance ? "" : undefined}>
       <slot />
     </div>
     <div class="spacer-nav"></div>
