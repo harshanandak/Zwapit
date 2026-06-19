@@ -51,7 +51,7 @@ const budget = 600;
   <div class="tiles">
     {
       categories.map((c) => (
-        <button type="button" class:list={["tile", "gl", { sel: c.sel }]} data-cat>
+        <button type="button" class:list={["tile", "gl", { sel: c.sel }]} data-cat aria-pressed={c.sel ? "true" : "false"}>
           <span class="icbx"><Icon name={c.icon} /></span>
           <b>{c.label}</b>
         </button>
@@ -63,12 +63,12 @@ const budget = 600;
   <div class="searchbar gl live"><Icon name="search" />dune part three</div>
   {
     catalog.map((item) => (
-      <button type="button" class:list={["catres", "gl", { sel: item.sel }]} data-catitem>
+      <button type="button" class:list={["catres", "gl", { sel: item.sel }]} data-catitem aria-pressed={item.sel ? "true" : "false"}>
         <span class="icbx"><Icon name={item.icon} /></span>
-        <div class="tx">
+        <span class="tx">
           <b>{item.title}</b>
           <span class="s">{item.sub}</span>
-        </div>
+        </span>
         <span class="srcb">{item.src}</span>
       </button>
     ))
@@ -145,7 +145,11 @@ const budget = 600;
     const items = Array.from(document.querySelectorAll<HTMLElement>(selector));
     for (const el of items) {
       el.addEventListener("click", () => {
-        for (const other of items) other.classList.toggle("sel", other === el);
+        for (const other of items) {
+          const selected = other === el;
+          other.classList.toggle("sel", selected);
+          other.setAttribute("aria-pressed", String(selected));
+        }
       });
     }
   }

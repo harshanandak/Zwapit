@@ -25,4 +25,16 @@ route-removal. Workflow: plan → dev → validate → ship → review → preme
    date/budget validation, the Alert-payoff screen (§5), Plans (§10).
 
 ## Decisions (filled during /dev)
-_(none yet)_
+
+### Exit-review (4 lenses) — outcome
+- Spec fidelity: faithful, microcopy verbatim; 2 cosmetic nits left (Dune mock embellishment; in-flow
+  CTA + `i-zap` + inline note — all documented deviations).
+- a11y/correctness: script has no throw paths (null-guarded steppers/selects). Two LOW fixes applied:
+  - Invalid HTML nesting — the `.catres` catalog rows are `<button>`s; their `.tx` was a `<div>` (flow
+    content in a button). Changed `.tx` to a `<span>` (all-phrasing → valid; CSS/layout unchanged).
+  - Single-select a11y — category tiles + catalog rows now carry `aria-pressed`, synced in
+    `singleSelect` (the alert toggles already had it).
+- Route/CTA integrity: CLEAN — flat `requests.astro` + `requests/new.astro` both build; 4 CTAs rewired;
+  no dangling links (knownForwardRoutes empty); 16 routes, 171 tests.
+- Duplication/copy: CLEAN — verify/smoke additions are single-line; no forbidden terms (no "Sales"/
+  "queue"/"#N"), no stray exclamations; social-proof exposes no identity/budget/queue number.
