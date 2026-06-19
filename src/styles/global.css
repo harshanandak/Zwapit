@@ -633,6 +633,7 @@ body{background:var(--bg)}
 .ghostlink:first-child{border-top:none}
 .ghostlink .ic{width:15px;height:15px}
 .ghostlink .arrow{margin-left:auto;color:var(--faint)}
+.tile .sub{font-size:9px;color:var(--faint);line-height:1.3}
 
 /* Entrance choreography — main tab screens rise + fade in, gently staggered, on load.
    Opt a screen in by adding its route id to the :is() list below. */

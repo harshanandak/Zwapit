@@ -1,6 +1,7 @@
 ---
 import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
+import HubTile from "../../components/buyer/HubTile.astro";
 import { requestQuota } from "../../lib/ui/requests";
 import { referralProgress } from "../../lib/ui/profile";
 
@@ -20,7 +21,7 @@ const buying = [
 const selling = [
   { label: "My Listings", icon: "tag", href: "/app/sell" },
   { label: "Orders", icon: "trend", href: "/app/sell/orders" },
-  { label: "Payouts", icon: "shield" },
+  { label: "Payouts", icon: "shield", sub: "Paid after confirm" },
   { label: "List a ticket", icon: "plus", href: "/app/sell" },
 ];
 const channels = [
@@ -58,42 +59,10 @@ const channels = [
   </div>
 
   <div class="divider">Buying</div>
-  <div class="tiles">
-    {
-      buying.map((t) =>
-        t.href ? (
-          <a class="tile gl" href={t.href}>
-            <span class="icbx"><Icon name={t.icon} /></span>
-            <b>{t.label}</b>
-          </a>
-        ) : (
-          <button type="button" class="tile gl">
-            <span class="icbx"><Icon name={t.icon} /></span>
-            <b>{t.label}</b>
-          </button>
-        ),
-      )
-    }
-  </div>
+  <div class="tiles">{buying.map((t) => <HubTile tile={t} />)}</div>
 
   <div class="divider">Selling</div>
-  <div class="tiles">
-    {
-      selling.map((t) =>
-        t.href ? (
-          <a class="tile gl" href={t.href}>
-            <span class="icbx"><Icon name={t.icon} /></span>
-            <b>{t.label}</b>
-          </a>
-        ) : (
-          <button type="button" class="tile gl">
-            <span class="icbx"><Icon name={t.icon} /></span>
-            <b>{t.label}</b>
-          </button>
-        ),
-      )
-    }
-  </div>
+  <div class="tiles">{selling.map((t) => <HubTile tile={t} />)}</div>
 
   <div class="divider">Notifications</div>
   <div class="gl" style="margin:0 22px;border-radius:var(--r-lg);overflow:hidden">
@@ -105,7 +74,7 @@ const channels = [
           {c.soon ? (
             <span class="chip mut">Soon</span>
           ) : (
-            <button type="button" class:list={["toggle", { on: c.on }]} aria-pressed={c.on ? "true" : "false"}>
+            <button type="button" class:list={["toggle", { on: c.on }]} aria-label={`${c.label} notifications`} aria-pressed={c.on ? "true" : "false"}>
               {c.on ? "On" : "Off"}
             </button>
           )}
