@@ -226,7 +226,7 @@ export async function verifyAcceptanceCriteria() {
   const notes = [];
   const built = new Map(routes.map(([route, relPath]) => [route, readBuilt(route, relPath, failures)]));
 
-  const appRoutes = ["/app/home", "/app/sell", "/app/tickets", "/app/me", "/app/profile"];
+  const appRoutes = ["/app/home", "/app/search", "/app/requests", "/app/listings", "/app/profile"];
   for (const route of appRoutes) {
     mustContain(route, built.get(route) ?? "", ["Home", "Search", "Requests", "Listings", "Profile"], failures);
   }
