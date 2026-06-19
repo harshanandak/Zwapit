@@ -640,20 +640,21 @@ body{background:var(--bg)}
 .chan-row .cn span{display:block;font-size:10.5px;color:var(--dim);margin-top:2px;line-height:1.4}
 
 /* Entrance choreography — main tab screens rise + fade in, gently staggered, on load.
-   Opt a screen in by adding its route id to the :is() list below. */
+   Opt a screen in by adding its route id to ENTRANCE_ROUTES in AppShell.astro, which
+   renders the `data-entrance` hook this block targets. No CSS edit needed per route. */
 @media (prefers-reduced-motion: no-preference){
   @keyframes zw-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *{
+  .app-shell > [data-entrance] > *{
     animation:zw-rise .52s cubic-bezier(.22,.61,.36,1) both;
   }
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(1){animation-delay:.02s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(2){animation-delay:.06s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(3){animation-delay:.10s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(4){animation-delay:.14s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(5){animation-delay:.18s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(6){animation-delay:.22s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(7){animation-delay:.26s}
-  .app-shell:is([data-route-id="/app/home"],[data-route-id="/app/search"],[data-route-id="/app/requests"],[data-route-id="/app/sell"],[data-route-id="/app/profile"],[data-route-id="/app/requests/new"]) > div:not(.spacer-nav) > *:nth-child(n+8){animation-delay:.30s}
+  .app-shell > [data-entrance] > *:nth-child(1){animation-delay:.02s}
+  .app-shell > [data-entrance] > *:nth-child(2){animation-delay:.06s}
+  .app-shell > [data-entrance] > *:nth-child(3){animation-delay:.10s}
+  .app-shell > [data-entrance] > *:nth-child(4){animation-delay:.14s}
+  .app-shell > [data-entrance] > *:nth-child(5){animation-delay:.18s}
+  .app-shell > [data-entrance] > *:nth-child(6){animation-delay:.22s}
+  .app-shell > [data-entrance] > *:nth-child(7){animation-delay:.26s}
+  .app-shell > [data-entrance] > *:nth-child(n+8){animation-delay:.30s}
 }
 
 /* a11y (CodeRabbit #19): the Home category chips and Listings browse tabs are
