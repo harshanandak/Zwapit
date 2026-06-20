@@ -4,15 +4,17 @@
 
 /**
  * Referral progress for the tier-card bar, e.g.
- * `{ label: "1 of 3 friends invited", percent: 33 }`. Defensive: non-finite or
- * negative `invited` floors to 0; a non-positive/non-finite `target` yields 0%.
- * percent is rounded and clamped to 0..100 for the `.track i` width.
+ * `{ label: "1 of 3 verified friends", percent: 33 }`. Rewards unlock on VERIFIED
+ * friends only (CLAUDE.md), so the bar measures verified count — the same thing the
+ * reward unlocks on, never "invited". Defensive: non-finite or negative `verified`
+ * floors to 0; a non-positive/non-finite `target` yields 0%. percent is rounded and
+ * clamped to 0..100 for the `.track i` width.
  */
-export function referralProgress(invited: number, target: number): { label: string; percent: number } {
-  const i = Number.isFinite(invited) && invited > 0 ? Math.floor(invited) : 0;
+export function referralProgress(verified: number, target: number): { label: string; percent: number } {
+  const i = Number.isFinite(verified) && verified > 0 ? Math.floor(verified) : 0;
   const t = Number.isFinite(target) && target > 0 ? Math.floor(target) : 0;
   const percent = t > 0 ? Math.min(100, Math.max(0, Math.round((i / t) * 100))) : 0;
-  return { label: `${i} of ${t} friends invited`, percent };
+  return { label: `${i} of ${t} verified friends`, percent };
 }
 
 /** A rung of the Plans & Referrals rewards ladder (§10). */
@@ -39,10 +41,10 @@ const REFERRAL_LADDER: ReadonlyArray<{ friends: number; reward: string }> = [
 /**
  * Resolve the ladder against a verified-friend count: each rung is `done` once
  * reached, the first unreached rung is `current`, the rest are `locked`. Defensive:
- * non-finite or negative `invited` floors to 0 (mirrors {@link referralProgress}).
+ * non-finite or negative `verified` floors to 0 (mirrors {@link referralProgress}).
  */
-export function referralLadder(invited: number): ReferralStep[] {
-  const i = Number.isFinite(invited) && invited > 0 ? Math.floor(invited) : 0;
+export function referralLadder(verified: number): ReferralStep[] {
+  const i = Number.isFinite(verified) && verified > 0 ? Math.floor(verified) : 0;
   let currentAssigned = false;
   return REFERRAL_LADDER.map(({ friends, reward }) => {
     if (i >= friends) return { friends, reward, state: "done" };

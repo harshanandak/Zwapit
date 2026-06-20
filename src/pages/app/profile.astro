@@ -4,12 +4,15 @@ import Icon from "../../components/Icon.astro";
 import HubTile from "../../components/buyer/HubTile.astro";
 import { requestQuota } from "../../lib/ui/requests";
 import { referralProgress } from "../../lib/ui/profile";
+import { loadReferralSummary, loadRequests } from "../../lib/convex/dataAdapter";
 
-// Mock-first display hub (spec §9). Real editing / sign-out / channel persistence
-// and the Plans screen (§10) are out of scope; not-yet-built destinations are
-// display-only buttons so route-coverage stays green.
-const quota = requestQuota(2, 3);
-const referral = referralProgress(1, 3);
+// Real quota (same source as /app/requests, so the two can't contradict) + real referral
+// count from Convex, with mock fallback when Convex isn't configured. The reward bar tracks
+// the VERIFIED-friend count (CLAUDE.md). Editing / sign-out / channel persistence and the
+// Invite action stay display-only buttons so route-coverage stays green.
+const reqView = await loadRequests();
+const quota = requestQuota(reqView.activeCount, reqView.quotaTotal);
+const referral = referralProgress((await loadReferralSummary()).verifiedCount, 3);
 
 // Hub tiles. `href` set => a real (resolving) link; otherwise a display-only button.
 const buying = [

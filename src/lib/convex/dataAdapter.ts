@@ -416,6 +416,34 @@ export async function loadRequests(): Promise<RequestsView> {
   }
 }
 
+// Referral summary for the Profile + Plans screens. Convex `getReferralSummary` returns
+// the buyer's invited/verified friend counts; the screens derive the progress bar + reward
+// ladder from `verifiedCount`. Keep this shape in sync with `ReferralSummary` in
+// convex/referrals.ts. Mirrors the seed so CI (no env) and Convex builds match.
+export interface ReferralSummaryView {
+  invitedCount: number;
+  verifiedCount: number;
+}
+
+const MOCK_REFERRAL_SUMMARY: ReferralSummaryView = { invitedCount: 3, verifiedCount: 1 };
+
+export async function loadReferralSummary(): Promise<ReferralSummaryView> {
+  const client = await getConvexClient();
+  if (!client) return MOCK_REFERRAL_SUMMARY;
+  try {
+    await client.mutation(functionRefs.seedDemoFixture, {});
+    const res = (await client.query(functionRefs.getReferralSummary, {})) as ReferralSummaryView | null;
+    // Zero verified friends is a VALID result (a buyer who hasn't referred anyone) — only
+    // fall back on a missing/shape-drifted response, never on a genuine zero/empty count.
+    if (!res || typeof res.invitedCount !== "number" || typeof res.verifiedCount !== "number") {
+      return MOCK_REFERRAL_SUMMARY;
+    }
+    return res;
+  } catch {
+    return MOCK_REFERRAL_SUMMARY;
+  }
+}
+
 // ---- Mutations (mock-visible flow only) ----
 
 export async function submitSellerListingDraft(
