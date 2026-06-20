@@ -119,6 +119,22 @@ async function syncCurrentUserForGuardedPath(client: Awaited<ReturnType<typeof g
   await client.mutation(functionRefs.syncAppUserFromProvider, {});
 }
 
+// Seed the demo fixture at most once per process. Many screens call several loaders, and each
+// loader used to fire its own (idempotent) seed mutation — /app/profile alone fired two
+// (loadRequests + loadReferralSummary). Memoizing the in-flight promise collapses those to a
+// single write without changing ordering: every caller still awaits the seed before its query.
+// On failure the cache resets so a later loader can retry while the current one falls to mock.
+let seedDemoFixturePromise: Promise<unknown> | null = null;
+function seedDemoFixtureOnce(client: NonNullable<Awaited<ReturnType<typeof getConvexClient>>>): Promise<unknown> {
+  if (!seedDemoFixturePromise) {
+    seedDemoFixturePromise = client.mutation(functionRefs.seedDemoFixture, {}).catch((err) => {
+      seedDemoFixturePromise = null;
+      throw err;
+    });
+  }
+  return seedDemoFixturePromise;
+}
+
 async function claimCurrentUserSellerOrder(client: Awaited<ReturnType<typeof getConvexClient>>): Promise<void> {
   if (!client || !isClerkAuthConfigured()) return;
   await syncCurrentUserForGuardedPath(client);
@@ -190,7 +206,7 @@ export async function loadFixtureView(): Promise<MockFixture> {
   const client = await getConvexClient();
   if (!client) return local;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     const view = await client.query(functionRefs.getCurrentFixtureView, {});
     if (!view) return local;
     return { ...(view as Omit<MockFixture, "auditEvents">), auditEvents: local.auditEvents };
@@ -205,7 +221,7 @@ export async function loadBuyerOrderState(): Promise<DemoState> {
   const client = await getConvexClient();
   if (!client) return local;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     if (isClerkAuthConfigured()) await syncCurrentUserForGuardedPath(client);
     const res = await client.query(
       isClerkAuthConfigured() ? functionRefs.getBuyerOrderForCurrentUser : functionRefs.getBuyerOrder,
@@ -230,7 +246,7 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
   const client = await getConvexClient();
   if (!client) return base;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     if (isClerkAuthConfigured()) await claimCurrentUserSellerOrder(client);
     const rows = await client.query(
       isClerkAuthConfigured() ? functionRefs.getSellerOrdersForCurrentUser : functionRefs.getSellerOrders,
@@ -261,7 +277,7 @@ export async function loadListingFlowView(listingKey?: string): Promise<ListingF
   const client = await getConvexClient();
   if (!client) return local;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     const res = await client.query(functionRefs.getCheckoutView, listingKey ? { listingKey } : {});
     if (!res?.listing || !res?.sourceRule || !res?.sellerPaymentAccount) return local;
     const listing = res.listing;
@@ -311,7 +327,7 @@ export async function loadCommunityListings(): Promise<MockListing[]> {
   const client = await getConvexClient();
   if (!client) return fallback;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     const docs = (await client.query(functionRefs.getHomeListings, {})) as MockListing[] | null;
     // Shape guard: each row must carry a string `id` (the detail-route param). If the
     // query shape ever drifts, fall back rather than emit `undefined` detail links.
@@ -397,7 +413,7 @@ export async function loadRequests(): Promise<RequestsView> {
   const client = await getConvexClient();
   if (!client) return MOCK_REQUESTS;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     const res = (await client.query(functionRefs.getRequestsForBuyer, {})) as RequestsView | null;
     // An empty `requests` array is a valid answer (a buyer with no requests) — only fall
     // back on a missing/shape-drifted response, never on a genuine empty result.
@@ -431,7 +447,7 @@ export async function loadReferralSummary(): Promise<ReferralSummaryView> {
   const client = await getConvexClient();
   if (!client) return MOCK_REFERRAL_SUMMARY;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     const res = (await client.query(functionRefs.getReferralSummary, {})) as ReferralSummaryView | null;
     // Zero verified friends is a VALID result (a buyer who hasn't referred anyone) — only
     // fall back on a missing/shape-drifted response, never on a genuine zero/empty count.
@@ -459,7 +475,7 @@ export async function submitSellerListingDraft(
   if (!client) return { ok: true, blockers: [], listing: localListing, status: "mock" };
 
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     await syncCurrentUserForGuardedPath(client);
     const result = (await client.mutation(functionRefs.submitSellerListingForCurrentUser, { draft })) as {
       listing: MockListing;
@@ -565,7 +581,7 @@ export async function runMockCheckout(
   const client = await getConvexClient();
   if (!client || !local.ok) return local;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     const checkoutArgs = {
       buyerEligibilityAcknowledged: options.buyerEligibilityAcknowledged === true,
       totalShownToBuyer: order.mockPaymentSummary.totalPayable,
@@ -609,7 +625,7 @@ export async function runReportBuyerIssue(
   const client = await getConvexClient();
   if (!client) return local;
   try {
-    await client.mutation(functionRefs.seedDemoFixture, {});
+    await seedDemoFixtureOnce(client);
     if (isClerkAuthConfigured()) {
       await syncCurrentUserForGuardedPath(client);
       await client.mutation(functionRefs.buyerReportIssueForCurrentUser, { reasonCode, evidenceText });

@@ -3,7 +3,7 @@ import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
 import HubTile from "../../components/buyer/HubTile.astro";
 import { requestQuota } from "../../lib/ui/requests";
-import { referralProgress } from "../../lib/ui/profile";
+import { referralProgress, REFERRAL_PROGRESS_TARGET } from "../../lib/ui/profile";
 import { loadReferralSummary, loadRequests } from "../../lib/convex/dataAdapter";
 
 // Real quota (same source as /app/requests, so the two can't contradict) + real referral
@@ -12,7 +12,7 @@ import { loadReferralSummary, loadRequests } from "../../lib/convex/dataAdapter"
 // Invite action stay display-only buttons so route-coverage stays green.
 const reqView = await loadRequests();
 const quota = requestQuota(reqView.activeCount, reqView.quotaTotal);
-const referral = referralProgress((await loadReferralSummary()).verifiedCount, 3);
+const referral = referralProgress((await loadReferralSummary()).verifiedCount, REFERRAL_PROGRESS_TARGET);
 
 // Hub tiles. `href` set => a real (resolving) link; otherwise a display-only button.
 const buying = [

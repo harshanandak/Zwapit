@@ -39,6 +39,14 @@ const REFERRAL_LADDER: ReadonlyArray<{ friends: number; reward: string }> = [
 ];
 
 /**
+ * Verified-friend milestone the Profile tier-card bar measures against: the
+ * "Earlier (Priority) alerts" rung, which matches the card headline ("Invite 3
+ * verified friends → earlier alerts"). Derived from the ladder so the bar tracks
+ * the config instead of a magic number.
+ */
+export const REFERRAL_PROGRESS_TARGET = REFERRAL_LADDER[1].friends;
+
+/**
  * Resolve the ladder against a verified-friend count: each rung is `done` once
  * reached, the first unreached rung is `current`, the rest are `locked`. Defensive:
  * non-finite or negative `verified` floors to 0 (mirrors {@link referralProgress}).
