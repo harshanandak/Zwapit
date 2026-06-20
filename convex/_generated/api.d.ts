@@ -9,6 +9,7 @@
  */
 
 import type * as authModel from "../authModel.js";
+import type * as catalog from "../catalog.js";
 import type * as identity from "../identity.js";
 import type * as listings from "../listings.js";
 import type * as model from "../model.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   authModel: typeof authModel;
+  catalog: typeof catalog;
   identity: typeof identity;
   listings: typeof listings;
   model: typeof model;

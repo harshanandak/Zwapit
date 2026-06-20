@@ -67,6 +67,50 @@ async function seedExtraListings(ctx: MutationCtx, base: FixtureListing): Promis
   return created;
 }
 
+// Official catalog items for the Search "Official" results (and, later, Want
+// references). Idempotent by catalogKey. Sources per CLAUDE.md: TMDB for movies,
+// manual for curated events / bus routes.
+const SEED_SYNCED_AT = "2026-06-20T00:00:00.000Z";
+const CATALOG_ITEMS: ReadonlyArray<{
+  key: string;
+  kind: "movie" | "live_event" | "bus_route";
+  externalSource: "tmdb" | "manual";
+  title: string;
+  subtitle: string;
+  city: string;
+  venueOrDestination: string;
+  startAt: string;
+}> = [
+  { key: "catalog_movie_oppenheimer", kind: "movie", externalSource: "tmdb", title: "Oppenheimer - IMAX 70mm", subtitle: "Re-release · English", city: "Bengaluru", venueOrDestination: "PVR Orion", startAt: "2026-12-20T18:30:00+05:30" },
+  { key: "catalog_event_alan_walker", kind: "live_event", externalSource: "manual", title: "Alan Walker - World Tour", subtitle: "Electronic", city: "Bengaluru", venueOrDestination: "Manpho Convention Centre", startAt: "2027-02-14T19:00:00+05:30" },
+  { key: "catalog_bus_blr_goa", kind: "bus_route", externalSource: "manual", title: "Bengaluru -> Goa", subtitle: "Sleeper · overnight", city: "Bengaluru", venueOrDestination: "Goa", startAt: "2026-12-27T21:00:00+05:30" },
+];
+
+// Insert the official catalog items idempotently (by catalogKey). Returns nothing —
+// called as a bare statement from the handler so it adds no branch (keeps the seed
+// handler's cognitive complexity within bounds; see seedExtraListings).
+async function seedCatalogItems(ctx: MutationCtx): Promise<void> {
+  for (const item of CATALOG_ITEMS) {
+    const existing = await ctx.db
+      .query("catalog_items")
+      .withIndex("by_key", (q) => q.eq("catalogKey", item.key))
+      .unique();
+    if (existing) continue;
+    await ctx.db.insert("catalog_items", {
+      catalogKey: item.key,
+      kind: item.kind,
+      externalSource: item.externalSource,
+      title: item.title,
+      subtitle: item.subtitle,
+      city: item.city,
+      venueOrDestination: item.venueOrDestination,
+      startAt: item.startAt,
+      isActive: true,
+      lastSyncedAt: SEED_SYNCED_AT,
+    });
+  }
+}
+
 export const seedDemoFixture = mutation({
   args: {},
   returns: v.object({
@@ -206,6 +250,9 @@ export const seedDemoFixture = mutation({
 
     // Additional live community listings (demo breadth for the Home/Listings rails).
     if (await seedExtraListings(ctx, listing)) created = true;
+
+    // Official catalog items for Search (bare call — an extra `if` branch would re-trip S3776).
+    await seedCatalogItems(ctx);
 
     // orders
     const order = fixture.order;

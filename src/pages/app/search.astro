@@ -4,15 +4,17 @@ import Icon from "../../components/Icon.astro";
 import ResaleRowCard from "../../components/buyer/ResaleRowCard.astro";
 import { isLiveResale } from "../../lib/ui/resaleListings";
 import { resultsLabel } from "../../lib/ui/searchResults";
-import { loadListingFlowView } from "../../lib/convex/dataAdapter";
+import { loadCommunityListings, loadOfficialCatalog } from "../../lib/convex/dataAdapter";
 
-const { listing } = await loadListingFlowView();
-// Wired community resale results (live/waitlist) from the mock data adapter.
-const community = [listing].filter(isLiveResale);
+// Real results from Convex (mock fallback when not configured): official availability
+// from the catalog read-model, community resale (live/waitlist) from getHomeListings.
+// Two independent reads — run them in parallel so latency doesn't double on a real backend.
+const [official, communityRaw] = await Promise.all([loadOfficialCatalog(), loadCommunityListings()]);
+const community = communityRaw.filter(isLiveResale);
 
 // Category tabs + filter chips + the All/Official/Community segment are visual this
-// slice; real text/catalog search, filtering, and official "Notify me" wiring are
-// backend (Codex) and out of scope here.
+// slice; real text search + filtering (and the official "Notify me" arming, which is
+// an internal-only mutation) are out of scope here.
 const categories = [
   { label: "Movie", icon: "film" },
   { label: "Event", icon: "music" },
@@ -28,8 +30,8 @@ const filters = [
   { label: "More", icon: "filter" },
 ];
 
-// Results shown = one display-only official sample + the wired community result(s).
-const resultCount = 1 + community.length;
+// Results shown = official availability + community resale results.
+const resultCount = official.length + community.length;
 ---
 
 <AppShell routeId="/app/search" title="Search" hideHeader>
@@ -67,16 +69,21 @@ const resultCount = 1 + community.length;
 
   <div class="divider">Results · {resultsLabel(resultCount)}</div>
 
-  {/* Official availability sample — display-only; real catalog + Notify-me wiring is backend. */}
-  <div class="rowcard solid">
-    <span class="mini m2">O</span>
-    <div class="info">
-      <h5>Oppenheimer — IMAX 70mm</h5>
-      <div class="sub">PVR Orion · re-release · this weekend</div>
-      <div class="meta"><span class="chip live"><Icon name="ticket" />Official</span></div>
-    </div>
-    <div class="right"><span class="notify-btn"><Icon name="bell" />Notify me</span></div>
-  </div>
+  {/* Official availability — catalog read-model. "Notify me" is display-only (arming an
+      availability alert is an internal-only/audited mutation, out of scope here). */}
+  {
+    official.map((item) => (
+      <div class="rowcard solid">
+        <span class="mini m2">{item.title.charAt(0)}</span>
+        <div class="info">
+          <h5>{item.title}</h5>
+          <div class="sub">{[item.venueOrDestination, item.subtitle].filter(Boolean).join(" · ")}</div>
+          <div class="meta"><span class="chip live"><Icon name="ticket" />Official</span></div>
+        </div>
+        <div class="right"><span class="notify-btn"><Icon name="bell" />Notify me</span></div>
+      </div>
+    ))
+  }
 
   {/* Wired community resale results, or the create-a-request empty state when none. */}
   {

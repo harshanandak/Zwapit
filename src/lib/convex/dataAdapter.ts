@@ -322,6 +322,44 @@ export async function loadCommunityListings(): Promise<MockListing[]> {
   }
 }
 
+// Official catalog items for the Search "Official" rail. Convex `getOfficialCatalog`
+// returns active catalog items; falls back to a single Oppenheimer sample when Convex
+// is not configured, the query is empty, or rows lack a string `title` (shape drift).
+// Keep this shape in sync with the identical OfficialCatalogItem in convex/catalog.ts
+// (the client can't import Convex types across the boundary). Update both together.
+export interface OfficialCatalogItem {
+  id: string;
+  kind: string;
+  title: string;
+  subtitle: string | null;
+  city: string | null;
+  venueOrDestination: string | null;
+  startAt: string | null;
+}
+
+const OPPENHEIMER_FALLBACK: OfficialCatalogItem = {
+  id: "catalog_movie_oppenheimer",
+  kind: "movie",
+  title: "Oppenheimer - IMAX 70mm",
+  subtitle: "Re-release · English",
+  city: "Bengaluru",
+  venueOrDestination: "PVR Orion",
+  startAt: null,
+};
+
+export async function loadOfficialCatalog(): Promise<OfficialCatalogItem[]> {
+  const fallback = [OPPENHEIMER_FALLBACK];
+  const client = await getConvexClient();
+  if (!client) return fallback;
+  try {
+    const docs = (await client.query(functionRefs.getOfficialCatalog, {})) as OfficialCatalogItem[] | null;
+    if (!Array.isArray(docs) || docs.length === 0 || typeof docs[0]?.title !== "string") return fallback;
+    return docs;
+  } catch {
+    return fallback;
+  }
+}
+
 // ---- Mutations (mock-visible flow only) ----
 
 export async function submitSellerListingDraft(
