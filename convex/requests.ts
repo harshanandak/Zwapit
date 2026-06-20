@@ -3,7 +3,6 @@
 // Read-only — creating/matching wants is an internal-only/audited mutation, not here.
 
 import { query, type QueryCtx } from "./_generated/server";
-import { v } from "convex/values";
 
 const DEMO_BUYER_ID = "user_demo_1";
 const QUOTA_TOTAL = 3; // free-plan active-request quota
@@ -60,9 +59,11 @@ async function purchasableMatchListingId(
 }
 
 export const getRequestsForBuyer = query({
-  args: { buyerId: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const buyerId = args.buyerId ?? DEMO_BUYER_ID;
+  // No client-supplied buyerId: a caller must not be able to read another buyer's
+  // requests. Pinned to the demo buyer pre-auth; swap to ctx.auth identity when auth lands.
+  args: {},
+  handler: async (ctx) => {
+    const buyerId = DEMO_BUYER_ID;
     const wants = await ctx.db
       .query("wants")
       .withIndex("by_buyer", (q) => q.eq("buyerId", buyerId))

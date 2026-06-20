@@ -41,7 +41,8 @@ State map: open→active, matched/reserved→matched, fulfilled→purchased, exp
 ## Frontend
 
 - `dataAdapter.loadRequests()` → Convex `getRequestsForBuyer` (+ quota) with mock fallback = the
-  current 3 mock requests + `requestQuota(2,3)`. Shape-guarded (string `id`/`title`).
+  current 4 mock requests (Coldplay matched + Dune/Goa active + Alan Walker expired) +
+  `requestQuota(2,3)`. Shape-guarded; a genuine empty result is NOT treated as drift.
 - `requests.astro`: map the real requests; quota from the real active count; one helper derives
   icon/alerts/wave; matched card's Buy link → `matchListingId` (the Coldplay listing detail, which
   already prerenders). `requestStateMeta`/`requestQuota` reused.
@@ -50,7 +51,7 @@ State map: open→active, matched/reserved→matched, fulfilled→purchased, exp
 
 - Convex: real wants (Coldplay matched + Dune/Goa active + Alan Walker expired), real quota, real
   match count.
-- No `PUBLIC_CONVEX_URL` (CI): mock fallback → the current 3 requests. Both gate-green.
+- No `PUBLIC_CONVEX_URL` (CI): mock fallback → the current 4 requests (mirrors the seed). Both gate-green.
 
 ## Needle rework (per advisor)
 

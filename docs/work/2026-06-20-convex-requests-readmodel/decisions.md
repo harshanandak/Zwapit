@@ -38,8 +38,17 @@ Three in-scope MED items raised — all fixed:
 3. **Buy link no longer re-validated the listing** (regression from dropping the client re-check) —
    Fixed server-side: `purchasableMatchListingId()` only emits a listing whose `state === "live"`,
    extracted as a helper so the handler's S3776 complexity stays flat.
-LOW (deferred): `getRequestsForBuyer` takes a client-supplied `buyerId` with no ownership check —
-acceptable in the pre-auth mock stage (consistent with sibling queries), but **must gain
-`ctx.auth.getUserIdentity()` ownership enforcement when auth lands** (tracked for the auth slice).
+LOW (now closed interim): `getRequestsForBuyer` originally took a client-supplied `buyerId`.
+CodeRabbit flagged the cross-user read; since the only caller passes `{}`, the arg was removed and
+the query is pinned to the demo buyer (`args: {}`). Full `ctx.auth.getUserIdentity()` ownership
+enforcement still lands with the auth slice — but the cross-user read hole is gone now.
+
+## CodeRabbit cycle (PR #29)
+3 actionable comments, all valid, all fixed:
+1. **buyerId ownership (Major)** — removed `args.buyerId`; pinned to `DEMO_BUYER_ID` (see above).
+2. **dataAdapter empty-result fallback (Major)** — dropped `requests.length === 0` from the
+   shape guard; a genuine empty result now passes through (validate `activeCount`/`quotaTotal`
+   numbers + every `id` is a string instead). Stops a real no-requests user seeing demo cards.
+3. **design.md mock count (Minor)** — synced 3→4 (Alan Walker).
 Re-probed dev after fixes: Coldplay matched → Buy `listing_event_coldplay_1` (live), matchesThisWeek 1;
 Dune/Goa active; Alan Walker expired. Both build paths verify green (Convex 22 pages, mock 18).

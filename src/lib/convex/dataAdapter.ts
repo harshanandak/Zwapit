@@ -399,7 +399,15 @@ export async function loadRequests(): Promise<RequestsView> {
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
     const res = (await client.query(functionRefs.getRequestsForBuyer, {})) as RequestsView | null;
-    if (!res || !Array.isArray(res.requests) || res.requests.length === 0 || typeof res.requests[0]?.id !== "string") {
+    // An empty `requests` array is a valid answer (a buyer with no requests) — only fall
+    // back on a missing/shape-drifted response, never on a genuine empty result.
+    if (
+      !res ||
+      !Array.isArray(res.requests) ||
+      typeof res.activeCount !== "number" ||
+      typeof res.quotaTotal !== "number" ||
+      res.requests.some((r) => typeof r?.id !== "string")
+    ) {
       return MOCK_REQUESTS;
     }
     return res;
