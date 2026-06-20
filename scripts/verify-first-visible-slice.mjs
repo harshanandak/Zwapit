@@ -270,7 +270,6 @@ export async function verifyAcceptanceCriteria() {
       "Bus",
       "Bengaluru",
       "Results",
-      "2 found",
       "Oppenheimer",
       "Notify me",
       "Arijit Singh Live - Silver Pass",

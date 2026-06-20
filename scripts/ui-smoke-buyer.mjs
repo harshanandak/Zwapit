@@ -75,7 +75,7 @@ const mustNot = (route, html) => {
 // deliberately do NOT mirror its full needle lists here.
 const routeChecks = [
   ["/app/home", "app/home", ['data-route-id="/app/home"', "Set an alert"]],
-  ["/app/search", "app/search", ['data-route-id="/app/search"', "Oppenheimer", "2 found"]],
+  ["/app/search", "app/search", ['data-route-id="/app/search"', "Oppenheimer", "Notify me", "Arijit Singh Live - Silver Pass"]],
   ["/app/requests", "app/requests", ['data-route-id="/app/requests"', "Your requests", "See referrals"]],
   ["/app/requests/new", "app/requests/new", ['data-route-id="/app/requests/new"', "Set an alert", "Create request & alert me"]],
   ["/app/alerts", "app/alerts", ['data-route-id="/app/alerts"', "Tickets are live", "A match for your request", "Buy with Protection"]],

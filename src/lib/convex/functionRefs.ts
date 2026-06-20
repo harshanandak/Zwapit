@@ -16,6 +16,7 @@ export const functionRefs = {
   getHomeListings: makeFunctionReference<"query">("listings:getHomeListings"),
   getListingDetail: makeFunctionReference<"query">("listings:getListingDetail"),
   getCheckoutView: makeFunctionReference<"query">("listings:getCheckoutView"),
+  getOfficialCatalog: makeFunctionReference<"query">("catalog:getOfficialCatalog"),
   submitSellerListingForCurrentUser: makeFunctionReference<"mutation">("listings:submitSellerListingForCurrentUser"),
   mockCheckout: makeFunctionReference<"mutation">("orders:mockCheckout"),
   mockCheckoutForCurrentUser: makeFunctionReference<"mutation">("orders:mockCheckoutForCurrentUser"),
