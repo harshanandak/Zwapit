@@ -360,6 +360,62 @@ export async function loadOfficialCatalog(): Promise<OfficialCatalogItem[]> {
   }
 }
 
+// Buyer requests for the Requests screen. Convex `getRequestsForBuyer` returns the
+// buyer's wants joined to their catalog item + a real `want_matches` count; falls back
+// to the mock request set when Convex is not configured / empty / shape-drifted.
+// Keep this shape in sync with `BuyerRequest` in convex/requests.ts.
+export interface BuyerRequestView {
+  id: string;
+  state: "active" | "matched" | "purchased" | "expired";
+  category: string;
+  title: string;
+  venue: string | null;
+  startAt: string | null;
+  budget: number;
+  matchesThisWeek: number;
+  matchListingId: string | null;
+}
+
+export interface RequestsView {
+  requests: BuyerRequestView[];
+  activeCount: number;
+  quotaTotal: number;
+}
+
+const MOCK_REQUESTS: RequestsView = {
+  requests: [
+    { id: "want_coldplay_1", state: "matched", category: "event_ticket", title: "Coldplay - Music of the Spheres", venue: "DY Patil Stadium", startAt: "2027-01-18T19:30:00+05:30", budget: 4000, matchesThisWeek: 1, matchListingId: "listing_event_coldplay_1" },
+    { id: "want_dune_1", state: "active", category: "movie_ticket", title: "Dune: Part Three", venue: "PVR Orion", startAt: "2026-12-21T21:30:00+05:30", budget: 700, matchesThisWeek: 0, matchListingId: null },
+    { id: "want_goa_1", state: "active", category: "bus_travel", title: "Bengaluru -> Goa", venue: "Goa", startAt: "2026-12-27T21:00:00+05:30", budget: 1800, matchesThisWeek: 0, matchListingId: null },
+    { id: "want_alan_1", state: "expired", category: "event_ticket", title: "Alan Walker - World Tour", venue: "Manpho Convention Centre", startAt: "2027-02-14T19:00:00+05:30", budget: 1500, matchesThisWeek: 0, matchListingId: null },
+  ],
+  activeCount: 2,
+  quotaTotal: 3,
+};
+
+export async function loadRequests(): Promise<RequestsView> {
+  const client = await getConvexClient();
+  if (!client) return MOCK_REQUESTS;
+  try {
+    await client.mutation(functionRefs.seedDemoFixture, {});
+    const res = (await client.query(functionRefs.getRequestsForBuyer, {})) as RequestsView | null;
+    // An empty `requests` array is a valid answer (a buyer with no requests) — only fall
+    // back on a missing/shape-drifted response, never on a genuine empty result.
+    if (
+      !res ||
+      !Array.isArray(res.requests) ||
+      typeof res.activeCount !== "number" ||
+      typeof res.quotaTotal !== "number" ||
+      res.requests.some((r) => typeof r?.id !== "string")
+    ) {
+      return MOCK_REQUESTS;
+    }
+    return res;
+  } catch {
+    return MOCK_REQUESTS;
+  }
+}
+
 // ---- Mutations (mock-visible flow only) ----
 
 export async function submitSellerListingDraft(

@@ -278,7 +278,7 @@ export async function verifyAcceptanceCriteria() {
     // Single-line entry on purpose: keeps these (new-code) needles off their own
     // repeated lines so SonarCloud's line-based CPD doesn't flag them against the
     // older multi-line route blocks above.
-    ["/app/requests", ["Your requests", "active requests", "Matched", "Up to", "matches this week", "Standard", "Priority", "See referrals", "Arijit Singh Live - Silver Pass"]],
+    ["/app/requests", ["Your requests", "active requests", "Matched", "Up to", "matches this week", "Standard", "See referrals", "Coldplay - Music of the Spheres", "Dune: Part Three", "Bengaluru -> Goa", "Alan Walker - World Tour"]],
     ["/app/listings/:listingId", [
       "Arijit Singh Live - Silver Pass",
       "Official Transfer",

@@ -19,8 +19,16 @@ type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
 // order-flow fixture. All reuse the seeded BookMyShow event rule (AUTO_APPROVE,
 // OFFICIAL_TRANSFER); none carries a verified original price, so each renders as
 // "Seller price" (discount-integrity).
-const EXTRA_LISTINGS = [
-  { key: "listing_event_coldplay_1", title: "Coldplay - Music of the Spheres", venueOrRoute: "DY Patil Stadium, Navi Mumbai", eventOrTripStartAt: "2027-01-18T19:30:00+05:30", quantity: 2, listingPrice: 3500 },
+const EXTRA_LISTINGS: ReadonlyArray<{
+  key: string;
+  title: string;
+  venueOrRoute: string;
+  eventOrTripStartAt: string;
+  quantity: number;
+  listingPrice: number;
+  catalogItemId?: string;
+}> = [
+  { key: "listing_event_coldplay_1", title: "Coldplay - Music of the Spheres", venueOrRoute: "DY Patil Stadium, Navi Mumbai", eventOrTripStartAt: "2027-01-18T19:30:00+05:30", quantity: 2, listingPrice: 3500, catalogItemId: "catalog_event_coldplay" },
   { key: "listing_event_garrix_1", title: "Sunburn Arena ft. Martin Garrix", venueOrRoute: "Phoenix Marketcity, Bengaluru", eventOrTripStartAt: "2026-12-28T18:00:00+05:30", quantity: 1, listingPrice: 2100 },
   { key: "listing_event_zakir_1", title: "Zakir Khan - Tathastu", venueOrRoute: "Shanmukhananda Hall, Mumbai", eventOrTripStartAt: "2026-12-13T20:00:00+05:30", quantity: 2, listingPrice: 1200 },
   { key: "listing_event_ipl_rcb_1", title: "IPL - RCB vs CSK", venueOrRoute: "M. Chinnaswamy Stadium, Bengaluru", eventOrTripStartAt: "2027-04-05T19:30:00+05:30", quantity: 1, listingPrice: 3400 },
@@ -36,11 +44,19 @@ async function seedExtraListings(ctx: MutationCtx, base: FixtureListing): Promis
       .query("listings")
       .withIndex("by_key", (q) => q.eq("listingKey", extra.key))
       .unique();
-    if (existing) continue;
+    if (existing) {
+      // Backfill catalogItemId onto a row seeded before this field existed (idempotent),
+      // so the want<->listing match stays genuinely catalogItemId-backed on older deployments.
+      if (extra.catalogItemId && !existing.catalogItemId) {
+        await ctx.db.patch(existing._id, { catalogItemId: extra.catalogItemId });
+      }
+      continue;
+    }
     created = true;
     const startMs = Date.parse(extra.eventOrTripStartAt);
     await ctx.db.insert("listings", {
       listingKey: extra.key,
+      ...(extra.catalogItemId ? { catalogItemId: extra.catalogItemId } : {}),
       sellerId: base.sellerId,
       sourceRuleId: base.sourceRuleId,
       sourceRuleVersion: base.sourceRuleVersion,
@@ -84,6 +100,8 @@ const CATALOG_ITEMS: ReadonlyArray<{
   { key: "catalog_movie_oppenheimer", kind: "movie", externalSource: "tmdb", title: "Oppenheimer - IMAX 70mm", subtitle: "Re-release · English", city: "Bengaluru", venueOrDestination: "PVR Orion", startAt: "2026-12-20T18:30:00+05:30" },
   { key: "catalog_event_alan_walker", kind: "live_event", externalSource: "manual", title: "Alan Walker - World Tour", subtitle: "Electronic", city: "Bengaluru", venueOrDestination: "Manpho Convention Centre", startAt: "2027-02-14T19:00:00+05:30" },
   { key: "catalog_bus_blr_goa", kind: "bus_route", externalSource: "manual", title: "Bengaluru -> Goa", subtitle: "Sleeper · overnight", city: "Bengaluru", venueOrDestination: "Goa", startAt: "2026-12-27T21:00:00+05:30" },
+  { key: "catalog_event_coldplay", kind: "live_event", externalSource: "manual", title: "Coldplay - Music of the Spheres", subtitle: "Rock", city: "Navi Mumbai", venueOrDestination: "DY Patil Stadium", startAt: "2027-01-18T19:30:00+05:30" },
+  { key: "catalog_movie_dune", kind: "movie", externalSource: "tmdb", title: "Dune: Part Three", subtitle: "IMAX · English", city: "Bengaluru", venueOrDestination: "PVR Orion", startAt: "2026-12-21T21:30:00+05:30" },
 ];
 
 // Insert the official catalog items idempotently (by catalogKey). Returns nothing —
@@ -107,6 +125,65 @@ async function seedCatalogItems(ctx: MutationCtx): Promise<void> {
       startAt: item.startAt,
       isActive: true,
       lastSyncedAt: SEED_SYNCED_AT,
+    });
+  }
+}
+
+// Demo buyer requests (wants) for user_demo_1, referencing the seeded catalog items.
+// Idempotent by wantKey. wantState -> UI state is mapped in convex/requests.ts.
+const DEMO_BUYER_ID = "user_demo_1";
+const WANTS: ReadonlyArray<{
+  key: string;
+  catalogItemId: string;
+  category: "event_ticket" | "movie_ticket" | "bus_travel";
+  quantity: number;
+  maxPricePerUnit: number;
+  state: "open" | "matched" | "reserved" | "fulfilled" | "expired" | "cancelled";
+  expiresAt: string;
+  createdAt: string;
+}> = [
+  { key: "want_coldplay_1", catalogItemId: "catalog_event_coldplay", category: "event_ticket", quantity: 2, maxPricePerUnit: 4000, state: "matched", expiresAt: "2027-01-17T23:59:00+05:30", createdAt: "2026-06-10T09:00:00+05:30" },
+  { key: "want_dune_1", catalogItemId: "catalog_movie_dune", category: "movie_ticket", quantity: 2, maxPricePerUnit: 700, state: "open", expiresAt: "2026-12-20T23:59:00+05:30", createdAt: "2026-06-12T10:00:00+05:30" },
+  { key: "want_goa_1", catalogItemId: "catalog_bus_blr_goa", category: "bus_travel", quantity: 1, maxPricePerUnit: 1800, state: "open", expiresAt: "2026-12-26T23:59:00+05:30", createdAt: "2026-06-14T11:00:00+05:30" },
+  { key: "want_alan_1", catalogItemId: "catalog_event_alan_walker", category: "event_ticket", quantity: 1, maxPricePerUnit: 1500, state: "expired", expiresAt: "2026-06-01T23:59:00+05:30", createdAt: "2026-05-20T12:00:00+05:30" },
+];
+
+// Bare-called from the handler (no branch -> no S3776 regrowth).
+async function seedWants(ctx: MutationCtx): Promise<void> {
+  for (const w of WANTS) {
+    const existing = await ctx.db.query("wants").withIndex("by_key", (q) => q.eq("wantKey", w.key)).unique();
+    if (existing) continue;
+    await ctx.db.insert("wants", {
+      wantKey: w.key,
+      buyerId: DEMO_BUYER_ID,
+      catalogItemId: w.catalogItemId,
+      category: w.category,
+      quantity: w.quantity,
+      maxPricePerUnit: w.maxPricePerUnit,
+      state: w.state,
+      expiresAt: w.expiresAt,
+      createdAt: w.createdAt,
+    });
+  }
+}
+
+// One catalogItemId-backed match: the Coldplay want <-> the Coldplay community listing
+// (both on catalog_event_coldplay). Idempotent by matchKey.
+const WANT_MATCHES: ReadonlyArray<{ key: string; wantId: string; listingId: string }> = [
+  { key: "want_match_coldplay_1", wantId: "want_coldplay_1", listingId: "listing_event_coldplay_1" },
+];
+
+async function seedWantMatches(ctx: MutationCtx): Promise<void> {
+  for (const m of WANT_MATCHES) {
+    const existing = await ctx.db.query("want_matches").withIndex("by_key", (q) => q.eq("matchKey", m.key)).unique();
+    if (existing) continue;
+    await ctx.db.insert("want_matches", {
+      matchKey: m.key,
+      wantId: m.wantId,
+      listingId: m.listingId,
+      state: "proposed",
+      allocationRank: 1,
+      createdAt: SEED_SYNCED_AT,
     });
   }
 }
@@ -253,6 +330,8 @@ export const seedDemoFixture = mutation({
 
     // Official catalog items for Search (bare call — an extra `if` branch would re-trip S3776).
     await seedCatalogItems(ctx);
+    await seedWants(ctx);
+    await seedWantMatches(ctx);
 
     // orders
     const order = fixture.order;
