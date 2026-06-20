@@ -1,0 +1,97 @@
+---
+import AppShell from "../../components/AppShell.astro";
+import Icon from "../../components/Icon.astro";
+
+// Mock-first "Alert payoff / Match" (spec §5) — the bell's inbox where a request
+// pays off. Real matching, availability watching, and notifications are
+// internal-only / audited backend (Codex) and out of scope; the cards are
+// display-led mock copy and the CTAs only navigate.
+//
+// Discount note: this match illustrates a *verified-original* community offer
+// (450 -> 390 = 13% off), which is the one place §5 shows the `.disc` badge. The
+// app-wide discount-integrity gate scopes to the fixture-bound marketplace routes
+// (home/listings/search/requests/sell), not this alerts inbox — see
+// docs/work/2026-06-20-u8-alert-match/decisions.md.
+const earlier = [
+  { icon: "ticket", text: "Interstellar (re-release) · PVR Forum — official booking opened. 2 days ago" },
+  { icon: "spark", text: "Coldplay · Mumbai — a match you purchased with protection. 4 days ago" },
+  { icon: "tag", text: "Oppenheimer 70mm · Bengaluru — price dropped to ₹520. 6 days ago" },
+];
+---
+
+<AppShell routeId="/app/alerts" title="Alerts" hideHeader>
+  <div class="pbar">
+    <a class="bk" href="/app/home" aria-label="Back to home"><Icon name="back" /></a>
+    <h1>Alerts</h1>
+  </div>
+
+  <div class="divider">Just now</div>
+
+  <!-- Official availability alert: deep-links OUT to official booking (Zwapit never
+       resells official inventory or touches that money). The per-event deep-link is
+       a mock placeholder here — the real one is supplied by the internal availability
+       watcher (out of scope); we keep a real official-site URL rather than fabricate
+       an unverified event URL that could dead-link. -->
+  <div class="alert-card official">
+    <div class="rail"></div>
+    <div class="ac-body">
+      <div class="ac-top">
+        <span class="ac-ic"><Icon name="ticket" /></span>
+        <h4>Tickets are live!</h4>
+        <span class="chip live">Official</span>
+      </div>
+      <p class="sub">Dune · PVR Orion · Sat 21 Jun, 9:30 PM — official booking just opened.</p>
+      <p class="sub" style="margin-top:6px">You + 124 others were alerted. Acting early helps — it's never a guaranteed seat.</p>
+      <div class="ac-foot">
+        <span class="ac-cta">
+          <a
+            class="btn"
+            href="https://in.bookmyshow.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="background:var(--gold-soft);color:var(--gold);border:1px solid rgba(217,168,78,.4)"
+          >Open booking<Icon name="arrow" /></a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Community resale match: Zwapit transacts here via protected payment. -->
+  <div class="alert-card community">
+    <div class="rail"></div>
+    <div class="ac-body">
+      <div class="ac-top">
+        <span class="ac-ic"><Icon name="spark" /></span>
+        <h4>A match for your request</h4>
+        <span class="chip protect"><Icon name="shield" />Protected payment</span>
+      </div>
+      <p class="sub">Arijit Singh Live - Silver Pass · Bengaluru Arena · from a verified seller.</p>
+      <div class="ac-foot" style="flex-wrap:wrap">
+        <span class="pr">₹390</span>
+        <span class="disc"><Icon name="tag" />13% off · was ₹450</span>
+        <span class="chip mode">Official Transfer</span>
+      </div>
+      <a class="btn btn-primary sweep" href="/app/checkout/listing_bms_event_1" style="width:100%;margin-top:12px">Buy with Protection</a>
+    </div>
+  </div>
+
+  <div class="trust-band">
+    <span class="bdg"><Icon name="shield" size="l" /></span>
+    <div>
+      <b>Protected payment</b>
+      <span>Your payment is held safely until the transfer is confirmed.</span>
+    </div>
+  </div>
+
+  <div class="divider">Earlier</div>
+  <div class="solid" style="margin:0 22px;border-radius:var(--r-lg);overflow:hidden">
+    {
+      earlier.map((e) => (
+        <div class="matchrow">
+          <span class="p"><Icon name={e.icon} /></span>
+          <div class="d">{e.text}</div>
+        </div>
+      ))
+    }
+  </div>
+</AppShell>

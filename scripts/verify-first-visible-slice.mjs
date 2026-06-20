@@ -24,6 +24,7 @@ const routes = [
   ["/app/search", "app/search/index.html"],
   ["/app/requests", "app/requests/index.html"],
   ["/app/requests/new", "app/requests/new/index.html"],
+  ["/app/alerts", "app/alerts/index.html"],
   ["/app/sell", "app/sell/index.html"],
   ["/app/sell/orders", "app/sell/orders/index.html"],
   ["/app/tickets", "app/tickets/index.html"],
@@ -238,6 +239,8 @@ export async function verifyAcceptanceCriteria() {
     // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
     ["/app/profile", ["Free plan", "Invite", "active requests", "Buying", "Selling", "My Requests", "My Listings", "Orders", "Sign out"]],
     ["/app/requests/new", ["Set an alert", "Category", "Movie", "Max price per ticket", "Tickets", "Availability", "Create request & alert me"]],
+    // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
+    ["/app/alerts", ["Alerts", "Tickets are live", "Open booking", "A match for your request", "Buy with Protection", "13% off", "held safely until the transfer is confirmed"]],
     ["/app/home", [
       "We'll notify you when it's available.",
       "Set an alert",
