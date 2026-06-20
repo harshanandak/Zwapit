@@ -4,11 +4,11 @@ import Icon from "../../../components/Icon.astro";
 import { formatDateTime, formatInr, transferModeLabel } from "../../../components/buyer/format";
 import { discountBadge } from "../../../lib/ui/listingBadges";
 import { isLiveResale } from "../../../lib/ui/resaleListings";
-import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
+import { loadCommunityListings } from "../../../lib/convex/dataAdapter";
 
-const { listing } = await loadListingFlowView();
-// Real resale listings from the mock data adapter (live/waitlist only).
-const listings = [listing].filter(isLiveResale);
+// Real resale listings from Convex (getHomeListings), live/waitlist only,
+// with a mock fallback when Convex isn't configured.
+const listings = (await loadCommunityListings()).filter(isLiveResale);
 
 // Browse section tabs (visual filters; wiring lands with the listings backend).
 const sections = [
@@ -38,8 +38,7 @@ const posterArt = ["p1", "p2", "p3", "p4", "p5"];
     }
   </div>
 
-  {/* Featured: real mock listings (linked). Sample cards fill the rail until the
-      listings backend supplies more — display-only, no faked interactivity. */}
+  {/* Featured: live community listings from Convex (getHomeListings), linked into detail. */}
   <div class="carousel">
     {
       listings.map((item, i) => {
@@ -71,15 +70,6 @@ const posterArt = ["p1", "p2", "p3", "p4", "p5"];
         );
       })
     }
-    <span class="poster-card solid">
-      <div class="poster p5"><div class="art" /><div class="glyph">S</div><span class="when">SUN · 6:00 PM</span></div>
-      <div class="body">
-        <h4>Sunburn — DJ Snake</h4>
-        <div class="venue">Novotel HICC · Qty 1</div>
-        <div class="meta"><span class="seller-price">Seller price</span><span class="chip mode">Code reveal</span></div>
-        <div class="pricerow"><div class="price price-d"><small>per ticket</small>{formatInr(2100)}</div><span class="go"><Icon name="chev" /></span></div>
-      </div>
-    </span>
   </div>
 
   {listings.length === 0 && (
@@ -91,23 +81,4 @@ const posterArt = ["p1", "p2", "p3", "p4", "p5"];
     </div>
   )}
 
-  <div class="divider">More near you</div>
-  <span class="rowcard solid">
-    <span class="mini m2">I</span>
-    <div class="info">
-      <h5>IPL Qualifier — SRH v RCB</h5>
-      <div class="sub">Uppal Stadium · Tue 24 Jun · 7:30 PM</div>
-      <div class="meta"><span class="seller-price">Seller price</span><span class="chip mode">Official transfer</span></div>
-    </div>
-    <div class="right"><span class="seller-tick"><Icon name="check" />Verified</span><span class="price price-d">{formatInr(3400)}</span></div>
-  </span>
-  <span class="rowcard solid">
-    <span class="mini m1">P</span>
-    <div class="info">
-      <h5>Peddi — IMAX 2D</h5>
-      <div class="sub">PVR Nexus · Fri · 9:15 PM</div>
-      <div class="meta"><span class="seller-price">Seller price</span><span class="chip mode">Verify &amp; Redeem</span></div>
-    </div>
-    <div class="right"><span class="seller-tick"><Icon name="check" />Verified</span><span class="price price-d">{formatInr(280)}</span></div>
-  </span>
 </AppShell>

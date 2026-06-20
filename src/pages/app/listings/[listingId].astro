@@ -8,19 +8,24 @@ import {
   transferModeLabel,
 } from "../../../components/buyer/format";
 import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/authAdapter";
-import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
+import { loadCommunityListings, loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
-export function getStaticPaths() {
-  return [{ params: { listingId: "listing_bms_event_1" } }];
+// Prerender a detail page for every live community listing (Convex getHomeListings,
+// mock fallback -> just the demo listing). Adding listings to the seed auto-extends
+// this set; no route edit needed.
+export async function getStaticPaths() {
+  const listings = await loadCommunityListings();
+  return listings.map((l) => ({ params: { listingId: l.id } }));
 }
 
-const { listing, sourceRule, purchasable } = await loadListingFlowView();
+const { listingId } = Astro.params;
+const { listing, sourceRule, purchasable } = await loadListingFlowView(listingId);
 const authState = createCurrentAuthState();
 const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`, authState, { requirePhoneVerified: true });
 ---
 
 <AppShell routeId="/app/listings/:listingId" title="Listing Detail" activeTab="home">
-  <div class="space-y-5">
+  <div class="space-y-5" data-listing-id={listing.id}>
     <div>
       <h2 class="text-xl font-semibold text-foreground">{listing.title}</h2>
       <p class="mt-1 text-sm text-muted-foreground">{listing.venueOrRoute}</p>
@@ -100,7 +105,8 @@ const buyAction = getAuthActionState("buy", `/app/checkout/${listing.id}`, authS
 <script>
   import { loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
-  void loadListingFlowView()
+  const listingId = document.querySelector("[data-listing-id]")?.getAttribute("data-listing-id") ?? undefined;
+  void loadListingFlowView(listingId)
     .then(({ purchasable }) => {
       document.getElementById("buy-link")?.classList.toggle("hidden", !purchasable);
       document.getElementById("listing-unavailable")?.classList.toggle("hidden", purchasable);

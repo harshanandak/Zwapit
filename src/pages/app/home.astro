@@ -3,11 +3,11 @@ import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
 import ResaleRowCard from "../../components/buyer/ResaleRowCard.astro";
 import { isLiveResale } from "../../lib/ui/resaleListings";
-import { loadListingFlowView } from "../../lib/convex/dataAdapter";
+import { loadCommunityListings } from "../../lib/convex/dataAdapter";
 
-const { listing } = await loadListingFlowView();
-// Community resale rail = live/waitlist listings from the mock data adapter.
-const community = [listing].filter(isLiveResale);
+// Community resale rail = live/waitlist listings from Convex (getHomeListings),
+// with a mock fallback when Convex isn't configured.
+const community = (await loadCommunityListings()).filter(isLiveResale);
 ---
 
 <AppShell routeId="/app/home" title="Home" hideHeader>

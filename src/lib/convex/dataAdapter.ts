@@ -253,13 +253,16 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
 }
 
 // Listing display + checkout readiness (same shape as connectMockListingFlow()).
-export async function loadListingFlowView(): Promise<ListingFlowView> {
+// `listingKey` selects a specific listing (the detail route passes the :listingId);
+// omitted -> the demo listing. Falls back to the mock demo flow when Convex is not
+// configured or the listing is missing.
+export async function loadListingFlowView(listingKey?: string): Promise<ListingFlowView> {
   const local = connectMockListingFlow();
   const client = await getConvexClient();
   if (!client) return local;
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
-    const res = await client.query(functionRefs.getCheckoutView, {});
+    const res = await client.query(functionRefs.getCheckoutView, listingKey ? { listingKey } : {});
     if (!res?.listing || !res?.sourceRule || !res?.sellerPaymentAccount) return local;
     const listing = res.listing;
     const sourceRule = res.sourceRule;
@@ -296,6 +299,24 @@ export async function loadListingFlowView(): Promise<ListingFlowView> {
     };
   } catch {
     return local;
+  }
+}
+
+// Community resale rail (Home + Listings): the full list of live listings, not
+// just the single checkout-flow listing. Convex `getHomeListings` returns every
+// `state:"live"` listing; falls back to the single mock listing when Convex is
+// not configured or returns nothing. `isLiveResale` filtering stays on the page.
+export async function loadCommunityListings(): Promise<MockListing[]> {
+  const fallback = [connectMockListingFlow().listing];
+  const client = await getConvexClient();
+  if (!client) return fallback;
+  try {
+    await client.mutation(functionRefs.seedDemoFixture, {});
+    const docs = (await client.query(functionRefs.getHomeListings, {})) as MockListing[] | null;
+    if (!Array.isArray(docs) || docs.length === 0) return fallback;
+    return docs;
+  } catch {
+    return fallback;
   }
 }
 
