@@ -8,8 +8,9 @@ import { loadCommunityListings, loadOfficialCatalog } from "../../lib/convex/dat
 
 // Real results from Convex (mock fallback when not configured): official availability
 // from the catalog read-model, community resale (live/waitlist) from getHomeListings.
-const official = await loadOfficialCatalog();
-const community = (await loadCommunityListings()).filter(isLiveResale);
+// Two independent reads — run them in parallel so latency doesn't double on a real backend.
+const [official, communityRaw] = await Promise.all([loadOfficialCatalog(), loadCommunityListings()]);
+const community = communityRaw.filter(isLiveResale);
 
 // Category tabs + filter chips + the All/Official/Community segment are visual this
 // slice; real text search + filtering (and the official "Notify me" arming, which is

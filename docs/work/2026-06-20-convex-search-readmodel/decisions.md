@@ -36,3 +36,15 @@ and emits "Oppenheimer" for the CI mock path; demo listing untouched (2,400 / 2,
   scope.
 - LOW (noted, no change): `.collect()` is fine at curated-catalog scale (switch to
   `by_kind_active` if it grows); empty catalog → Oppenheimer mock is intended.
+
+## CodeRabbit review (PR #28) — outcome
+- **Sequential awaits → Promise.all** (search.astro): FIXED — the two independent reads now
+  run in parallel.
+- **Duplicated `OfficialCatalogItem`** (catalog.ts + dataAdapter.ts): kept duplicated +
+  added cross-sync comments in both (CodeRabbit's sanctioned fallback). A shared type is
+  "shared types" (needs approval per CLAUDE.md) and the convex↔src import is awkward.
+- **Rename `catalogDocToMock`**: DECLINED — matches the established `listingDocToMock` /
+  `sourceRuleDocToMock` convention; renaming only this one would be inconsistent.
+- **Per-row title guard**: DECLINED — keeps consistency with the merged `loadCommunityListings`
+  `docs[0]` guard; the catalog is curated/tiny so partial-row drift is a non-issue (changing
+  both is out of scope).

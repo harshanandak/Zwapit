@@ -325,6 +325,8 @@ export async function loadCommunityListings(): Promise<MockListing[]> {
 // Official catalog items for the Search "Official" rail. Convex `getOfficialCatalog`
 // returns active catalog items; falls back to a single Oppenheimer sample when Convex
 // is not configured, the query is empty, or rows lack a string `title` (shape drift).
+// Keep this shape in sync with the identical OfficialCatalogItem in convex/catalog.ts
+// (the client can't import Convex types across the boundary). Update both together.
 export interface OfficialCatalogItem {
   id: string;
   kind: string;

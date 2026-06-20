@@ -5,6 +5,9 @@
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 
+// Keep this shape in sync with the identical OfficialCatalogItem in
+// src/lib/convex/dataAdapter.ts — the client can't import Convex types across the
+// boundary, so the two declarations are intentionally duplicated. Update both together.
 export interface OfficialCatalogItem {
   /** catalogKey — the stable public id. */
   id: string;
