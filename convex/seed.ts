@@ -55,7 +55,7 @@ async function seedExtraListings(ctx: MutationCtx, base: FixtureListing): Promis
       listingPrice: extra.listingPrice,
       platformFee: 10,
       gstOnFee: 1.8,
-      totalPayable: extra.listingPrice + 11.8,
+      totalPayable: extra.listingPrice + 10 + 1.8, // listingPrice + platformFee (10) + GST (1.8)
       transferMode: base.transferMode,
       transferDeadlineAt: new Date(startMs - 60 * 60 * 1000).toISOString(),
       protectionDeadlineAt: new Date(startMs + 24 * 60 * 60 * 1000).toISOString(),

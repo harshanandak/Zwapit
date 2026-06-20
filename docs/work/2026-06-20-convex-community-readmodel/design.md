@@ -1,7 +1,7 @@
 # Convex community-listings read-model + seed enrichment · design
 
 **Slug:** convex-community-readmodel · **Date:** 2026-06-20 · **Branch:** feat/convex-community-readmodel
-**Status:** in progress · **Classification:** Critical-ish (backend data + routing) — done solo with a convex-reviewer pass (Codex, the backend owner, is rate-limited until 2026-07-18).
+**Status:** in review (PR #27) · **Classification:** Critical-ish (backend data + routing) — done solo with a convex-reviewer pass (Codex, the backend owner, is rate-limited until 2026-07-18).
 
 ## Purpose
 

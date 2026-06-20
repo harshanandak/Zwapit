@@ -313,7 +313,9 @@ export async function loadCommunityListings(): Promise<MockListing[]> {
   try {
     await client.mutation(functionRefs.seedDemoFixture, {});
     const docs = (await client.query(functionRefs.getHomeListings, {})) as MockListing[] | null;
-    if (!Array.isArray(docs) || docs.length === 0) return fallback;
+    // Shape guard: each row must carry a string `id` (the detail-route param). If the
+    // query shape ever drifts, fall back rather than emit `undefined` detail links.
+    if (!Array.isArray(docs) || docs.length === 0 || typeof docs[0]?.id !== "string") return fallback;
     return docs;
   } catch {
     return fallback;
