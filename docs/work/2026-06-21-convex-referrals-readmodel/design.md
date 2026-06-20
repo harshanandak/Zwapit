@@ -58,3 +58,14 @@ Counts come from the backend; tier/wave/progress/ladder stay derived in the one 
 ## Verification
 Dev-only deploy (`npx convex dev --once`) → seed → probe. Both build paths green: Convex build
 + mock-fallback build through `verify-first-visible-slice`. `bun test` for the profile helper.
+
+## Security analysis (OWASP)
+Low-risk, read-only, pre-auth, demo-pinned:
+- **A01 Broken access control** — `getReferralSummary` takes `args: {}` and is pinned to
+  `DEMO_BUYER_ID`; no client-supplied id, so no cross-user read. On auth landing, swap the
+  pin to `ctx.auth.getUserIdentity()` — same read-only shape.
+- **A03 Injection / XSS / CSRF** — no external input (no args), read-only query, seed-based
+  data only; Astro escapes the rendered count/label.
+- **A02 Sensitive data exposure** — returns counts only (`invitedCount`/`verifiedCount`); no
+  email, name, or PII. Invite/verify are not client mutations (no write surface to abuse).
+- **Audit** — no money/transfer/payout action here, so no audit-log entry is required.
