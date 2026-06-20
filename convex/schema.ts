@@ -387,6 +387,20 @@ export default defineSchema({
     .index("by_want_listing", ["wantId", "listingId"])
     .index("by_state", ["state"]),
 
+  // Friend referrals. Rewards (the alert-wave ladder) unlock only on VERIFIED
+  // friends, never on installs/invites (CLAUDE.md) — so state distinguishes an
+  // invited friend from one who completed a verified action. Read-only in v1;
+  // invite/verify are not client mutations.
+  referrals: defineTable({
+    referralKey: v.string(),
+    referrerId: v.string(),
+    state: v.union(v.literal("invited"), v.literal("verified")),
+    invitedAt: v.string(),
+    verifiedAt: v.optional(v.string()),
+  })
+    .index("by_key", ["referralKey"])
+    .index("by_referrer", ["referrerId"]),
+
   // Append-only audit log for visible state transitions.
   audit_logs: defineTable({
     actorId: v.string(),
