@@ -149,6 +149,50 @@ export const seedDemoFixture = mutation({
       });
     }
 
+    // Additional live community listings — demo breadth for the Home/Listings
+    // rails. All reuse the seeded BookMyShow event rule (AUTO_APPROVE,
+    // OFFICIAL_TRANSFER); none carries a verified original price, so each renders
+    // as "Seller price" (discount-integrity). Idempotent by listingKey.
+    const extraListings = [
+      { key: "listing_event_coldplay_1", title: "Coldplay - Music of the Spheres", venueOrRoute: "DY Patil Stadium, Navi Mumbai", eventOrTripStartAt: "2027-01-18T19:30:00+05:30", quantity: 2, listingPrice: 3500 },
+      { key: "listing_event_garrix_1", title: "Sunburn Arena ft. Martin Garrix", venueOrRoute: "Phoenix Marketcity, Bengaluru", eventOrTripStartAt: "2026-12-28T18:00:00+05:30", quantity: 1, listingPrice: 2100 },
+      { key: "listing_event_zakir_1", title: "Zakir Khan - Tathastu", venueOrRoute: "Shanmukhananda Hall, Mumbai", eventOrTripStartAt: "2026-12-13T20:00:00+05:30", quantity: 2, listingPrice: 1200 },
+      { key: "listing_event_ipl_rcb_1", title: "IPL - RCB vs CSK", venueOrRoute: "M. Chinnaswamy Stadium, Bengaluru", eventOrTripStartAt: "2027-04-05T19:30:00+05:30", quantity: 1, listingPrice: 3400 },
+    ];
+    for (const extra of extraListings) {
+      const existingExtra = await ctx.db
+        .query("listings")
+        .withIndex("by_key", (q) => q.eq("listingKey", extra.key))
+        .unique();
+      if (existingExtra) continue;
+      created = true;
+      const startMs = Date.parse(extra.eventOrTripStartAt);
+      await ctx.db.insert("listings", {
+        listingKey: extra.key,
+        sellerId: listing.sellerId,
+        sourceRuleId: listing.sourceRuleId,
+        sourceRuleVersion: listing.sourceRuleVersion,
+        category: listing.category,
+        source: listing.source,
+        sourceCategoryKey: listing.sourceCategoryKey,
+        title: extra.title,
+        venueOrRoute: extra.venueOrRoute,
+        eventOrTripStartAt: extra.eventOrTripStartAt,
+        quantity: extra.quantity,
+        faceValue: extra.listingPrice,
+        listingPrice: extra.listingPrice,
+        platformFee: 10,
+        gstOnFee: 1.8,
+        totalPayable: extra.listingPrice + 11.8,
+        transferMode: listing.transferMode,
+        transferDeadlineAt: new Date(startMs - 60 * 60 * 1000).toISOString(),
+        protectionDeadlineAt: new Date(startMs + 24 * 60 * 60 * 1000).toISOString(),
+        state: "live",
+        ruleDecision: listing.ruleDecision,
+        duplicateFingerprint: `${listing.sourceCategoryKey}:${extra.key}`,
+      });
+    }
+
     // orders
     const order = fixture.order;
     const existingOrder = await ctx.db
