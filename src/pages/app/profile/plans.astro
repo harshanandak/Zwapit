@@ -1,0 +1,73 @@
+---
+import AppShell from "../../../components/AppShell.astro";
+import Icon from "../../../components/Icon.astro";
+import { referralLadder } from "../../../lib/ui/profile";
+
+// Mock-first Plans & Referrals (spec §10). Referrals are the active v1 lever;
+// rewards are non-paid and map to the alert-wave model. Compliance (CLAUDE.md):
+// v1 is success-fee only and Apple/Google forbid selling tiers via in-app
+// purchase, so the Plus column is INFORMATIONAL — no upgrade action; Plus is
+// managed on the web. No real purchase, referral mutation, or share happens here.
+// TODO(real-data): replace the hardcoded 1 with the signed-in user's verified-friend count.
+const ladder = referralLadder(1);
+const stateLabel = { done: "Unlocked", current: "You're here", locked: "Locked" } as const;
+---
+
+<AppShell routeId="/app/profile/plans" title="Plans & referrals" hideHeader>
+  <div class="pbar">
+    <a class="bk" href="/app/profile" aria-label="Back to profile"><Icon name="back" /></a>
+    <h1>Plans &amp; referrals</h1>
+  </div>
+
+  <div class="divider">Choose your plan</div>
+  <div class="compare">
+    <div class="col">
+      <h5>Free</h5>
+      <div class="pl">Current plan</div>
+      <ul>
+        <li><Icon name="check" />3 active requests</li>
+        <li><Icon name="check" />Standard alerts</li>
+        <li><Icon name="check" />Discount &amp; price-drop alerts</li>
+        <li><Icon name="check" />Protected payment</li>
+      </ul>
+      <div style="margin-top:13px"><span class="wave-pill">Standard</span></div>
+    </div>
+    <div class="col plus metal">
+      <h5><Icon name="crown" />Plus</h5>
+      <div class="pl">For the regulars</div>
+      <ul>
+        <li><Icon name="check" />Unlimited within fair use</li>
+        <li><Icon name="check" />Earlier alerts</li>
+        <li><Icon name="check" />Included + sharper thresholds</li>
+        <li><Icon name="check" />More saved watchlists</li>
+      </ul>
+      <div style="margin-top:13px"><span class="wave-pill priority"><Icon name="spark" />Priority</span></div>
+    </div>
+  </div>
+  <div class="formnote">Plus is available on the web.</div>
+
+  <div class="divider">Referral rewards</div>
+  <div class="ladder">
+    {
+      ladder.map((step) => (
+        <div class:list={["lstep", { done: step.state === "done" }]}>
+          <span class="ln"><Icon name={step.state === "done" ? "check" : "gift"} /></span>
+          <div>
+            <b>{step.friends} verified friend{step.friends === 1 ? "" : "s"} → {step.reward}</b>
+            <span>{stateLabel[step.state]}</span>
+          </div>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="wave-explain gl">
+    <div class="we-h"><Icon name="signal" />How alert waves work</div>
+    <div class="we-row"><span class="wave-pill"><Icon name="signal" />Standard</span><span>Everyone matching a request.</span></div>
+    <div class="we-row"><span class="wave-pill priority"><Icon name="spark" />Priority</span><span>Referrers — a few minutes earlier.</span></div>
+    <div class="we-row"><span class="wave-pill high"><Icon name="crown" />High Priority</span><span>Plus + best match — usually hears first.</span></div>
+    <div class="we-note">Priority means you may hear earlier — never a guaranteed ticket.</div>
+  </div>
+
+  <button type="button" class="btn btn-ghost" style="margin:16px 22px 0;width:calc(100% - 44px)"><Icon name="gift" />Share my invite link</button>
+</AppShell>

@@ -80,6 +80,7 @@ const routeChecks = [
   ["/app/requests/new", "app/requests/new", ['data-route-id="/app/requests/new"', "Set an alert", "Create request & alert me"]],
   ["/app/alerts", "app/alerts", ['data-route-id="/app/alerts"', "Tickets are live", "A match for your request", "Buy with Protection"]],
   ["/app/profile", "app/profile", ['data-route-id="/app/profile"', "Free plan", "Sign out"]],
+  ["/app/profile/plans", "app/profile/plans", ['data-route-id="/app/profile/plans"', "Plans & referrals", "Referral rewards", "Share my invite link"]],
   ["/app/listings/:listingId", "app/listings/listing_bms_event_1", [
     'data-route-id="/app/listings/:listingId"',
     "Buy with Protection",
