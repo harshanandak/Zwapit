@@ -51,3 +51,17 @@ Workflow: plan → dev → validate → ship → review → premerge.
 - **Compliance/copy/dup:** CLEAN — no in-app purchase, neutral "available on the web" note,
   no "hold token"/"best price"/forbidden terms, zero exclamations, helper pure+defensive+
   table-tested, script entries single-line, the two compare columns are content-distinct.
+
+### CodeRabbit review (PR #26) — 2 actionable + 1 nitpick, outcome
+- **#3445709944 (Minor) — "hears first" absolute wording:** FIXED. Softened the High
+  Priority line to "usually hears first" — consistent with the "never a guaranteed
+  ticket" disclaimer and the honest-framing principle.
+- **profile.test.ts naming (nitpick):** FIXED. Renamed both new tests to the
+  `should … when …` convention.
+- **#3445709943 (Minor) — inline styles → Tailwind:** DECLINED (with reasoning). The v5
+  screens use the hand-written CSS design system (global.css, V5-VERBATIM) plus targeted
+  one-off inline spacing — the established pattern across U1–U8. The values (13px, the
+  22px screen gutter, `calc(100% - 44px)`) have no clean Tailwind utilities; arbitrary-
+  value classes (`mt-[13px]`) would add no value and break consistency. Matches the prior
+  CodeRabbit learning that this repo's CSS coexists with (rather than is replaced by)
+  Tailwind.

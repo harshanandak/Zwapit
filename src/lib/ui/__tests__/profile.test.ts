@@ -21,7 +21,7 @@ describe("referralProgress (Profile referral bar, U6)", () => {
 });
 
 describe("referralLadder (Plans & Referrals rewards ladder, U9)", () => {
-  test("should mark each step done/current/locked from the verified-friend count", () => {
+  test("should mark each step done/current/locked when the verified-friend count changes", () => {
     const states = (invited: number) => referralLadder(invited).map((s) => s.state);
     // [invited, expected states for the three steps (1 / 3 / 5 friends)]
     const cases: Array<[number, Array<"done" | "current" | "locked">]> = [
@@ -39,7 +39,7 @@ describe("referralLadder (Plans & Referrals rewards ladder, U9)", () => {
     }
   });
 
-  test("should expose the fixed thresholds and non-paid rewards (no hold tokens)", () => {
+  test("should expose the fixed thresholds and non-paid rewards when the ladder is built", () => {
     const ladder = referralLadder(0);
     expect(ladder.map((s) => s.friends)).toEqual([1, 3, 5]);
     expect(ladder.map((s) => s.reward)).toEqual([
