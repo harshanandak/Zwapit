@@ -34,6 +34,7 @@ const routes = [
   ["/app/orders/:orderId", "app/orders/order_demo_1/index.html"],
   ["/app/me", "app/me/index.html"],
   ["/app/profile", "app/profile/index.html"],
+  ["/app/profile/plans", "app/profile/plans/index.html"],
   ["/admin", "admin/index.html"],
 ];
 
@@ -238,6 +239,8 @@ export async function verifyAcceptanceCriteria() {
   const routeContentChecks = [
     // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
     ["/app/profile", ["Free plan", "Invite", "active requests", "Buying", "Selling", "My Requests", "My Listings", "Orders", "Sign out"]],
+    // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
+    ["/app/profile/plans", ["Plans & referrals", "Choose your plan", "Unlimited within fair use", "Plus is available on the web", "Referral rewards", "How alert waves work", "Share my invite link"]],
     ["/app/requests/new", ["Set an alert", "Category", "Movie", "Max price per ticket", "Tickets", "Availability", "Create request & alert me"]],
     // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
     ["/app/alerts", ["Alerts", "Tickets are live", "Open booking", "A match for your request", "Buy with Protection", "13% off", "held safely until the transfer is confirmed"]],

@@ -23,6 +23,7 @@ Use real routes for top-level app surfaces and detail flows.
 - `/app/orders/:orderId` -> shared order/transfer timeline.
 - `/app/me` -> account / phone-verification step (the protected-action gate target).
 - `/app/profile` -> Profile hub (Profile tab): identity, plan/referrals, Buying + Selling hubs, channels.
+- `/app/profile/plans` -> Plans & Referrals: Free vs Plus comparison (info-only, no in-app purchase) + referral rewards ladder + alert-waves explainer.
 - `/admin` -> admin shell placeholder only.
 
 Bottom nav (v5, 5 tabs):
