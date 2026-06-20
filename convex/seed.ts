@@ -9,8 +9,63 @@
 // intentionally NOT seeded — they are append-only from the transition mutations.
 
 import { mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { createMockFixture } from "../src/lib/mock/fixtures";
+
+type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
+
+// Demo breadth for the Home/Listings rails: extra live community listings beyond the
+// order-flow fixture. All reuse the seeded BookMyShow event rule (AUTO_APPROVE,
+// OFFICIAL_TRANSFER); none carries a verified original price, so each renders as
+// "Seller price" (discount-integrity).
+const EXTRA_LISTINGS = [
+  { key: "listing_event_coldplay_1", title: "Coldplay - Music of the Spheres", venueOrRoute: "DY Patil Stadium, Navi Mumbai", eventOrTripStartAt: "2027-01-18T19:30:00+05:30", quantity: 2, listingPrice: 3500 },
+  { key: "listing_event_garrix_1", title: "Sunburn Arena ft. Martin Garrix", venueOrRoute: "Phoenix Marketcity, Bengaluru", eventOrTripStartAt: "2026-12-28T18:00:00+05:30", quantity: 1, listingPrice: 2100 },
+  { key: "listing_event_zakir_1", title: "Zakir Khan - Tathastu", venueOrRoute: "Shanmukhananda Hall, Mumbai", eventOrTripStartAt: "2026-12-13T20:00:00+05:30", quantity: 2, listingPrice: 1200 },
+  { key: "listing_event_ipl_rcb_1", title: "IPL - RCB vs CSK", venueOrRoute: "M. Chinnaswamy Stadium, Bengaluru", eventOrTripStartAt: "2027-04-05T19:30:00+05:30", quantity: 1, listingPrice: 3400 },
+];
+
+// Insert the extra community listings idempotently (by listingKey), reusing the demo
+// listing's source rule + seller. Returns true if any were created. Extracted from the
+// seed handler to keep its cognitive complexity within bounds.
+async function seedExtraListings(ctx: MutationCtx, base: FixtureListing): Promise<boolean> {
+  let created = false;
+  for (const extra of EXTRA_LISTINGS) {
+    const existing = await ctx.db
+      .query("listings")
+      .withIndex("by_key", (q) => q.eq("listingKey", extra.key))
+      .unique();
+    if (existing) continue;
+    created = true;
+    const startMs = Date.parse(extra.eventOrTripStartAt);
+    await ctx.db.insert("listings", {
+      listingKey: extra.key,
+      sellerId: base.sellerId,
+      sourceRuleId: base.sourceRuleId,
+      sourceRuleVersion: base.sourceRuleVersion,
+      category: base.category,
+      source: base.source,
+      sourceCategoryKey: base.sourceCategoryKey,
+      title: extra.title,
+      venueOrRoute: extra.venueOrRoute,
+      eventOrTripStartAt: extra.eventOrTripStartAt,
+      quantity: extra.quantity,
+      faceValue: extra.listingPrice,
+      listingPrice: extra.listingPrice,
+      platformFee: 10,
+      gstOnFee: 1.8,
+      totalPayable: extra.listingPrice + 10 + 1.8, // listingPrice + platformFee (10) + GST (1.8)
+      transferMode: base.transferMode,
+      transferDeadlineAt: new Date(startMs - 60 * 60 * 1000).toISOString(),
+      protectionDeadlineAt: new Date(startMs + 24 * 60 * 60 * 1000).toISOString(),
+      state: "live",
+      ruleDecision: base.ruleDecision,
+      duplicateFingerprint: `${base.sourceCategoryKey}:${extra.key}`,
+    });
+  }
+  return created;
+}
 
 export const seedDemoFixture = mutation({
   args: {},
@@ -148,6 +203,9 @@ export const seedDemoFixture = mutation({
         duplicateFingerprint: listing.duplicateFingerprint,
       });
     }
+
+    // Additional live community listings (demo breadth for the Home/Listings rails).
+    if (await seedExtraListings(ctx, listing)) created = true;
 
     // orders
     const order = fixture.order;
