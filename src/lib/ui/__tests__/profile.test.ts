@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { referralProgress } from "../profile";
+import { referralLadder, referralProgress } from "../profile";
 
 describe("referralProgress (Profile referral bar, U6)", () => {
   test("should render the invited-of-target label and clamped fill percent for any input", () => {
@@ -17,5 +17,35 @@ describe("referralProgress (Profile referral bar, U6)", () => {
     for (const [invited, target, expected] of cases) {
       expect(referralProgress(invited, target)).toEqual(expected);
     }
+  });
+});
+
+describe("referralLadder (Plans & Referrals rewards ladder, U9)", () => {
+  test("should mark each step done/current/locked from the verified-friend count", () => {
+    const states = (invited: number) => referralLadder(invited).map((s) => s.state);
+    // [invited, expected states for the three steps (1 / 3 / 5 friends)]
+    const cases: Array<[number, Array<"done" | "current" | "locked">]> = [
+      [0, ["current", "locked", "locked"]],
+      [1, ["done", "current", "locked"]],
+      [2, ["done", "current", "locked"]],
+      [3, ["done", "done", "current"]],
+      [5, ["done", "done", "done"]],
+      [10, ["done", "done", "done"]],
+      [-2, ["current", "locked", "locked"]],
+      [Number.NaN, ["current", "locked", "locked"]],
+    ];
+    for (const [invited, expected] of cases) {
+      expect(states(invited)).toEqual(expected);
+    }
+  });
+
+  test("should expose the fixed thresholds and non-paid rewards (no hold tokens)", () => {
+    const ladder = referralLadder(0);
+    expect(ladder.map((s) => s.friends)).toEqual([1, 3, 5]);
+    expect(ladder.map((s) => s.reward)).toEqual([
+      "+1 request",
+      "Earlier (Priority) alerts",
+      "High Priority alert wave",
+    ]);
   });
 });

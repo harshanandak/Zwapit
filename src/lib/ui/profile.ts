@@ -14,3 +14,42 @@ export function referralProgress(invited: number, target: number): { label: stri
   const percent = t > 0 ? Math.min(100, Math.max(0, Math.round((i / t) * 100))) : 0;
   return { label: `${i} of ${t} friends invited`, percent };
 }
+
+/** A rung of the Plans & Referrals rewards ladder (§10). */
+export interface ReferralStep {
+  /** Verified-friend threshold that unlocks this reward. */
+  friends: number;
+  /** User-facing, non-paid reward (mapped to the alert-wave model — never a paid hold). */
+  reward: string;
+  /** done = unlocked; current = the next reward to chase; locked = beyond that. */
+  state: "done" | "current" | "locked";
+}
+
+/**
+ * Fixed referral ladder for §10. Rewards are non-paid and map to the alert-wave
+ * model (Standard → Priority → High Priority). No "hold tokens" — paid holds are
+ * out of v1 (CLAUDE.md). The order is the source of truth for the rendered steps.
+ */
+const REFERRAL_LADDER: ReadonlyArray<{ friends: number; reward: string }> = [
+  { friends: 1, reward: "+1 request" },
+  { friends: 3, reward: "Earlier (Priority) alerts" },
+  { friends: 5, reward: "High Priority alert wave" },
+];
+
+/**
+ * Resolve the ladder against a verified-friend count: each rung is `done` once
+ * reached, the first unreached rung is `current`, the rest are `locked`. Defensive:
+ * non-finite or negative `invited` floors to 0 (mirrors {@link referralProgress}).
+ */
+export function referralLadder(invited: number): ReferralStep[] {
+  const i = Number.isFinite(invited) && invited > 0 ? Math.floor(invited) : 0;
+  let currentAssigned = false;
+  return REFERRAL_LADDER.map(({ friends, reward }) => {
+    if (i >= friends) return { friends, reward, state: "done" };
+    if (!currentAssigned) {
+      currentAssigned = true;
+      return { friends, reward, state: "current" };
+    }
+    return { friends, reward, state: "locked" };
+  });
+}
