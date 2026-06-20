@@ -26,6 +26,8 @@ describe("referralLadder (Plans & Referrals rewards ladder, U9)", () => {
     // [invited, expected states for the three steps (1 / 3 / 5 friends)]
     const cases: Array<[number, Array<"done" | "current" | "locked">]> = [
       [0, ["current", "locked", "locked"]],
+      [0.5, ["current", "locked", "locked"]], // fractional positive floors to 0
+
       [1, ["done", "current", "locked"]],
       [2, ["done", "current", "locked"]],
       [3, ["done", "done", "current"]],
