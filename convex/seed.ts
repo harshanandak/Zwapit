@@ -188,6 +188,35 @@ async function seedWantMatches(ctx: MutationCtx): Promise<void> {
   }
 }
 
+// Demo referrals for user_demo_1: 1 verified + 2 invited -> verifiedCount 1 (keeps the
+// reward ladder render identical to the prior hardcoded value) while exercising the
+// invited<->verified distinction. Rewards unlock on verified only (CLAUDE.md). Idempotent
+// by referralKey. Bare-called from the handler (no branch -> no S3776 regrowth).
+const REFERRALS: ReadonlyArray<{
+  key: string;
+  state: "invited" | "verified";
+  invitedAt: string;
+  verifiedAt?: string;
+}> = [
+  { key: "referral_demo_1", state: "verified", invitedAt: "2026-06-05T10:00:00+05:30", verifiedAt: "2026-06-07T18:30:00+05:30" },
+  { key: "referral_demo_2", state: "invited", invitedAt: "2026-06-12T09:00:00+05:30" },
+  { key: "referral_demo_3", state: "invited", invitedAt: "2026-06-18T20:00:00+05:30" },
+];
+
+async function seedReferrals(ctx: MutationCtx): Promise<void> {
+  for (const r of REFERRALS) {
+    const existing = await ctx.db.query("referrals").withIndex("by_key", (q) => q.eq("referralKey", r.key)).unique();
+    if (existing) continue;
+    await ctx.db.insert("referrals", {
+      referralKey: r.key,
+      referrerId: DEMO_BUYER_ID,
+      state: r.state,
+      invitedAt: r.invitedAt,
+      ...(r.verifiedAt ? { verifiedAt: r.verifiedAt } : {}),
+    });
+  }
+}
+
 export const seedDemoFixture = mutation({
   args: {},
   returns: v.object({
@@ -332,6 +361,7 @@ export const seedDemoFixture = mutation({
     await seedCatalogItems(ctx);
     await seedWants(ctx);
     await seedWantMatches(ctx);
+    await seedReferrals(ctx);
 
     // orders
     const order = fixture.order;

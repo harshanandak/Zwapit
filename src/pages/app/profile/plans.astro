@@ -2,14 +2,15 @@
 import AppShell from "../../../components/AppShell.astro";
 import Icon from "../../../components/Icon.astro";
 import { referralLadder } from "../../../lib/ui/profile";
+import { loadReferralSummary } from "../../../lib/convex/dataAdapter";
 
-// Mock-first Plans & Referrals (spec §10). Referrals are the active v1 lever;
-// rewards are non-paid and map to the alert-wave model. Compliance (CLAUDE.md):
-// v1 is success-fee only and Apple/Google forbid selling tiers via in-app
-// purchase, so the Plus column is INFORMATIONAL — no upgrade action; Plus is
-// managed on the web. No real purchase, referral mutation, or share happens here.
-// TODO(real-data): replace the hardcoded 1 with the signed-in user's verified-friend count.
-const ladder = referralLadder(1);
+// Plans & Referrals (spec §10). Referrals are the active v1 lever; rewards are non-paid
+// and map to the alert-wave model. Compliance (CLAUDE.md): v1 is success-fee only and
+// Apple/Google forbid selling tiers via in-app purchase, so the Plus column is
+// INFORMATIONAL — no upgrade action; Plus is managed on the web. No real purchase,
+// referral mutation, or share happens here. The ladder resolves against the real
+// verified-friend count (Convex, mock fallback); rewards unlock on verified only.
+const ladder = referralLadder((await loadReferralSummary()).verifiedCount);
 const stateLabel = { done: "Unlocked", current: "You're here", locked: "Locked" } as const;
 ---
 
