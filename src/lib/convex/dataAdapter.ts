@@ -486,18 +486,30 @@ const MOCK_ALERTS: AlertsView = {
 
 export async function loadAlerts(): Promise<AlertsView> {
   const client = await getConvexClient();
+  // MOCK_ALERTS is ONLY for the no-Convex build (no client). When Convex IS configured,
+  // a failed/shape-drifted query must NOT surface a fabricated match — show no match card
+  // (empty) instead. An empty `matches` array is a valid answer (a buyer with no current match).
   if (!client) return MOCK_ALERTS;
   try {
     await seedDemoFixtureOnce(client);
     const res = (await client.query(functionRefs.getAlertsForBuyer, {})) as AlertsView | null;
-    // An empty `matches` array is a valid answer (a buyer with no current match) — only fall
-    // back on a missing/shape-drifted response, never on a genuine empty result.
-    if (!res || !Array.isArray(res.matches) || res.matches.some((m) => typeof m?.listingKey !== "string")) {
-      return MOCK_ALERTS;
+    if (
+      !res ||
+      !Array.isArray(res.matches) ||
+      res.matches.some(
+        (m) =>
+          typeof m?.title !== "string" ||
+          typeof m?.venue !== "string" ||
+          typeof m?.listingKey !== "string" ||
+          typeof m?.price !== "number" ||
+          typeof m?.transferMode !== "string",
+      )
+    ) {
+      return { matches: [] };
     }
     return res;
   } catch {
-    return MOCK_ALERTS;
+    return { matches: [] };
   }
 }
 

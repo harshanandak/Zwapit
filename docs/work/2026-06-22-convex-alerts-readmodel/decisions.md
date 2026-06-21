@@ -55,3 +55,15 @@ followed. Reconciled with the advisor:
   across BOTH `loadCommunityListings` (getStaticPaths) AND `loadListingFlowView` (detail content) —
   a cross-cutting mock-infra refactor across home/listings/requests/alerts. Tracked as a follow-up;
   offered to the user as the next slice. Not smuggled into this one.
+
+## CodeRabbit cycle (PR #31)
+2 actionable comments on `loadAlerts`, both fixed:
+1. **Don't show fabricated alerts on a Convex-side failure (Major)** — `MOCK_ALERTS` is now ONLY
+   for the no-Convex build (`!client`); a failed/shape-drifted query with a client present returns
+   `{ matches: [] }` (no match card) instead of a fabricated match. Also makes verify honest — a
+   broken real query now fails the needle instead of silently passing on mock.
+2. **Validate the full match shape (Minor)** — the guard now checks title/venue/listingKey are
+   strings, price is a number, and transferMode is a string (transferModeLabel safely defaults on
+   an unknown mode), not just `listingKey`.
+Both build paths re-verified green (Convex 22 / mock 18). The no-env MED above is unchanged
+(tracked follow-up).
