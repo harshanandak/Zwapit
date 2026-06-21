@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as alerts from "../alerts.js";
 import type * as authModel from "../authModel.js";
 import type * as catalog from "../catalog.js";
 import type * as identity from "../identity.js";
@@ -25,6 +26,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  alerts: typeof alerts;
   authModel: typeof authModel;
   catalog: typeof catalog;
   identity: typeof identity;
