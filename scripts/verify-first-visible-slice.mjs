@@ -243,7 +243,7 @@ export async function verifyAcceptanceCriteria() {
     ["/app/profile/plans", ["Plans & referrals", "Choose your plan", "Unlimited within fair use", "Plus is available on the web", "Referral rewards", "Unlocked", "You're here", "How alert waves work", "Share my invite link"]],
     ["/app/requests/new", ["Set an alert", "Category", "Movie", "Max price per ticket", "Tickets", "Availability", "Create request & alert me"]],
     // Single-line entry keeps these (new-code) needles off their own repeated lines (SonarCloud CPD).
-    ["/app/alerts", ["Alerts", "Tickets are live", "Open booking", "A match for your request", "Buy with Protection", "13% off", "held safely until the transfer is confirmed"]],
+    ["/app/alerts", ["Alerts", "Tickets are live", "Open booking", "A match for your request", "Coldplay - Music of the Spheres", "Buy with Protection", "Seller price", "Official Transfer", "held safely until the transfer is confirmed"]],
     ["/app/home", [
       "We'll notify you when it's available.",
       "Set an alert",

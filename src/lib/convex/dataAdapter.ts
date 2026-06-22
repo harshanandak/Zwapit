@@ -18,6 +18,7 @@ import type {
   MockOrder,
   SellerListingDraft,
   SellerListingSubmissionResult,
+  TransferMode,
 } from "../types";
 import {
   connectMockCheckoutFlow,
@@ -548,6 +549,58 @@ export async function loadReferralSummary(): Promise<ReferralSummaryView> {
     return res;
   } catch {
     return MOCK_REFERRAL_SUMMARY;
+  }
+}
+
+// Alerts inbox match cards. Convex `getAlertsForBuyer` returns the buyer's matched want(s)
+// resolved to a live listing (the genuinely-backable part of the alerts screen; the official
+// availability card + "Earlier" feed are static illustrative content until the internal
+// watcher/notification system lands). Keep this shape in sync with `AlertMatch` in
+// convex/alerts.ts. Mirrors the seed so CI (no env) and Convex builds match.
+export interface AlertMatchView {
+  title: string;
+  venue: string;
+  listingKey: string;
+  price: number;
+  transferMode: TransferMode;
+}
+
+export interface AlertsView {
+  matches: AlertMatchView[];
+}
+
+const MOCK_ALERTS: AlertsView = {
+  matches: [
+    { title: "Coldplay - Music of the Spheres", venue: "DY Patil Stadium, Navi Mumbai", listingKey: "listing_event_coldplay_1", price: 3500, transferMode: "OFFICIAL_TRANSFER" },
+  ],
+};
+
+export async function loadAlerts(): Promise<AlertsView> {
+  const client = await getConvexClient();
+  // MOCK_ALERTS is ONLY for the no-Convex build (no client). When Convex IS configured,
+  // a failed/shape-drifted query must NOT surface a fabricated match — show no match card
+  // (empty) instead. An empty `matches` array is a valid answer (a buyer with no current match).
+  if (!client) return MOCK_ALERTS;
+  try {
+    await seedDemoFixtureOnce(client);
+    const res = (await client.query(functionRefs.getAlertsForBuyer, {})) as AlertsView | null;
+    if (
+      !res ||
+      !Array.isArray(res.matches) ||
+      res.matches.some(
+        (m) =>
+          typeof m?.title !== "string" ||
+          typeof m?.venue !== "string" ||
+          typeof m?.listingKey !== "string" ||
+          typeof m?.price !== "number" ||
+          typeof m?.transferMode !== "string",
+      )
+    ) {
+      return { matches: [] };
+    }
+    return res;
+  } catch {
+    return { matches: [] };
   }
 }
 
