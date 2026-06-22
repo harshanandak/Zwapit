@@ -268,6 +268,97 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
   }
 }
 
+// The community listings the no-Convex (mock) build must also prerender + resolve, mirroring
+// the seed's EXTRA_LISTINGS so /app/listings/<id> and /app/checkout/<id> exist for EVERY
+// community listing, not just the demo fixture. Keep in sync with EXTRA_LISTINGS in
+// convex/seed.ts.
+const MOCK_COMMUNITY_EXTRAS: ReadonlyArray<{
+  key: string;
+  title: string;
+  venueOrRoute: string;
+  eventOrTripStartAt: string;
+  quantity: number;
+  listingPrice: number;
+}> = [
+  { key: "listing_event_coldplay_1", title: "Coldplay - Music of the Spheres", venueOrRoute: "DY Patil Stadium, Navi Mumbai", eventOrTripStartAt: "2027-01-18T19:30:00+05:30", quantity: 2, listingPrice: 3500 },
+  { key: "listing_event_garrix_1", title: "Sunburn Arena ft. Martin Garrix", venueOrRoute: "Phoenix Marketcity, Bengaluru", eventOrTripStartAt: "2026-12-28T18:00:00+05:30", quantity: 1, listingPrice: 2100 },
+  { key: "listing_event_zakir_1", title: "Zakir Khan - Tathastu", venueOrRoute: "Shanmukhananda Hall, Mumbai", eventOrTripStartAt: "2026-12-13T20:00:00+05:30", quantity: 2, listingPrice: 1200 },
+  { key: "listing_event_ipl_rcb_1", title: "IPL - RCB vs CSK", venueOrRoute: "M. Chinnaswamy Stadium, Bengaluru", eventOrTripStartAt: "2027-04-05T19:30:00+05:30", quantity: 1, listingPrice: 3400 },
+];
+
+// Build a mock community listing from the fixture template, mirroring seedExtraListings' field
+// math (faceValue = price, platformFee 10, gstOnFee 1.8, totalPayable = price + 11.8, deadlines
+// from the start time) so the mock listing matches the seeded Convex row.
+function mockExtraListing(fixture: MockListing, extra: (typeof MOCK_COMMUNITY_EXTRAS)[number]): MockListing {
+  const startMs = Date.parse(extra.eventOrTripStartAt);
+  return {
+    ...fixture,
+    id: extra.key,
+    title: extra.title,
+    venueOrRoute: extra.venueOrRoute,
+    eventOrTripStartAt: extra.eventOrTripStartAt,
+    quantity: extra.quantity,
+    faceValue: extra.listingPrice,
+    listingPrice: extra.listingPrice,
+    platformFee: 10,
+    gstOnFee: 1.8,
+    totalPayable: extra.listingPrice + 11.8,
+    transferDeadlineAt: new Date(startMs - 60 * 60 * 1000).toISOString(),
+    protectionDeadlineAt: new Date(startMs + 24 * 60 * 60 * 1000).toISOString(),
+    duplicateFingerprint: `${fixture.sourceCategoryKey}:${extra.key}`,
+  };
+}
+
+// The fixture + the mirrored extras — the single source the no-env community rail and the
+// listing-detail/checkout getStaticPaths all draw from.
+function mockCommunityListings(): MockListing[] {
+  const fixture = connectMockListingFlow().listing;
+  return [fixture, ...MOCK_COMMUNITY_EXTRAS.map((extra) => mockExtraListing(fixture, extra))];
+}
+
+// No-Convex listing flow for a specific listing: the fixture flow with the requested community
+// listing swapped in (evaluation recomputed; checkout/purchasable reused — all demo listings
+// share the source rule and are AUTO_APPROVE). No key, the fixture's own key, or an unknown key
+// -> the fixture flow unchanged, so the demo/checkout no-arg path stays byte-for-byte identical.
+function mockListingFlowView(fixtureFlow: ListingFlowView, listingKey?: string): ListingFlowView {
+  if (!listingKey || listingKey === fixtureFlow.listing.id) return fixtureFlow;
+  const listing = mockCommunityListings().find((l) => l.id === listingKey);
+  if (!listing) return fixtureFlow;
+  const evaluation = evaluateSourceRule({
+    source: listing.source,
+    category: listing.category,
+    listingPrice: listing.listingPrice,
+    faceValue: listing.faceValue,
+    requiredFieldValues: {
+      title: listing.title,
+      eventOrTripStartAt: listing.eventOrTripStartAt,
+      venueOrRoute: listing.venueOrRoute,
+      quantity: listing.quantity,
+      transferDeadlineAt: listing.transferDeadlineAt,
+      sellerPromiseAccepted: true,
+    },
+  });
+  // Re-validate checkout against THIS listing's own fields (deadline/state/total), mirroring the
+  // Convex path — not the fixture's — so a future extra with a past deadline or non-live state
+  // is correctly non-purchasable rather than inheriting the fixture's ok=true.
+  const { sellerPaymentAccount } = createMockFixture();
+  const checkout = validateCheckout({
+    listing,
+    sourceRule: fixtureFlow.sourceRule,
+    sellerPaymentAccount,
+    buyerEligibilityAcknowledged: true,
+    totalShownToBuyer: listing.totalPayable,
+    now: new Date().toISOString(),
+  });
+  return {
+    ...fixtureFlow,
+    listing,
+    evaluation,
+    checkout,
+    purchasable: checkout.ok && evaluation.decision === "AUTO_APPROVE",
+  };
+}
+
 // Listing display + checkout readiness (same shape as connectMockListingFlow()).
 // `listingKey` selects a specific listing (the detail route passes the :listingId);
 // omitted -> the demo listing. Falls back to the mock demo flow when Convex is not
@@ -275,7 +366,7 @@ export async function loadSellerOrderView(): Promise<SellerOrderFlowView> {
 export async function loadListingFlowView(listingKey?: string): Promise<ListingFlowView> {
   const local = connectMockListingFlow();
   const client = await getConvexClient();
-  if (!client) return local;
+  if (!client) return mockListingFlowView(local, listingKey);
   try {
     await seedDemoFixtureOnce(client);
     const res = await client.query(functionRefs.getCheckoutView, listingKey ? { listingKey } : {});
@@ -323,7 +414,7 @@ export async function loadListingFlowView(listingKey?: string): Promise<ListingF
 // `state:"live"` listing; falls back to the single mock listing when Convex is
 // not configured or returns nothing. `isLiveResale` filtering stays on the page.
 export async function loadCommunityListings(): Promise<MockListing[]> {
-  const fallback = [connectMockListingFlow().listing];
+  const fallback = mockCommunityListings();
   const client = await getConvexClient();
   if (!client) return fallback;
   try {

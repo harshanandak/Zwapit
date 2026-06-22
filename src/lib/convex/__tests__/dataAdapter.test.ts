@@ -94,6 +94,19 @@ describe("convex data adapter — fallback shape parity", () => {
     expect(await loadListingFlowView()).toEqual(connectMockListingFlow());
   });
 
+  test("loadListingFlowView(key) resolves a mirrored community listing (no Convex)", async () => {
+    const view = await loadListingFlowView("listing_event_coldplay_1");
+    expect(view.listing.id).toBe("listing_event_coldplay_1");
+    expect(view.listing.title).toBe("Coldplay - Music of the Spheres");
+    expect(view.listing.listingPrice).toBe(3500);
+    expect(view.listing.totalPayable).toBe(3511.8);
+    expect(view.purchasable).toBe(true);
+  });
+
+  test("loadListingFlowView(unknown key) falls back to the fixture flow", async () => {
+    expect(await loadListingFlowView("listing_does_not_exist")).toEqual(connectMockListingFlow());
+  });
+
   test("loadSellerOrderView() equals connectSellerOrderFlow()", async () => {
     expect(await loadSellerOrderView()).toEqual(connectSellerOrderFlow());
   });

@@ -8,13 +8,17 @@ import {
   transferModeLabel,
 } from "../../../components/buyer/format";
 import { createCurrentAuthState, getAuthActionState } from "../../../lib/auth/authAdapter";
-import { accountStepUrl, loadListingFlowView } from "../../../lib/convex/dataAdapter";
+import { accountStepUrl, loadCommunityListings, loadListingFlowView } from "../../../lib/convex/dataAdapter";
 
-export function getStaticPaths() {
-  return [{ params: { listingId: "listing_bms_event_1" } }];
+// Prerender a checkout page for every community listing (not just the demo fixture), so the
+// listing-detail "Buy with Protection" link resolves for all listings instead of 404-ing.
+export async function getStaticPaths() {
+  const listings = await loadCommunityListings();
+  return listings.map((l) => ({ params: { listingId: l.id } }));
 }
 
-const { listing, sourceRule, purchasable } = await loadListingFlowView();
+const { listingId } = Astro.params;
+const { listing, sourceRule, purchasable } = await loadListingFlowView(listingId);
 const payLabel = `Pay ${formatInr(listing.totalPayable)}`;
 
 // Protected checkout execution gate. The frontmatter value is a build-time
@@ -166,7 +170,9 @@ const authStepHref = accountStepUrl(checkoutHref);
   void (async () => {
     let currentPurchasable = unavailable === null || unavailable.classList.contains("hidden");
     try {
-      const listingView = await loadListingFlowView();
+      // Re-check the SAME listing this checkout page is for (last path segment), not the fixture.
+      const listingId = window.location.pathname.split("/").filter(Boolean).pop();
+      const listingView = await loadListingFlowView(listingId);
       currentPurchasable = listingView.purchasable;
     } catch {
       // Keep the static fallback state.
