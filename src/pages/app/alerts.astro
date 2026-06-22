@@ -1,17 +1,18 @@
 ---
 import AppShell from "../../components/AppShell.astro";
 import Icon from "../../components/Icon.astro";
+import { formatInr, transferModeLabel } from "../../components/buyer/format";
+import { discountBadge } from "../../lib/ui/listingBadges";
+import { loadAlerts } from "../../lib/convex/dataAdapter";
 
-// Mock-first "Alert payoff / Match" (spec §5) — the bell's inbox where a request
-// pays off. Real matching, availability watching, and notifications are
-// internal-only / audited backend (Codex) and out of scope; the cards are
-// display-led mock copy and the CTAs only navigate.
-//
-// Discount note: this match illustrates a *verified-original* community offer
-// (450 -> 390 = 13% off), which is the one place §5 shows the `.disc` badge. The
-// app-wide discount-integrity gate scopes to the fixture-bound marketplace routes
-// (home/listings/search/requests/sell), not this alerts inbox — see
-// docs/work/2026-06-20-u8-alert-match/decisions.md.
+// "Alert payoff / Match" (spec §5) — the bell's inbox where a request pays off.
+// Only the community MATCH card is backed by real data: the buyer's want_match -> live
+// listing (loadAlerts -> getAlertsForBuyer). The official-availability card and the
+// "Earlier" feed below stay illustrative — notifications, availability watching, and the
+// shared watcher are internal-only/audited and deferred (CLAUDE.md), so there is no real
+// source for them yet. Discount-integrity applies: real listings carry no verified original
+// price, so the match shows "Seller price", never a fabricated discount.
+const view = await loadAlerts();
 const earlier = [
   { icon: "ticket", text: "Interstellar (re-release) · PVR Forum — official booking opened. 2 days ago" },
   { icon: "spark", text: "Coldplay · Mumbai — a match you purchased with protection. 4 days ago" },
@@ -56,24 +57,39 @@ const earlier = [
     </div>
   </div>
 
-  <!-- Community resale match: Zwapit transacts here via protected payment. -->
-  <div class="alert-card community">
-    <div class="rail"></div>
-    <div class="ac-body">
-      <div class="ac-top">
-        <span class="ac-ic"><Icon name="spark" /></span>
-        <h4>A match for your request</h4>
-        <span class="chip protect"><Icon name="shield" />Protected payment</span>
-      </div>
-      <p class="sub">Arijit Singh Live - Silver Pass · Bengaluru Arena · from a verified seller.</p>
-      <div class="ac-foot" style="flex-wrap:wrap">
-        <span class="pr">₹390</span>
-        <span class="disc"><Icon name="tag" />13% off · was ₹450</span>
-        <span class="chip mode">Official Transfer</span>
-      </div>
-      <a class="btn btn-primary sweep" href="/app/checkout/listing_bms_event_1" style="width:100%;margin-top:12px">Buy with Protection</a>
-    </div>
-  </div>
+  <!-- Community resale match(es): Zwapit transacts here via protected payment. Backed by the
+       buyer's real want_match -> live listing. "Buy with Protection" links to the listing detail
+       (protection -> checkout) — the param-driven, prerendered route; the checkout route itself
+       only prerenders the fixture. Discount-integrity: discountBadge is null for real listings
+       (no verified original price), so we show "Seller price". -->
+  {
+    view.matches.map((m) => {
+      const disc = discountBadge({ listingPrice: m.price });
+      return (
+        <div class="alert-card community">
+          <div class="rail"></div>
+          <div class="ac-body">
+            <div class="ac-top">
+              <span class="ac-ic"><Icon name="spark" /></span>
+              <h4>A match for your request</h4>
+              <span class="chip protect"><Icon name="shield" />Protected payment</span>
+            </div>
+            <p class="sub">{m.title} · {m.venue} · from a verified seller.</p>
+            <div class="ac-foot" style="flex-wrap:wrap">
+              <span class="pr">{formatInr(m.price)}</span>
+              {disc ? (
+                <span class="disc"><Icon name="tag" />{disc.percent}% off</span>
+              ) : (
+                <span class="seller-price">Seller price</span>
+              )}
+              <span class="chip mode">{transferModeLabel(m.transferMode)}</span>
+            </div>
+            <a class="btn btn-primary sweep" href={`/app/listings/${m.listingKey}`} style="width:100%;margin-top:12px">Buy with Protection</a>
+          </div>
+        </div>
+      );
+    })
+  }
 
   <div class="trust-band">
     <span class="bdg"><Icon name="shield" size="l" /></span>
