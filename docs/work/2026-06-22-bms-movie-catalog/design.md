@@ -41,6 +41,24 @@ harness with a stub egress + fixtures. The frontend Search/Request wiring lands 
 - Deploy schema (`sourceLastmod`) to dev; probe `upsertMoviesFromSource` with sample rows → catalog row.
 - Live BMS run deferred until the residential/Parallel egress is wired.
 
+## Egress + poster findings (tested 2026-06-22 with the Parallel key)
+- **Parallel key works + bypasses BMS's datacenter 403.** `POST api.parallel.ai/v1beta/extract`
+  (Bearer + `parallel-beta: search-extract-2025-10-10`, body `{urls, full_content:true}`) returned
+  `events-synopsis.xml` (which 403s from datacenter). Stored as Convex dev env `PARALLEL_API_KEY`.
+- **Architecture simplifies → Convex action + cron** calling Parallel (Convex CAN reach
+  api.parallel.ai; only BMS blocks Convex). No external worker.
+- **JSON API endpoints return EMPTY via Parallel** (`synopsis/init` → empty; matches the `/gw/`
+  finding). Hydrate from the rendered DETAIL PAGE, not the API.
+- **Detail page via Parallel → title + rich metadata** (year, language, genre, format, runtime, cert,
+  rating) parse cleanly from full_content/excerpts.
+- **POSTERS NOT OBTAINABLE FREE (open blocker):** Parallel Extract is markdown-only and strips ALL
+  image URLs (0 images in full_content/excerpts/whole response; result has no image field). Jina
+  Reader (`r.jina.ai`) returned a blocked thin page (829 B, no og:image). The bmscdn poster needs the
+  page <img>/og:image, which neither free reader yields. → poster source is an OPEN DECISION
+  (ship metadata-only v1 / paid render API / keep digging). Titles + metadata + enumeration are free.
+- **Parser update needed:** Parallel returns stripped markdown (concatenated `…/ET<code>` +
+  `YYYY-MM-DD`), not raw `<loc>` XML — parse via URL+ET+date regex, not XML tags.
+
 ## OWASP / safety
 Internal-only upsert mutation (no client exposure); no PII (public movie metadata); external input is
 BMS XML → parse defensively (validate ET-code regex, ignore malformed `<url>`); crawler egress isolated

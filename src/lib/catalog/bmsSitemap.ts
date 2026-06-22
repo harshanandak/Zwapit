@@ -63,6 +63,32 @@ export function diffByLastmod(
   });
 }
 
+/**
+ * Parse the PRODUCTION crawl path: Parallel Extract returns the sitemap as stripped markdown
+ * (XML tags removed), so entity URLs and their `<lastmod>` dates arrive concatenated, e.g.
+ * `…/ET004974742026-06-22daily0.8…/ET00495663…`. BMS event codes are exactly `ET` + 8 digits, so
+ * the code and the trailing `YYYY-MM-DD` lastmod separate cleanly. `kind` selects /movies/ or
+ * /events/. Deduped by event code; defensive (no match → []).
+ */
+export function parseParallelEntities(content: string, kind: "movie" | "event"): MovieSitemapEntry[] {
+  if (typeof content !== "string" || content.length === 0) return [];
+  const seg = kind === "movie" ? "movies" : "events";
+  const re = new RegExp(`https?://in\\.bookmyshow\\.com/${seg}/[^\\s]*?/(ET\\d{8})(\\d{4}-\\d{2}-\\d{2})?`, "gi");
+  const out: MovieSitemapEntry[] = [];
+  const seen = new Set<string>();
+  for (const m of content.matchAll(re)) {
+    const eventCode = m[1].toUpperCase();
+    if (seen.has(eventCode)) continue;
+    seen.add(eventCode);
+    const lastmod = m[2] ?? "";
+    const loc = lastmod ? m[0].slice(0, m[0].length - lastmod.length) : m[0];
+    const beforeCode = loc.slice(0, loc.length - eventCode.length - 1); // drop "/ETxxxxxxxx"
+    const slug = beforeCode.split("/").filter(Boolean).pop() ?? "";
+    out.push({ eventCode, slug, loc, lastmod });
+  }
+  return out;
+}
+
 /** Stable catalog key for a BMS movie. */
 export function bmsCatalogKey(eventCode: string): string {
   return `bms_${eventCode.toUpperCase()}`;

@@ -5,8 +5,18 @@ import {
   bmsPosterUrl,
   diffByLastmod,
   parseMoviesSitemap,
+  parseParallelEntities,
   type MovieSitemapEntry,
 } from "../bmsSitemap";
+
+// The ACTUAL shape Parallel Extract returns for a synopsis sitemap: XML stripped, so URL + lastmod +
+// changefreq + priority are concatenated with no separators (observed 2026-06-22).
+const PARALLEL_MOVIES =
+  "https://in.bookmyshow.com/movies/mumbai/dilwale-dulhania-le-jayenge/ET000006522026-05-22daily0.8" +
+  "https://in.bookmyshow.com/movies/surat/jab-we-met/ET000001822026-06-01daily0.8";
+const PARALLEL_EVENTS =
+  "https://in.bookmyshow.com/events/sufi-raag-at-the-terrace-ghaziabad/ET004974742026-06-22daily0.8" +
+  "https://in.bookmyshow.com/events/clay-sculpting/ET004956632026-06-22daily0.8";
 
 // Mirrors the real movies-synopsis.xml shape (incl. a browse-page row that must be skipped,
 // and an entity with no <lastmod>).
@@ -64,6 +74,44 @@ describe("diffByLastmod (incremental)", () => {
   test("a no-lastmod entity already stored is not re-hydrated (no change detectable)", () => {
     const existing = new Map<string, string | undefined>([["ET00009999", ""]]);
     expect(diffByLastmod(parsed, existing).some((r) => r.eventCode === "ET00009999")).toBe(false);
+  });
+});
+
+describe("parseParallelEntities (production crawl path — stripped markdown)", () => {
+  test("separates ET<8-digit> code from the trailing YYYY-MM-DD lastmod in concatenated output", () => {
+    const rows = parseParallelEntities(PARALLEL_MOVIES, "movie");
+    expect(rows).toEqual([
+      {
+        eventCode: "ET00000652",
+        slug: "dilwale-dulhania-le-jayenge",
+        loc: "https://in.bookmyshow.com/movies/mumbai/dilwale-dulhania-le-jayenge/ET00000652",
+        lastmod: "2026-05-22",
+      },
+      {
+        eventCode: "ET00000182",
+        slug: "jab-we-met",
+        loc: "https://in.bookmyshow.com/movies/surat/jab-we-met/ET00000182",
+        lastmod: "2026-06-01",
+      },
+    ]);
+  });
+
+  test("kind=event matches /events/ entities", () => {
+    const rows = parseParallelEntities(PARALLEL_EVENTS, "event");
+    expect(rows.map((r) => r.eventCode)).toEqual(["ET00497474", "ET00495663"]);
+    expect(rows[0].slug).toBe("sufi-raag-at-the-terrace-ghaziabad");
+    expect(rows[0].lastmod).toBe("2026-06-22");
+  });
+
+  test("kind filter excludes the other entity type, and empty input -> []", () => {
+    expect(parseParallelEntities(PARALLEL_MOVIES, "event")).toEqual([]);
+    expect(parseParallelEntities("", "movie")).toEqual([]);
+  });
+
+  test("diff works on Parallel-parsed entries too", () => {
+    const parsed = parseParallelEntities(PARALLEL_MOVIES, "movie");
+    const existing = new Map<string, string | undefined>([["ET00000652", "2026-05-22"]]);
+    expect(diffByLastmod(parsed, existing).map((r) => r.eventCode)).toEqual(["ET00000182"]);
   });
 });
 
