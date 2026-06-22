@@ -292,6 +292,11 @@ const MOCK_COMMUNITY_EXTRAS: ReadonlyArray<{
 // from the start time) so the mock listing matches the seeded Convex row.
 function mockExtraListing(fixture: MockListing, extra: (typeof MOCK_COMMUNITY_EXTRAS)[number]): MockListing {
   const startMs = Date.parse(extra.eventOrTripStartAt);
+  // Fail loudly at build time on a malformed constant rather than emitting "Invalid Date"
+  // deadline strings (these run during getStaticPaths).
+  if (Number.isNaN(startMs)) {
+    throw new Error(`mockExtraListing: invalid eventOrTripStartAt "${extra.eventOrTripStartAt}" for ${extra.key}`);
+  }
   return {
     ...fixture,
     id: extra.key,
