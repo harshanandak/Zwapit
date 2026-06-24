@@ -335,6 +335,59 @@ describe("enqueueNotifications — idempotent, fire-once", () => {
   });
 });
 
+describe("enqueueNotifications — fan-out per delivered alertType × channel (zwapit-46i.6)", () => {
+  async function armAndOpen(
+    tt: ReturnType<typeof t>,
+    alertTypes: Array<"availability" | "discount" | "price_drop" | "last_minute">,
+    channels: Array<"email" | "web_push">,
+  ) {
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+      alertTypes,
+      channels,
+    });
+    const rec = await tt.mutation(internal.watcher.recordAvailability, {
+      monitorTargetId: monitorTargetId as never,
+      source: "bms" as const,
+      normalized: [{ source: "bms" as const, theatreName: "PVR", showTime: "18:30", format: "2D" }],
+      bookingUrl: "https://in.bookmyshow.com/movies/demo",
+      detectedAt: NOW,
+      snapshotHash: "hash_open_1",
+    });
+    await tt.mutation(internal.watcher.enqueueNotifications, {
+      availabilityEventId: rec.availabilityEventId as never,
+      nowIso: NOW,
+    });
+    return tt.run((ctx) => ctx.db.query("notification_queue").collect());
+  }
+
+  test("one subscriber on 2 channels × 2 delivered types → 4 distinct pending rows", async () => {
+    const notifs = await armAndOpen(t(), ["availability", "last_minute"], ["email", "web_push"]);
+    expect(notifs).toHaveLength(4);
+    expect(new Set(notifs.map((n) => n.dedupeKey)).size).toBe(4);
+    expect(new Set(notifs.map((n) => n.channel))).toEqual(new Set(["email", "web_push"]));
+    expect(new Set(notifs.map((n) => n.alertType))).toEqual(new Set(["availability", "last_minute"]));
+    expect(notifs.every((n) => n.status === "pending")).toBe(true);
+  });
+
+  test("discount is captured-but-NOT-delivered (only availability enqueues)", async () => {
+    const notifs = await armAndOpen(t(), ["availability", "discount"], ["email"]);
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0].alertType).toBe("availability");
+    expect(notifs[0].channel).toBe("email");
+  });
+
+  test("a want with ONLY non-delivered types (discount/price_drop) enqueues nothing yet", async () => {
+    const notifs = await armAndOpen(t(), ["discount", "price_drop"], ["email"]);
+    expect(notifs).toHaveLength(0);
+  });
+});
+
 describe("degrade lifecycle — K consecutive empty polls", () => {
   test("3 empty polls flip a target watching → degraded with no notifications", async () => {
     const tt = t();
