@@ -12,6 +12,8 @@ import { mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { createMockFixture } from "../src/lib/mock/fixtures";
+import { computeCollapseKey } from "./watcher/parse";
+import { monitorTargetByCollapseKey } from "./model";
 
 type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
 
@@ -217,6 +219,114 @@ async function seedReferrals(ctx: MutationCtx): Promise<void> {
   }
 }
 
+// ---- Official-availability watcher demo fixture (design 2026-06-22) ----
+//
+// Seeds ONE end-to-end watcher slice the demo can read: a movie catalog row that
+// carries BOTH BMS codes (event/region/venue) AND District codes (MV/CD/city
+// slug), the shared monitor_targets row that an alert collapses onto, and ONE
+// linked alert (a `wants` row). createAlert is a CLIENT mutation and a mutation
+// cannot call another mutation, so this replicates its internals via the model
+// helpers + direct inserts. Idempotent at every step (catalogKey / collapseKey /
+// wantKey), and subscriberCount is incremented ONLY on the first want insert.
+const WATCHER_DEMO = {
+  catalogKey: "catalog_movie_watcher_demo",
+  title: "Avatar: Fire and Ash",
+  city: "mumbai",
+  date: "2026-12-19",
+  format: "IMAX 3D",
+  // BMS codes (event+region drive byevent; venue drives byvenue — both present).
+  bmsEventCode: "ET00377019",
+  bmsRegionCode: "MUMBAI",
+  bmsVenueCode: "BMSV-DEMO",
+  // District codes (MV + CD + city slug).
+  districtMvCode: "MV99001",
+  districtCdCode: "CD4501",
+  districtCitySlug: "mumbai",
+  buyerId: DEMO_BUYER_ID,
+} as const;
+
+// Bare-called from the handler (no branch -> no S3776 regrowth). Replicates the
+// createAlert internals: catalog row -> shared monitor target (find-or-create on
+// collapseKey) -> linked alert want (find-or-create on wantKey).
+async function seedWatcherDemo(ctx: MutationCtx): Promise<void> {
+  // 1. Catalog movie carrying BOTH sources' codes. Idempotent by catalogKey.
+  const existingCatalog = await ctx.db
+    .query("catalog_items")
+    .withIndex("by_key", (q) => q.eq("catalogKey", WATCHER_DEMO.catalogKey))
+    .unique();
+  if (!existingCatalog) {
+    await ctx.db.insert("catalog_items", {
+      catalogKey: WATCHER_DEMO.catalogKey,
+      kind: "movie",
+      externalSource: "tmdb",
+      title: WATCHER_DEMO.title,
+      isActive: true,
+      lastSyncedAt: SEED_SYNCED_AT,
+      bmsEventCode: WATCHER_DEMO.bmsEventCode,
+      bmsRegionCode: WATCHER_DEMO.bmsRegionCode,
+      bmsVenueCode: WATCHER_DEMO.bmsVenueCode,
+      districtMvCode: WATCHER_DEMO.districtMvCode,
+      districtCdCode: WATCHER_DEMO.districtCdCode,
+      districtCitySlug: WATCHER_DEMO.districtCitySlug,
+    });
+  }
+
+  // 2. Shared monitor target, find-or-create on the exact collapseKey.
+  const collapseKey = computeCollapseKey({
+    catalogItemId: WATCHER_DEMO.catalogKey,
+    city: WATCHER_DEMO.city,
+    date: WATCHER_DEMO.date,
+    format: WATCHER_DEMO.format,
+  });
+  let target = await monitorTargetByCollapseKey(ctx, collapseKey);
+  if (!target) {
+    const targetId = await ctx.db.insert("monitor_targets", {
+      collapseKey,
+      catalogItemId: WATCHER_DEMO.catalogKey,
+      city: WATCHER_DEMO.city,
+      date: WATCHER_DEMO.date,
+      format: WATCHER_DEMO.format,
+      sources: ["bms", "district"],
+      status: "watching",
+      subscriberCount: 0,
+      failCount: 0,
+      nextCheckAt: SEED_SYNCED_AT,
+    });
+    target = (await ctx.db.get(targetId))!;
+  }
+
+  // 3. One linked alert (`wants` row), find-or-create on wantKey. Increment the
+  // shared subscriberCount ONLY when the want is first inserted.
+  const wantKey = `want_alert_${WATCHER_DEMO.buyerId}_${collapseKey}`.replace(
+    /[^a-zA-Z0-9_]/g,
+    "_",
+  );
+  const existingWant = await ctx.db
+    .query("wants")
+    .withIndex("by_key", (q) => q.eq("wantKey", wantKey))
+    .unique();
+  if (!existingWant) {
+    await ctx.db.insert("wants", {
+      wantKey,
+      buyerId: WATCHER_DEMO.buyerId,
+      catalogItemId: WATCHER_DEMO.catalogKey,
+      category: "movie_ticket",
+      quantity: 1,
+      maxPricePerUnit: 0,
+      state: "open",
+      expiresAt: WATCHER_DEMO.date,
+      createdAt: SEED_SYNCED_AT,
+      watchCity: WATCHER_DEMO.city,
+      watchDate: WATCHER_DEMO.date,
+      watchFormat: WATCHER_DEMO.format,
+      alertTypes: ["availability"],
+      channels: ["email"],
+      monitorTargetId: target._id,
+    });
+    await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
+  }
+}
+
 export const seedDemoFixture = mutation({
   args: {},
   returns: v.object({
@@ -362,6 +472,7 @@ export const seedDemoFixture = mutation({
     await seedWants(ctx);
     await seedWantMatches(ctx);
     await seedReferrals(ctx);
+    await seedWatcherDemo(ctx);
 
     // orders
     const order = fixture.order;
