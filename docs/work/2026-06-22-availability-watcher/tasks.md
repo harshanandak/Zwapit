@@ -75,7 +75,7 @@ Legend: `OWNS:` = files this task modifies (no two tasks in the same wave share 
 ### Task 11 — dispatchNotifications internalAction
 - **OWNS:** `convex/watcher.ts`, `convex/watcher/senders.ts`, `convex/__tests__/senders.test.ts`
 - **Implement:** `senders = { email, webpush }` injectable; default email→Resend, webpush→VAPID, **no-op + log when env unset**; `dispatchNotifications` internalAction drains `pending` → send → mark `sent`/`failed`; copy: title "Tickets are live", body "<movie> · <theatre> · <time> — book now", action deep-link OUT. (Add cron tick or chain from poll.)
-- **TDD:** RED: pending → `sent` with mock sender; sender throws → `failed`, retryable. GREEN. Commit `feat(watcher): dispatch notifications (email + web push)`.
+- **TDD:** RED: pending → `sent` with mock sender; sender throws → `failed` (recorded + audited; NOT auto-retried this slice — bounded retry-with-backoff is tracked in beads zwapit-46i.4). GREEN. Commit `feat(watcher): dispatch notifications (email + web push)`.
 
 ---
 

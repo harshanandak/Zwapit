@@ -39,7 +39,9 @@ export interface NotificationMessage {
  * - { sent: true }     — delivered (or handed to the provider).
  * - { skipped: true }  — env unset, intentional no-op (default sender, no key).
  * A throwing sender (network failure) is surfaced to the caller so the queue can
- * mark the row `failed` and retry — senders do not swallow real errors.
+ * mark the row `failed` — senders do not swallow real errors. NOTE: a `failed`
+ * row is recorded (and audited) but is NOT auto-retried in this slice; bounded
+ * retry-with-backoff is tracked in beads zwapit-46i.4.
  */
 export interface SenderResult {
   sent?: boolean;
