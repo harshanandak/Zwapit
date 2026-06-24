@@ -106,7 +106,11 @@ export function buildCreateAlertArgs(selection: AlertSelection): CreateAlertArgs
 
 const defaultDeps: CreateAlertDeps = {
   isConfigured: isConvexConfigured,
-  getClient: getConvexClient,
+  // The shared ConvexClient's `mutation` is generically typed — narrower than this
+  // structural seam (which only needs "something callable with (ref, args)").
+  // submitCreateAlert only ever calls it with a FunctionReference + plain args, so
+  // adapt the real client to the seam explicitly (TS can't prove the generic match).
+  getClient: getConvexClient as unknown as CreateAlertDeps["getClient"],
 };
 
 /**
