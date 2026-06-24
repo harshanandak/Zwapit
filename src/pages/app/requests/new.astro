@@ -14,15 +14,24 @@ const categories = [
   { label: "Voucher", icon: "voucher" },
   { label: "Pass", icon: "pass" },
 ];
+// Catalog rows carry the canonical catalog id + city/date/format the create-alert
+// mutation needs (mock seed values until real catalog search lands). The selected
+// row's data is read on submit and sent to `createAlert`.
 const catalog = [
-  { icon: "film", title: "Dune: Part Three", sub: "PVR Orion · Sat 21 Jun · 9:30 PM · English · IMAX 3D", src: "BMS", sel: true },
-  { icon: "film", title: "Dune: Part Three", sub: "Cinepolis Nexus · Sun 22 Jun · 6:15 PM · English · IMAX 2D", src: "BMS" },
+  { icon: "film", title: "Dune: Part Three", sub: "PVR Orion · Sat 21 Jun · 9:30 PM · English · IMAX 3D", src: "BMS", sel: true, catalogId: "catalog_movie_dune3", city: "Bengaluru", date: "2026-06-21", format: "IMAX 3D" },
+  { icon: "film", title: "Dune: Part Three", sub: "Cinepolis Nexus · Sun 22 Jun · 6:15 PM · English · IMAX 2D", src: "BMS", catalogId: "catalog_movie_dune3", city: "Bengaluru", date: "2026-06-22", format: "IMAX 2D" },
 ];
+// `key` maps each toggle to a createAlert alertType literal.
 const alerts = [
-  { label: "Availability", icon: "bell", sub: "Tell me the moment tickets are live", on: true },
-  { label: "Discount", icon: "tag", sub: "Tell me when the price drops below my budget", on: true },
-  { label: "Price-drop", icon: "drop", sub: "Track scheduled seller drops" },
-  { label: "Last-minute", icon: "zap", sub: "Alert me close to showtime" },
+  { key: "availability", label: "Availability", icon: "bell", sub: "Tell me the moment tickets are live", on: true },
+  { key: "discount", label: "Discount", icon: "tag", sub: "Tell me when the price drops below my budget", on: true },
+  { key: "price_drop", label: "Price-drop", icon: "drop", sub: "Track scheduled seller drops" },
+  { key: "last_minute", label: "Last-minute", icon: "zap", sub: "Alert me close to showtime" },
+];
+// `key` maps each toggle to a createAlert channel literal.
+const channels = [
+  { key: "email", label: "Email", icon: "bell", sub: "We'll email you the moment it's live", on: true },
+  { key: "web_push", label: "Web push", icon: "zap", sub: "Get a push in your browser", on: true },
 ];
 const budget = 600;
 ---
@@ -63,7 +72,16 @@ const budget = 600;
   <div class="searchbar gl live"><Icon name="search" />dune part three</div>
   {
     catalog.map((item) => (
-      <button type="button" class:list={["catres", "gl", { sel: item.sel }]} data-catitem aria-pressed={item.sel ? "true" : "false"}>
+      <button
+        type="button"
+        class:list={["catres", "gl", { sel: item.sel }]}
+        data-catitem
+        data-catalog-id={item.catalogId}
+        data-city={item.city}
+        data-date={item.date}
+        data-format={item.format}
+        aria-pressed={item.sel ? "true" : "false"}
+      >
         <span class="icbx"><Icon name={item.icon} /></span>
         <span class="tx">
           <b>{item.title}</b>

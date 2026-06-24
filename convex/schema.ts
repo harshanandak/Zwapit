@@ -127,6 +127,37 @@ const wantMatchState = v.union(
   v.literal("expired"),
 );
 
+// ---- Official-availability watcher (design 2026-06-22) ----
+// Internal table/value names ("monitor_target", source "bms"/"district") never
+// surface to users; user-facing copy uses approved terms ("Tickets are live").
+
+const watcherSource = v.union(v.literal("bms"), v.literal("district"));
+
+const monitorTargetStatus = v.union(
+  v.literal("watching"),
+  v.literal("live"),
+  v.literal("closed"),
+  v.literal("degraded"),
+);
+
+// Alert types are captured now; only "availability" + "last_minute" are
+// delivered in this slice (design §Out of scope).
+const alertType = v.union(
+  v.literal("availability"),
+  v.literal("discount"),
+  v.literal("price_drop"),
+  v.literal("last_minute"),
+);
+
+// Email + Web Push only this slice; WhatsApp/Telegram deferred (DLT compliance).
+const channel = v.union(v.literal("email"), v.literal("web_push"));
+
+const notificationStatus = v.union(
+  v.literal("pending"),
+  v.literal("sent"),
+  v.literal("failed"),
+);
+
 const actorRole = v.union(v.literal("buyer"), v.literal("seller"), v.literal("system"));
 const protectionLevel = v.union(
   v.literal("protected_payment"),
@@ -335,6 +366,18 @@ export default defineSchema({
     imageUrl: v.optional(v.string()),
     isActive: v.boolean(),
     lastSyncedAt: v.string(),
+    // Official-availability watcher source codes (additive, optional — design
+    // 2026-06-22 §Approach). A movie row carries its BMS event/region + District
+    // MV/city-slug; a venue-kind row carries bmsVenueCode/districtCdCode. Some
+    // rows carry both sources' codes, some one (platform-routing / D5 union).
+    bmsEventCode: v.optional(v.string()),
+    bmsRegionCode: v.optional(v.string()),
+    bmsVenueCode: v.optional(v.string()),
+    districtMvCode: v.optional(v.string()),
+    districtCdCode: v.optional(v.string()),
+    districtCitySlug: v.optional(v.string()),
+    lat: v.optional(v.number()),
+    long: v.optional(v.number()),
   })
     .index("by_key", ["catalogKey"])
     .index("by_kind_active", ["kind", "isActive"])
@@ -363,11 +406,24 @@ export default defineSchema({
     state: wantState,
     expiresAt: v.string(),
     createdAt: v.string(),
+    // Official-availability watcher alert prefs (additive, optional — design
+    // 2026-06-22 §Approach). `wants` IS the request/alert object; we add the
+    // watch dimensions + alert prefs without renaming the table. Only
+    // "availability" + "last_minute" are delivered in this slice; "discount" /
+    // "price_drop" are captured now, delivered later.
+    watchCity: v.optional(v.string()),
+    watchDate: v.optional(v.string()),
+    watchFormat: v.optional(v.string()),
+    alertTypes: v.optional(v.array(alertType)),
+    channels: v.optional(v.array(channel)),
+    // Internal app id of the shared monitor_targets row this alert subscribes to.
+    monitorTargetId: v.optional(v.string()),
   })
     .index("by_key", ["wantKey"])
     .index("by_buyer", ["buyerId"])
     .index("by_catalog_state", ["catalogItemId", "state"])
-    .index("by_state_created", ["state", "createdAt"]),
+    .index("by_state_created", ["state", "createdAt"])
+    .index("by_monitor_target", ["monitorTargetId"]),
 
   // One proposed pairing of a want and a listing. `reservedUntil` bounds the
   // matched buyer's exclusive window before the listing reopens to everyone.
@@ -401,6 +457,71 @@ export default defineSchema({
     .index("by_key", ["referralKey"])
     .index("by_referrer", ["referrerId"]),
 
+  // ---- Official-availability watcher engine (design 2026-06-22) ----
+
+  // One shared watcher per exact show (movie + city + date [+ format]). Many
+  // requests on the same show collapse to ONE row via collapseKey, so the cron
+  // polls once and notifies every subscriber. Internal-only; never client-set.
+  // collapseKey = catalogItemId|city|date|format.
+  monitor_targets: defineTable({
+    collapseKey: v.string(),
+    catalogItemId: v.string(),
+    city: v.string(),
+    date: v.string(),
+    format: v.optional(v.string()),
+    // Only the sources whose catalog codes exist (platform-routing).
+    sources: v.array(watcherSource),
+    status: monitorTargetStatus,
+    // Narrow normalized-field hash of the last poll, to suppress false fires.
+    lastSnapshotHash: v.optional(v.string()),
+    subscriberCount: v.number(),
+    // Consecutive empty/blocked polls; K in a row → degraded.
+    failCount: v.optional(v.number()),
+    windowStart: v.optional(v.string()),
+    windowEnd: v.optional(v.string()),
+    lastCheckedAt: v.optional(v.string()),
+    nextCheckAt: v.optional(v.string()),
+  })
+    .index("by_collapse_key", ["collapseKey"])
+    .index("by_status_next_check", ["status", "nextCheckAt"]),
+
+  // One row per detected booking-open snapshot for a target. theatresJson holds
+  // the normalized theatre/showtime list; bookingUrl is the official deep-link
+  // OUT (Zwapit never books or holds inventory).
+  availability_events: defineTable({
+    monitorTargetId: v.string(),
+    source: watcherSource,
+    detectedAt: v.string(),
+    theatresJson: v.string(),
+    bookingUrl: v.string(),
+    snapshotHash: v.string(),
+  }).index("by_target", ["monitorTargetId"]),
+
+  // Fire-once notification outbox. Idempotent on dedupeKey =
+  // userId|monitorTargetId|availabilityEventId|alertType|channel.
+  notification_queue: defineTable({
+    userId: v.string(),
+    monitorTargetId: v.string(),
+    availabilityEventId: v.string(),
+    alertType,
+    channel,
+    status: notificationStatus,
+    dedupeKey: v.string(),
+    createdAt: v.string(),
+    sentAt: v.optional(v.string()),
+  })
+    .index("by_dedupe", ["dedupeKey"])
+    .index("by_status", ["status"]),
+
+  // Adapter read cache: last snapshot hash per (target, source) so an unchanged
+  // poll is a no-op (no duplicate availability_events / notifications).
+  source_snapshots: defineTable({
+    monitorTargetId: v.string(),
+    source: watcherSource,
+    snapshotHash: v.string(),
+    fetchedAt: v.string(),
+  }).index("by_target_source", ["monitorTargetId", "source"]),
+
   // Append-only audit log for visible state transitions.
   audit_logs: defineTable({
     actorId: v.string(),
@@ -413,6 +534,10 @@ export default defineSchema({
       v.literal("issue"),
       v.literal("want"),
       v.literal("want_match"),
+      // Official-availability watcher (design 2026-06-22).
+      v.literal("monitor_target"),
+      v.literal("availability_event"),
+      v.literal("notification"),
     ),
     entityId: v.string(),
     fromState: v.optional(v.string()),
