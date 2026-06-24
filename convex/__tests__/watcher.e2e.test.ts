@@ -202,6 +202,33 @@ describe("watcher e2e — full happy path through the real poll", () => {
   });
 });
 
+describe("watcher e2e — by-event BMS routing", () => {
+  test("a movie row (eventCode+regionCode, NO venueCode) takes the byevent URL branch → detection", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    // No bmsVenueCode → buildBmsUrl/targetSourceUrls routes to the byevent URL.
+    await seedMovie(tt, "catalog_movie_1", {
+      bmsEventCode: "ET00000001",
+      bmsRegionCode: "BANG",
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, ALERT_ARGS);
+
+    // The injected fetcher echoes the SAME open ShowDetails fixture for whatever
+    // URL is requested — here that URL is the byevent endpoint.
+    __setFetcher(fetcherReturning(openBmsJson()));
+    const poll = await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    expect(poll.detected).toBe(1);
+
+    const { target, events } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      events: await ctx.db.query("availability_events").collect(),
+    }));
+    expect(target.status).toBe("live");
+    expect(events).toHaveLength(1);
+    expect(events[0].source).toBe("bms");
+  });
+});
+
 describe("watcher e2e — degrade path", () => {
   test("3 consecutive throwing polls → degraded with NO notifications", async () => {
     const tt = t();

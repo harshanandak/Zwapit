@@ -46,7 +46,6 @@ import {
 } from "./watcher/adapters";
 import {
   computeCollapseKey,
-  parseBmsByEvent,
   parseBmsByVenue,
   parseDistrictMovieCity,
   snapshotHash,
@@ -613,9 +612,10 @@ function parseResultForSource(source: "bms" | "district", content: string): Norm
   } catch {
     return [];
   }
-  // byvenue + byevent share the ShowDetails model; either parser walks it.
-  const byVenue = parseBmsByVenue(json);
-  return byVenue.length > 0 ? byVenue : parseBmsByEvent(json);
+  // byvenue + byevent share the ShowDetails model, so a single walker reads both
+  // shapes; the byVenue/byEvent ternary fallback was dead (both delegate to the
+  // same parseBmsShowDetails walker and can never differ).
+  return parseBmsByVenue(json);
 }
 
 /**
