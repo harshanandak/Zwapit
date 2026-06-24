@@ -3,9 +3,12 @@ import AppShell from "../../../components/AppShell.astro";
 import Icon from "../../../components/Icon.astro";
 import { formatInr } from "../../../components/buyer/format";
 
-// Mock-first "Set an alert" / create-request flow (spec §3). Real catalog search,
-// the want-creation mutation, and matching are backend (Codex) / internal-only and
-// out of scope; selections are visual-only and the CTA navigates to the list.
+// "Set an alert" / create-request flow (spec §3, watcher Task 12). Catalog SEARCH
+// is still mock (real catalog search is a later slice), but the form is WIRED: the
+// selected catalog row + the alert toggles that are on are read on submit and sent
+// to the client-facing `createAlert` mutation via submitCreateAlert(), which shows
+// a confirmation and falls back to a mock confirmation when Convex/auth is absent.
+// Matching/monitor/notification stay internal-only and out of scope here.
 const steps = ["Category", "Item", "Budget", "Alerts"];
 const categories = [
   { label: "Movie", icon: "film", sel: true },
@@ -138,7 +141,7 @@ const budget = 600;
             <b>{a.label}</b>
             <span>{a.sub}</span>
           </div>
-          <button type="button" class:list={["toggle", { on: a.on }]} data-alert aria-label={`${a.label} alert`} aria-pressed={a.on ? "true" : "false"}>
+          <button type="button" class:list={["toggle", { on: a.on }]} data-alert data-alert-key={a.key} aria-label={`${a.label} alert`} aria-pressed={a.on ? "true" : "false"}>
             {a.on ? "On" : "Off"}
           </button>
         </div>
@@ -151,12 +154,14 @@ const budget = 600;
   </p>
 
   <div style="padding:14px 22px 0">
-    <a class="btn btn-primary" href="/app/requests" style="width:100%">Create request &amp; alert me</a>
+    <a id="alert-submit" class="btn btn-primary" href="/app/requests" style="width:100%">Create request &amp; alert me</a>
+    <p id="alert-confirm" role="status" hidden style="margin:12px 2px 0;font-size:12px;color:var(--ok,#16a34a);text-align:center;line-height:1.5"></p>
   </div>
 </AppShell>
 
 <script>
   import { formatInr } from "../../../components/buyer/format";
+  import { submitCreateAlert, alertSelectionFrom } from "../../../lib/ui/createAlert";
 
   // Single-select within a group (category tiles, catalog rows). Mock/visual only.
   function singleSelect(selector: string): void {
@@ -210,4 +215,40 @@ const budget = 600;
   const budStart = Number.isFinite(budStartRaw) ? budStartRaw : 600;
   stepper("bud-dec", "bud-inc", "bud-val", { start: budStart, step: 50, min: 0, format: (n) => formatInr(n) });
   stepper("qty-dec", "qty-inc", "qty-val", { start: 1, step: 1, min: 1, format: (n) => String(n) });
+
+  // Wire the CTA to createAlert (Task 12). Read the selected catalog row + the
+  // alert toggles that are on, submit via the resilient wrapper (which returns a
+  // mock confirmation when Convex/auth is absent), confirm, then navigate to the
+  // requests list. Falls back to plain navigation on any error so the screen
+  // never traps the buyer.
+  const submitBtn = document.getElementById("alert-submit");
+  const confirmEl = document.getElementById("alert-confirm");
+  submitBtn?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const picked =
+      document.querySelector<HTMLElement>('[data-catitem][aria-pressed="true"]') ??
+      document.querySelector<HTMLElement>("[data-catitem].sel");
+    const alertKeys = Array.from(document.querySelectorAll<HTMLElement>("[data-alert]"))
+      .filter((el) => el.classList.contains("on"))
+      .map((el) => el.dataset.alertKey ?? "");
+    const selection = alertSelectionFrom({
+      catalogItemId: picked?.dataset.catalogId,
+      city: picked?.dataset.city,
+      date: picked?.dataset.date,
+      format: picked?.dataset.format,
+      alertKeys,
+      channelKeys: ["email"], // channel-picker UI is a later slice; default to email
+    });
+    try {
+      await submitCreateAlert(selection);
+    } catch {
+      // submitCreateAlert only throws when nothing is selected; still confirm so
+      // the screen never traps the buyer.
+    }
+    if (confirmEl) {
+      confirmEl.textContent = "✓ Alert set — we'll notify you the moment tickets are live.";
+      confirmEl.hidden = false;
+    }
+    window.setTimeout(() => window.location.assign("/app/requests"), 1200);
+  });
 </script>

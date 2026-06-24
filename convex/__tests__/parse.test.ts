@@ -129,6 +129,20 @@ describe("parseDistrictMovieCity", () => {
     expect(parseDistrictMovieCity(districtNoShows)).toEqual([]);
     expect(parseDistrictMovieCity("")).toEqual([]);
   });
+
+  test("keeps the meridiem on the time when a show line has no format token", () => {
+    const shows = parseDistrictMovieCity("* PVR Demo\n+ 09:00 AM\n+ 13:45");
+    expect(shows).toHaveLength(2);
+    // Meridiem stays with the time instead of being swallowed into `format`.
+    expect(shows[0]).toMatchObject({ theatreName: "PVR Demo", showTime: "09:00 AM", format: "" });
+    // A format-less / 24h time-only line is still captured (was dropped before).
+    expect(shows[1]).toMatchObject({ showTime: "13:45", format: "" });
+  });
+
+  test("still splits time+meridiem from a trailing format token", () => {
+    const shows = parseDistrictMovieCity("* PVR Demo\n+ 09:00 AM PXL 3D");
+    expect(shows[0]).toMatchObject({ showTime: "09:00 AM", format: "PXL 3D" });
+  });
 });
 
 describe("computeCollapseKey", () => {

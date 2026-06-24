@@ -119,8 +119,11 @@ export function parseBmsByEvent(payload: unknown): NormalizedShow[] {
 // ---------------------------------------------------------------------------
 
 const DISTRICT_THEATRE = /^\*\s+(.+?)\s*$/;
-// `+ 09:00 AM PXL 3D`  or  `+ 13:45 PM 3D`  -> [time+meridiem, format]
-const DISTRICT_SHOW = /^\+\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)\s+(.+?)\s*$/i;
+// `+ 09:00 AM PXL 3D` -> [time+meridiem, format]; `+ 13:45` / `+ 09:00 AM` ->
+// [time+meridiem, undefined]. The meridiem binds to the TIME group and the format
+// group is optional, so a meridiem-last or format-less line keeps its AM/PM
+// instead of swallowing it into `format`.
+const DISTRICT_SHOW = /^\+\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)(?:\s+(.+?))?\s*$/i;
 
 /**
  * Parse the District movie-in-city rendered text into NormalizedShow[].
@@ -149,7 +152,7 @@ export function parseDistrictMovieCity(text: string): NormalizedShow[] {
     const showMatch = DISTRICT_SHOW.exec(line);
     if (showMatch && currentTheatre) {
       const showTime = showMatch[1].replace(/\s+/g, " ").trim();
-      const format = showMatch[2].trim();
+      const format = showMatch[2]?.trim() ?? "";
       shows.push({
         source: "district",
         theatreName: currentTheatre,

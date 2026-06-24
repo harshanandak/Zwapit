@@ -104,6 +104,33 @@ export function buildCreateAlertArgs(selection: AlertSelection): CreateAlertArgs
   };
 }
 
+/**
+ * PURE: build an {@link AlertSelection} from the raw values read off the
+ * create-alert screen DOM — the selected catalog row's `data-*` attributes plus
+ * the `key`s of the alert/channel toggles that are switched on. Unknown tokens
+ * are dropped here; blank/whitespace fields collapse to "" (and a blank format is
+ * omitted) so {@link buildCreateAlertArgs} applies its defaults downstream. This
+ * is the screen↔mutation mapping the "Set an alert" form relies on (Task 12).
+ */
+export function alertSelectionFrom(raw: {
+  catalogItemId?: string | null;
+  city?: string | null;
+  date?: string | null;
+  format?: string | null;
+  alertKeys?: readonly string[];
+  channelKeys?: readonly string[];
+}): AlertSelection {
+  const format = raw.format?.trim();
+  return {
+    catalogItemId: (raw.catalogItemId ?? "").trim(),
+    city: (raw.city ?? "").trim(),
+    date: (raw.date ?? "").trim(),
+    ...(format ? { format } : {}),
+    alertTypes: uniqueKnown(raw.alertKeys ?? [], ALERT_TYPES),
+    channels: uniqueKnown(raw.channelKeys ?? [], CHANNELS),
+  };
+}
+
 const defaultDeps: CreateAlertDeps = {
   isConfigured: isConvexConfigured,
   // The shared ConvexClient's `mutation` is generically typed — narrower than this

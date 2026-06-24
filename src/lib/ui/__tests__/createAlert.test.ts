@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  alertSelectionFrom,
   buildCreateAlertArgs,
   submitCreateAlert,
   type AlertSelection,
@@ -114,5 +115,60 @@ describe("submitCreateAlert (wrapper, U-watcher)", () => {
     };
     const result = await submitCreateAlert(selection(), deps);
     expect(result).toEqual({ ok: true, status: "mock" });
+  });
+});
+
+describe("alertSelectionFrom (screen DOM → selection, U-watcher Task 12)", () => {
+  test("maps the selected catalog row's data-* + on-toggle keys to a selection", () => {
+    expect(
+      alertSelectionFrom({
+        catalogItemId: "catalog_movie_dune3",
+        city: "Bengaluru",
+        date: "2026-06-21",
+        format: "IMAX 3D",
+        alertKeys: ["availability", "discount"],
+        channelKeys: ["email"],
+      }),
+    ).toEqual({
+      catalogItemId: "catalog_movie_dune3",
+      city: "Bengaluru",
+      date: "2026-06-21",
+      format: "IMAX 3D",
+      alertTypes: ["availability", "discount"],
+      channels: ["email"],
+    });
+  });
+
+  test("drops unknown alert/channel keys (only mutation literals survive)", () => {
+    const sel = alertSelectionFrom({
+      catalogItemId: "c1",
+      city: "BLR",
+      date: "2026-06-21",
+      alertKeys: ["availability", "bogus"],
+      channelKeys: ["email", "sms"],
+    });
+    expect(sel.alertTypes).toEqual(["availability"]);
+    expect(sel.channels).toEqual(["email"]);
+  });
+
+  test("coalesces missing/blank fields and omits a blank format", () => {
+    const sel = alertSelectionFrom({
+      catalogItemId: "  c1  ",
+      city: null,
+      date: undefined,
+      format: "   ",
+      alertKeys: [],
+      channelKeys: [],
+    });
+    expect(sel).toEqual({ catalogItemId: "c1", city: "", date: "", alertTypes: [], channels: [] });
+    expect("format" in sel).toBe(false);
+  });
+
+  test("its output feeds buildCreateAlertArgs (defaults apply when nothing is on)", () => {
+    const args = buildCreateAlertArgs(
+      alertSelectionFrom({ catalogItemId: "c1", city: "BLR", date: "2026-06-21", alertKeys: [], channelKeys: [] }),
+    );
+    expect(args.alertTypes).toEqual(["availability"]);
+    expect(args.channels).toEqual(["email"]);
   });
 });
