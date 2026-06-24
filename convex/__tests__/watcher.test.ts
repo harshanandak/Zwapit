@@ -231,6 +231,59 @@ describe("recordAvailability — detection → live + snapshot dedup", () => {
     expect(events).toHaveLength(1);
     expect(target.status).toBe("live");
   });
+
+  test("primary-source flip (bms→district) on an UNCHANGED union hash is a no-op", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_1",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+
+    const normalized = [
+      { source: "bms" as const, theatreName: "PVR", showTime: "18:30", format: "2D" },
+    ];
+    // SAME union hash both times — only the recorded primarySource differs.
+    const unionHash = "hash_union_open";
+
+    const first = await tt.mutation(internal.watcher.recordAvailability, {
+      monitorTargetId: monitorTargetId as never,
+      source: "bms" as const,
+      normalized,
+      bookingUrl: "https://in.bookmyshow.com/movies/demo",
+      detectedAt: NOW,
+      snapshotHash: unionHash,
+    });
+    expect(first.deduped).toBe(false);
+    expect(first.availabilityEventId).toBeTruthy();
+
+    // The primary source flips to "district" on an UNCHANGED union (same hash).
+    // Dedup gates on target.lastSnapshotHash (the union hash), independent of which
+    // source won → no new event, nothing to enqueue.
+    const flip = await tt.mutation(internal.watcher.recordAvailability, {
+      monitorTargetId: monitorTargetId as never,
+      source: "district" as const,
+      normalized,
+      bookingUrl: "https://www.district.in/movies/demo",
+      detectedAt: NOW,
+      snapshotHash: unionHash,
+    });
+    expect(flip.deduped).toBe(true);
+    expect(flip.availabilityEventId).toBeNull();
+
+    const { events, notifs } = await tt.run(async (ctx) => ({
+      events: await ctx.db.query("availability_events").collect(),
+      notifs: await ctx.db.query("notification_queue").collect(),
+    }));
+    expect(events).toHaveLength(1); // still exactly one event after the flip
+    // No new event ⇒ pollDueTargets would not enqueue; queue stays empty here.
+    expect(notifs).toHaveLength(0);
+  });
 });
 
 describe("enqueueNotifications — idempotent, fire-once", () => {

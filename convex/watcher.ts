@@ -33,7 +33,6 @@ import {
   catalogItemByKey,
   latestAvailabilityEvent,
   monitorTargetByCollapseKey,
-  sourceSnapshotFor,
   subscribersForTarget,
   upsertSourceSnapshot,
 } from "./model";
@@ -307,9 +306,13 @@ export const recordAvailability = internalMutation({
     const target = await ctx.db.get(args.monitorTargetId);
     if (!target) throw new Error("MONITOR_TARGET_NOT_FOUND");
 
-    // Dedup against the per-(target, source) snapshot cache.
-    const cached = await sourceSnapshotFor(ctx, args.monitorTargetId, args.source);
-    if (cached && cached.snapshotHash === args.snapshotHash) {
+    // Dedup against the TARGET UNION hash (target.lastSnapshotHash), NOT the
+    // per-(target, source) cache. pollDueTargets hashes the whole cross-source
+    // union and records under whichever source won the booking URL, so the
+    // primary source can flip (bms→district) on an UNCHANGED union. Gating on the
+    // per-source cache would miss that flip and re-fire; gating on the union hash
+    // is independent of which source won, so an unchanged union is a true no-op.
+    if (target.lastSnapshotHash === args.snapshotHash) {
       return { availabilityEventId: null, deduped: true };
     }
 
