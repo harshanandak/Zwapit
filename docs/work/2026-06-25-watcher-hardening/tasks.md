@@ -21,6 +21,18 @@ codegen WORKS inline (main loop): `bunx convex codegen` (timeout ~120s) — conn
 - REFRAME first: District shows are NAME-keyed (parseDistrictMovieCity sets no venueCode), and catalog_items has no District-theatre-name field. A venueMap keyed on districtCdCode can't match a District show. So a code-based map only bridges BMS↔BMS, not BMS↔District.
 - Decision: either (a) accept name-fallback dedupe (already works) + close .3 with rationale, or (b) build the map from bmsVenueCode only (partial). Lean (a) unless cross-source dupes are observed. Confirm with user / verify against real data before investing.
 
+### DECISION (2026-06-25, confirmed with user): (a) — close as name-fallback sufficient.
+Verified against code: `canonicalVenue` (convex/watcher/parse.ts:267) already bridges
+sources via a `name:<normalized-name>` fallback (trim/lowercase/collapse-spaces), and
+`pollDueTargets` passes an empty venueMap — so cross-source dedupe already works whenever
+theatre names normalize identically. A code-keyed venueMap CANNOT bridge BMS↔District
+because District shows carry no venue code (parseDistrictMovieCity emits none), so it would
+only ever dedupe BMS↔BMS — not what .3 intended. Residual gap: divergent names
+(e.g. "PVR Phoenix" vs "PVR: Phoenix Mall, Lower Parel") dedup-miss → theatre listed twice;
+a display nicety, not a correctness/safety issue, and unfixable without a name↔code data
+source we don't have. **No code change.** Revisit only if real divergent-name dupes are
+observed; that would be its own data+ingestion task (option b).
+
 ## Ship
 - When all done: `bun run build`, push feat/watcher-hardening, open PR, /code-review, close the beads issues.
 </content>
