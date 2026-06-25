@@ -118,12 +118,15 @@ export function parseBmsByEvent(payload: unknown): NormalizedShow[] {
 // District — rendered text (`* <Theatre>` / `+ HH:MM AM/PM <format>`)
 // ---------------------------------------------------------------------------
 
-const DISTRICT_THEATRE = /^\*\s+(.+?)\s*$/;
+// Greedy capture + `$` (no lazy `(.+?)\s*$`, which Sonar flags as super-linear).
+// Lines are pre-trimmed (loop) and captures are .trim()'d below, so this is
+// behavior-identical without the backtracking risk.
+const DISTRICT_THEATRE = /^\*\s+(.+)$/;
 // `+ 09:00 AM PXL 3D` -> [time+meridiem, format]; `+ 13:45` / `+ 09:00 AM` ->
 // [time+meridiem, undefined]. The meridiem binds to the TIME group and the format
 // group is optional, so a meridiem-last or format-less line keeps its AM/PM
 // instead of swallowing it into `format`.
-const DISTRICT_SHOW = /^\+\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)(?:\s+(.+?))?\s*$/i;
+const DISTRICT_SHOW = /^\+\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)(?:\s+(.+))?$/i;
 
 /**
  * Parse the District movie-in-city rendered text into NormalizedShow[].

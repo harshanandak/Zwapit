@@ -157,6 +157,24 @@ function dedupeKey(parts: {
 // CLIENT mutation: createAlert (Task 4)
 // ===========================================================================
 
+/** Validate + normalize createAlert's client input (trim; reject empty city /
+ * malformed date) so semantically-identical alerts collapse and malformed ones are
+ * never persisted. Extracted to keep createAlert's cognitive complexity down. */
+function normalizeAlertInput(args: {
+  city: string;
+  date: string;
+  format?: string;
+}): { city: string; date: string; format?: string } {
+  const city = args.city.trim();
+  const date = args.date.trim();
+  const format = args.format?.trim() || undefined;
+  if (!city) throw new Error("ALERT_CITY_REQUIRED");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+    throw new Error("ALERT_DATE_INVALID");
+  }
+  return { city, date, ...(format ? { format } : {}) };
+}
+
 /**
  * Create (or update) the caller's alert for a movie + city + date [+ format] and
  * find-or-create the shared monitor_targets row. Idempotent on collapseKey: two
@@ -185,15 +203,8 @@ export const createAlert = mutation({
 
     // Validate + normalize client input before it flows into the collapse key,
     // monitor_targets, wants.expiresAt and source URLs (coding guideline: validate
-    // all user input). Trim so semantically-identical alerts collapse; reject an
-    // empty city or malformed date so we never persist an uncollapsible/inert alert.
-    const city = args.city.trim();
-    const date = args.date.trim();
-    const format = args.format?.trim() || undefined;
-    if (!city) throw new Error("ALERT_CITY_REQUIRED");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
-      throw new Error("ALERT_DATE_INVALID");
-    }
+    // all user input). See normalizeAlertInput.
+    const { city, date, format } = normalizeAlertInput(args);
 
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
