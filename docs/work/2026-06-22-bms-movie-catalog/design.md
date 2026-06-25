@@ -7,15 +7,22 @@ Populate `catalog_items` (kind=movie) from BookMyShow's national `movies-synopsi
 incrementally (by `<lastmod>`), idempotently (upsert by ET code), with free posters (bmscdn image code).
 
 ## Architecture (key constraint)
-BMS 403s datacenter IPs, and **Convex actions also egress from datacenter** → the crawler CANNOT run
-inside Convex. Split:
-- **External crawler job** (egress = residential/Parallel.ai): fetch sitemap → parse → lastmod-diff →
-  hydrate deltas → call the Convex internal mutation. Lives outside Convex; egress is a pluggable fn.
+BMS 403s datacenter IPs when called **directly**, and Convex actions egress from a datacenter — so a
+Convex action cannot hit BMS directly. BUT Convex **can** reach `api.parallel.ai`, and Parallel's
+extract bypasses BMS's 403 (verified 2026-06-22 — see Egress findings below). So the crawler ships
+**inside Convex** as an action + cron that calls Parallel — no external worker. Three parts:
+- **Convex action + cron** (`convex/catalogCrawl.ts`): fetch sitemap + hydrate deltas via Parallel
+  (`PARALLEL_API_KEY` from Convex env, never in code), then call the internal upsert mutation. The egress
+  (Parallel fetch) is a pluggable fn so tests inject a stub.
 - **Convex internal mutation** `catalog:upsertMoviesFromSource` (internalMutation — NOT client-exposed,
   per CLAUDE.md "internal functions for sensitive operations"): receives parsed+hydrated rows, upserts
   into `catalog_items` by `(externalSource, externalId)`.
 - **Pure shared module** (`src/lib/catalog/bmsSitemap.ts`): parse XML → entities; lastmod-diff. No I/O →
   unit-testable now, no egress.
+
+> History: the original plan assumed an *external* crawler (Convex can't egress to BMS). The 2026-06-22
+> egress findings below superseded that — Parallel reaches BMS and Convex reaches Parallel — so the
+> whole crawler now runs in a Convex action + cron. The shipped `convex/catalogCrawl.ts` reflects this.
 
 ## Data shape
 `catalog_items` already has: catalogKey, kind, externalSource, externalId, title, subtitle, city,
@@ -24,7 +31,7 @@ for the incremental diff. Movie rows: kind="movie", externalSource="bookmyshow",
 catalogKey=`bms_<ETcode>`, title, imageUrl=bmscdn poster, isActive=true, sourceLastmod=`<lastmod>`.
 
 ## Pipeline
-1. Fetch `in.bookmyshow.com/sitemap/movies-synopsis.xml` (external, residential egress).
+1. Fetch `in.bookmyshow.com/sitemap/movies-synopsis.xml` (via Parallel from the Convex action — Convex reaches Parallel; Parallel reaches BMS).
 2. `parseMoviesSitemap(xml)` → `[{ eventCode, slug, loc, lastmod }]` (ET code from URL).
 3. `diffByLastmod(parsed, existing)` → entities new or with `lastmod > stored sourceLastmod` (to hydrate).
 4. Hydrate each delta (external): title (eventName) + image code → `in.bmscdn.com/iedb/movies/images/mobile/thumbnail/xlarge/<code>.jpg`.
