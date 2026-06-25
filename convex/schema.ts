@@ -154,8 +154,11 @@ const alertType = v.union(
 // Email + Web Push only this slice; WhatsApp/Telegram deferred (DLT compliance).
 const channel = v.union(v.literal("email"), v.literal("web_push"));
 
+// "sending" is the in-flight claim state: a dispatch wave flips pending → sending
+// atomically before calling the sender, so overlapping waves can't double-send.
 const notificationStatus = v.union(
   v.literal("pending"),
+  v.literal("sending"),
   v.literal("sent"),
   v.literal("failed"),
 );
@@ -513,6 +516,9 @@ export default defineSchema({
     dedupeKey: v.string(),
     createdAt: v.string(),
     sentAt: v.optional(v.string()),
+    // Delivery attempts so far; a failed send requeues to "pending" until this
+    // reaches the cap, then parks as "failed" (no infinite retry).
+    attempts: v.optional(v.number()),
   })
     .index("by_dedupe", ["dedupeKey"])
     .index("by_status", ["status"]),

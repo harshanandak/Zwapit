@@ -63,6 +63,8 @@ import type { NormalizedShow } from "./watcher/types";
 
 // Degrade threshold: K consecutive empty/blocked polls → "degraded" (design §Edge).
 const DEGRADE_AFTER = 3;
+// Max delivery attempts before a notification is parked as permanently "failed".
+const MAX_NOTIFICATION_ATTEMPTS = 3;
 // Delivered alert types in this slice (design §Out of scope): Discount / Price-drop
 // are captured on the want but NOT delivered yet.
 const DELIVERED_ALERT_TYPES = ["availability", "last_minute"] as const;
@@ -909,7 +911,30 @@ export const pendingNotifications = internalQuery({
   },
 });
 
-/** Mark a notification row sent or failed (internal mutation, audited). */
+/**
+ * Atomically claim a pending notification for delivery: re-check `status ===
+ * "pending"` INSIDE the mutation (Convex mutations are serializable, so this
+ * read-then-write is the atomic gate) and flip it to "sending". An overlapping
+ * dispatch wave that loses the race sees a non-pending row and gets
+ * { claimed: false } — so each row is handed to a sender at most once per claim.
+ *
+ * NOTE (known follow-up, out of scope for zwapit-46i.4): if the dispatch action
+ * dies AFTER this commit but BEFORE markNotification/failNotification, the row is
+ * stranded in "sending" (pendingNotifications only drains "pending"). Reclaiming
+ * stale "sending" rows needs a claimedAt timestamp + age threshold — tracked
+ * separately, not built here.
+ */
+export const claimNotification = internalMutation({
+  args: { notificationId: v.id("notification_queue"), now: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.notificationId);
+    if (!row || row.status !== "pending") return { claimed: false };
+    await ctx.db.patch(args.notificationId, { status: "sending" });
+    return { claimed: true };
+  },
+});
+
+/** Mark a notification row sent (internal mutation, audited). */
 export const markNotification = internalMutation({
   args: {
     notificationId: v.id("notification_queue"),
@@ -929,10 +954,43 @@ export const markNotification = internalMutation({
       action: args.status === "sent" ? "notification_sent" : "notification_failed",
       entityType: "notification",
       entityId: row.dedupeKey,
-      fromState: "pending",
+      fromState: row.status,
       toState: args.status,
       createdAt: nowIso,
     });
+  },
+});
+
+/**
+ * Record a failed delivery attempt: increment `attempts` and decide the next
+ * state. Under the cap → requeue to "pending" (a later wave retries it). At the
+ * cap → "failed" (terminal), so a persistently-broken send cannot loop forever.
+ * pendingNotifications only ever drains "pending", so the requeue IS the retry.
+ */
+export const failNotification = internalMutation({
+  args: {
+    notificationId: v.id("notification_queue"),
+    now: v.optional(v.string()),
+    maxAttempts: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const max = args.maxAttempts ?? MAX_NOTIFICATION_ATTEMPTS;
+    const row = await ctx.db.get(args.notificationId);
+    if (!row) return { status: "failed" as const, attempts: 0 };
+    const attempts = (row.attempts ?? 0) + 1;
+    const status = attempts >= max ? ("failed" as const) : ("pending" as const);
+    await ctx.db.patch(args.notificationId, { status, attempts });
+    await appendWatcherAuditLog(ctx, {
+      actorId: "system",
+      action: status === "failed" ? "notification_failed" : "notification_retry",
+      entityType: "notification",
+      entityId: row.dedupeKey,
+      fromState: row.status,
+      toState: status,
+      createdAt: nowIso,
+    });
+    return { status, attempts };
   },
 });
 
@@ -979,10 +1037,27 @@ export const dispatchNotifications = internalAction({
     let sent = 0;
     let failed = 0;
     for (const row of pending) {
+      // Claim first (pending → sending). If a concurrent wave already claimed it,
+      // skip — never hand the same row to a sender twice.
+      const claim = await ctx.runMutation(internal.watcher.claimNotification, {
+        notificationId: row._id,
+        now: nowIso,
+      });
+      if (!claim.claimed) continue;
+
       const parts = await ctx.runQuery(internal.watcher.notificationMessageParts, {
         notificationId: row._id,
       });
-      if (!parts) continue;
+      if (!parts) {
+        // Message parts vanished (event/target gone) — count the attempt; the
+        // retry cap keeps this bounded rather than leaving the row stuck "sending".
+        await ctx.runMutation(internal.watcher.failNotification, {
+          notificationId: row._id,
+          now: nowIso,
+        });
+        failed += 1;
+        continue;
+      }
       const message = buildLiveMessage({
         movie: parts.movie,
         theatre: parts.theatre,
@@ -999,9 +1074,10 @@ export const dispatchNotifications = internalAction({
         });
         sent += 1;
       } catch {
-        await ctx.runMutation(internal.watcher.markNotification, {
+        // Transient failure → increment attempts; requeue to "pending" under the
+        // cap, else park "failed". The cap makes the retry loop terminate.
+        await ctx.runMutation(internal.watcher.failNotification, {
           notificationId: row._id,
-          status: "failed",
           now: nowIso,
         });
         failed += 1;

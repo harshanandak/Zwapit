@@ -542,7 +542,7 @@ describe("pollDueTargets — detection + platform routing", () => {
 });
 
 describe("dispatchNotifications — sender routing", () => {
-  test("pending → sent with a mock sender; a throwing sender → failed", async () => {
+  test("pending → sent with a mock sender; a throwing sender requeues to pending (retry)", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
@@ -578,14 +578,110 @@ describe("dispatchNotifications — sender routing", () => {
 
     const dispatch = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
     expect(dispatch.sent).toBe(1);
-    expect(dispatch.failed).toBe(1);
+    expect(dispatch.failed).toBe(1); // run-level: one send threw this wave
 
     const notifs = await tt.run((ctx) => ctx.db.query("notification_queue").collect());
     const byStatus = (s: string) => notifs.filter((n) => n.status === s).length;
     expect(byStatus("sent")).toBe(1);
-    expect(byStatus("failed")).toBe(1);
+    // A single transient throw requeues to "pending" (retry), NOT terminal "failed".
+    expect(byStatus("failed")).toBe(0);
+    const requeued = notifs.find((n) => n.channel === "web_push");
+    expect(requeued?.status).toBe("pending");
+    expect(requeued?.attempts).toBe(1);
     expect(sentMessages[0].title).toBe("Tickets are live");
     expect(sentMessages[0].url).toContain("bookmyshow");
+  });
+});
+
+describe("dispatchNotifications — claim race guard + bounded retry (zwapit-46i.4)", () => {
+  const ALERT = {
+    catalogItemId: "catalog_movie_1",
+    city: "mumbai",
+    date: "2026-06-25",
+    format: "2D",
+    alertTypes: ["availability" as const],
+    channels: ["email" as const],
+  };
+
+  async function armAndOpenOne(tt: ReturnType<typeof t>) {
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, ALERT);
+    __setFetcher(fetcherReturning(openBmsJson()));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    return (await tt.run((ctx) => ctx.db.query("notification_queue").collect()))[0];
+  }
+
+  test("claim prevents double-send: a row already 'sending' is not dispatched again", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+
+    // First claim wins (pending → sending); a second claim loses (already sending).
+    const first = await tt.mutation(internal.watcher.claimNotification, { notificationId: row._id });
+    expect(first.claimed).toBe(true);
+    const second = await tt.mutation(internal.watcher.claimNotification, { notificationId: row._id });
+    expect(second.claimed).toBe(false);
+
+    // Dispatch now finds nothing pending (the row is 'sending'), so it never sends.
+    const sent: NotificationMessage[] = [];
+    __setSenders({
+      email: async (m): Promise<SenderResult> => { sent.push(m); return { sent: true }; },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+    const dispatch = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(dispatch.sent).toBe(0);
+    expect(sent).toHaveLength(0);
+
+    const after = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(after?.status).toBe("sending"); // claimed but undispatched (no double-send)
+  });
+
+  test("transient fail then success: requeued to pending, the next wave delivers it", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+
+    let calls = 0;
+    __setSenders({
+      email: async (m): Promise<SenderResult> => {
+        calls += 1;
+        if (calls === 1) throw new Error("smtp blip");
+        return { sent: true };
+      },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+
+    const d1 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(d1.sent).toBe(0);
+    expect(d1.failed).toBe(1);
+    const afterFail = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(afterFail?.status).toBe("pending"); // requeued
+    expect(afterFail?.attempts).toBe(1);
+
+    const d2 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(d2.sent).toBe(1);
+    const afterOk = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(afterOk?.status).toBe("sent");
+  });
+
+  test("persistent fail: parked as 'failed' after 3 attempts, no infinite loop", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+
+    __setSenders({
+      email: async (): Promise<SenderResult> => { throw new Error("smtp down"); },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+
+    for (let i = 0; i < 3; i++) {
+      await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    }
+    const parked = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(parked?.status).toBe("failed");
+    expect(parked?.attempts).toBe(3);
+
+    // A 4th wave finds nothing pending → no further work, no loop.
+    const d4 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(d4.dispatched).toBe(0);
   });
 });
 
