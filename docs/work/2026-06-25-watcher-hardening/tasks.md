@@ -30,8 +30,19 @@ because District shows carry no venue code (parseDistrictMovieCity emits none), 
 only ever dedupe BMS↔BMS — not what .3 intended. Residual gap: divergent names
 (e.g. "PVR Phoenix" vs "PVR: Phoenix Mall, Lower Parel") dedup-miss → theatre listed twice;
 a display nicety, not a correctness/safety issue, and unfixable without a name↔code data
-source we don't have. **No code change.** Revisit only if real divergent-name dupes are
-observed; that would be its own data+ingestion task (option b).
+source we don't have. **No code change.**
+
+Why this is the disciplined call, not the easy one: the originally-specced (b) ("build the
+map from bmsVenueCode") is a DEAD END — a code-keyed map can never reach District, so it
+would not dedupe cross-source at all; shipping it would be effort toward a non-solution.
+And cross-source is near-zero-frequency in v1: seed has exactly ONE dual-source row
+(catalog_movie_watcher_demo); District catalog ingestion is not built yet. Building venue
+canonicalization now = speculative machinery for data that doesn't exist.
+
+REVISIT TRIGGER (concrete): when **Phase C (events + District + cross-source)** lands real
+District catalog ingestion, measure BMS-vs-District theatre-name divergence on the SAME
+venue. If the normalize-miss rate is material, add a name-normalization/alias layer (the
+WORKING version of option b — name↔name, not code-keyed), design-first as its own task.
 
 ## Ship
 - When all done: `bun run build`, push feat/watcher-hardening, open PR, /code-review, close the beads issues.
