@@ -35,6 +35,7 @@ import {
   monitorTargetByCollapseKey,
   subscribersForTarget,
   upsertSourceSnapshot,
+  wantByKey,
 } from "./model";
 import {
   buildBmsUrl,
@@ -153,6 +154,30 @@ function dedupeKey(parts: {
     parts.alertType,
     parts.channel,
   ].join("|");
+}
+
+/**
+ * Audit a notification status transition. All are system-driven and entityType
+ * "notification", keyed by the row's dedupeKey; fromState is omitted for the
+ * initial enqueue (no prior state).
+ */
+async function auditNotification(
+  ctx: MutationCtx,
+  dedupeKey: string,
+  action: string,
+  toState: string,
+  nowIso: string,
+  fromState?: string,
+): Promise<void> {
+  await appendWatcherAuditLog(ctx, {
+    actorId: "system",
+    action,
+    entityType: "notification",
+    entityId: dedupeKey,
+    ...(fromState ? { fromState } : {}),
+    toState,
+    createdAt: nowIso,
+  });
 }
 
 // ===========================================================================
@@ -450,14 +475,7 @@ async function enqueueForEvent(
           dedupeKey: key,
           createdAt: nowIso,
         });
-        await appendWatcherAuditLog(ctx, {
-          actorId: "system",
-          action: "notification_enqueued",
-          entityType: "notification",
-          entityId: key,
-          toState: "pending",
-          createdAt: nowIso,
-        });
+        await auditNotification(ctx, key, "notification_enqueued", "pending", nowIso);
         inserted += 1;
       }
     }
@@ -612,10 +630,7 @@ export const removeSubscriber = internalMutation({
   args: { wantKey: v.string(), now: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const nowIso = args.now ?? new Date().toISOString();
-    const want = await ctx.db
-      .query("wants")
-      .withIndex("by_key", (q) => q.eq("wantKey", args.wantKey))
-      .unique();
+    const want = await wantByKey(ctx, args.wantKey);
     if (!want) return { closed: false };
     return await detachSubscriberCore(ctx, want, nowIso);
   },
@@ -671,6 +686,9 @@ function endOfWatchDay(expiresAt: string): string {
  * Open alert wants whose watch date has fully passed. Scans the oldest open wants
  * (most likely expired) and keeps only ALERT wants (monitorTargetId set) past
  * end-of-watch-day. Non-alert demand wants are left alone (separate lifecycle).
+ * Batched at `limit`, oldest-first by createdAt: at v1 scale one hourly wave
+ * clears the backlog; if expired wants ever exceed a batch, successive waves
+ * drain the remainder (no single run is unbounded).
  */
 export const expiredAlertWants = internalQuery({
   args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
@@ -697,10 +715,7 @@ export const expireWant = internalMutation({
   args: { wantKey: v.string(), now: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const nowIso = args.now ?? new Date().toISOString();
-    const want = await ctx.db
-      .query("wants")
-      .withIndex("by_key", (q) => q.eq("wantKey", args.wantKey))
-      .unique();
+    const want = await wantByKey(ctx, args.wantKey);
     if (!want || want.state !== "open") return { expired: false, closed: false };
     const { closed } = await detachSubscriberCore(ctx, want, nowIso);
     await ctx.db.patch(want._id, { state: "expired" });
@@ -918,11 +933,11 @@ export const pendingNotifications = internalQuery({
  * dispatch wave that loses the race sees a non-pending row and gets
  * { claimed: false } — so each row is handed to a sender at most once per claim.
  *
- * NOTE (known follow-up, out of scope for zwapit-46i.4): if the dispatch action
- * dies AFTER this commit but BEFORE markNotification/failNotification, the row is
+ * KNOWN LIMITATION (out of scope for zwapit-46i.4): if the dispatch action dies
+ * AFTER this commit but BEFORE markNotification/failNotification, the row is
  * stranded in "sending" (pendingNotifications only drains "pending"). Reclaiming
- * stale "sending" rows needs a claimedAt timestamp + age threshold — tracked
- * separately, not built here.
+ * stale "sending" rows would need a claimedAt timestamp + age threshold; not
+ * handled in this slice and flagged to the user as a follow-up.
  */
 export const claimNotification = internalMutation({
   args: { notificationId: v.id("notification_queue"), now: v.optional(v.string()) },
@@ -949,15 +964,14 @@ export const markNotification = internalMutation({
       status: args.status,
       ...(args.status === "sent" ? { sentAt: nowIso } : {}),
     });
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      action: args.status === "sent" ? "notification_sent" : "notification_failed",
-      entityType: "notification",
-      entityId: row.dedupeKey,
-      fromState: row.status,
-      toState: args.status,
-      createdAt: nowIso,
-    });
+    await auditNotification(
+      ctx,
+      row.dedupeKey,
+      args.status === "sent" ? "notification_sent" : "notification_failed",
+      args.status,
+      nowIso,
+      row.status,
+    );
   },
 });
 
@@ -981,15 +995,14 @@ export const failNotification = internalMutation({
     const attempts = (row.attempts ?? 0) + 1;
     const status = attempts >= max ? ("failed" as const) : ("pending" as const);
     await ctx.db.patch(args.notificationId, { status, attempts });
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      action: status === "failed" ? "notification_failed" : "notification_retry",
-      entityType: "notification",
-      entityId: row.dedupeKey,
-      fromState: row.status,
-      toState: status,
-      createdAt: nowIso,
-    });
+    await auditNotification(
+      ctx,
+      row.dedupeKey,
+      status === "failed" ? "notification_failed" : "notification_retry",
+      status,
+      nowIso,
+      row.status,
+    );
     return { status, attempts };
   },
 });
