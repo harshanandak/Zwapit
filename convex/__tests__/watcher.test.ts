@@ -633,6 +633,134 @@ describe("getAlertPayoff — live payoff with deep-link OUT", () => {
   });
 });
 
+describe("expireWants — close a target once every subscriber's date has passed (zwapit-46i.1)", () => {
+  // Watch date is 2026-06-25; this "now" is years later so the alert is unambiguously
+  // past its watch window (mirrors POLL_NOW — only the watch DATE is fixed in fixtures).
+  const PAST_EXPIRY_NOW = "2030-01-01T00:00:00.000Z";
+
+  test("the only subscriber's past-date alert → want expired + target closed", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const { wantKey } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_1",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+
+    const res = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(res.expired).toBe(1);
+    expect(res.closed).toBe(1);
+
+    const { target, want } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      want: (await ctx.db.query("wants").collect()).find((w) => w.wantKey === wantKey),
+    }));
+    expect(target?.status).toBe("closed");
+    expect(target?.subscriberCount).toBe(0);
+    expect(want?.state).toBe("expired");
+    expect(want?.monitorTargetId).toBeUndefined();
+  });
+
+  test("two subscribers on the same past-date target → both expired, target closed once", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+
+    const res = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(res.expired).toBe(2);
+    expect(res.closed).toBe(1); // one shared target closes exactly once
+
+    const { target, wants } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      wants: await ctx.db.query("wants").collect(),
+    }));
+    expect(target.status).toBe("closed");
+    expect(target.subscriberCount).toBe(0);
+    expect(wants.every((w) => w.state === "expired")).toBe(true);
+  });
+
+  test("a show TODAY is NOT expired — UTC end-of-day grace keeps it watching", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    // "now" is the morning of the watch date → end-of-day is still ahead, so a
+    // bare-date expiresAt must NOT lexically expire the same-day show.
+    const res = await tt.action(internal.watcher.expireWants, {
+      now: "2026-06-25T06:00:00.000Z",
+    });
+    expect(res.expired).toBe(0);
+
+    const { target, want } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      want: (await ctx.db.query("wants").collect())[0],
+    }));
+    expect(target.status).toBe("watching");
+    expect(want.state).toBe("open");
+  });
+
+  test("idempotent — a second run expires nothing new and leaves the target closed", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+    });
+
+    const first = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(first.expired).toBe(1);
+    const second = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(second.expired).toBe(0);
+    expect(second.closed).toBe(0);
+
+    const target = await tt.run(
+      async (ctx) => (await ctx.db.query("monitor_targets").collect())[0],
+    );
+    expect(target.status).toBe("closed");
+  });
+
+  test("stops past-date polling — a closed target is no longer polled", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+
+    // Even with an OPEN fetcher, a closed target is excluded from dueTargets → no poll.
+    __setFetcher(fetcherReturning(openBmsJson()));
+    const poll = await tt.action(internal.watcher.pollDueTargets, { now: PAST_EXPIRY_NOW });
+    expect(poll.polled).toBe(0);
+    expect(poll.detected).toBe(0);
+  });
+});
+
 describe("crons — poll job registered (Task 10)", () => {
   test("poll-availability is scheduled on an interval to watcher.pollDueTargets", () => {
     const registered = (crons as unknown as {
@@ -646,5 +774,8 @@ describe("crons — poll job registered (Task 10)", () => {
 
     const dispatch = registered["dispatch-notifications"];
     expect(dispatch?.name).toBe("watcher:dispatchNotifications");
+
+    const expire = registered["expire-wants"];
+    expect(expire?.name).toBe("watcher:expireWants");
   });
 });

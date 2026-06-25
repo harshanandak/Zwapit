@@ -30,4 +30,14 @@ crons.interval(
   {},
 );
 
+// Expire alert wants once their watch date is fully past: detach each from its
+// shared target and close the target when its subscriber count hits 0 — which
+// also stops past-date polling. Hourly is ample (expiry is date-granular).
+crons.interval(
+  "expire-wants",
+  { hours: 1 },
+  internal.watcher.expireWants,
+  {},
+);
+
 export default crons;

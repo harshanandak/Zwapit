@@ -18,7 +18,7 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import {
   internalAction,
@@ -564,10 +564,47 @@ export const rescheduleTarget = internalMutation({
 });
 
 /**
- * Remove a subscriber (expired/cancelled want) from a target: clears the link and
- * decrements subscriberCount. When the count reaches 0 the target → closed
- * (design §Edge: out-of-window / expired alert). Live targets still close when
- * empty (no one left to notify).
+ * Detach a want from its monitor target: clear the link and decrement
+ * subscriberCount. When the count reaches 0 the target → closed (design §Edge:
+ * out-of-window / expired alert) and we audit the transition. Live targets still
+ * close when empty (no one left to notify). The CALLER decides the want's own
+ * terminal state (cancelled vs expired), so this core never touches want.state.
+ * Shared by removeSubscriber (cancel path) and expireWant (expiry path).
+ */
+async function detachSubscriberCore(
+  ctx: MutationCtx,
+  want: Doc<"wants">,
+  nowIso: string,
+): Promise<{ closed: boolean }> {
+  if (!want.monitorTargetId) return { closed: false };
+
+  const targetId = want.monitorTargetId as Id<"monitor_targets">;
+  const target = await ctx.db.get(targetId);
+  await ctx.db.patch(want._id, { monitorTargetId: undefined });
+  if (!target) return { closed: false };
+
+  const subscriberCount = Math.max(0, target.subscriberCount - 1);
+  if (subscriberCount === 0 && target.status !== "closed") {
+    await ctx.db.patch(target._id, { subscriberCount, status: "closed", lastCheckedAt: nowIso });
+    await appendWatcherAuditLog(ctx, {
+      actorId: "system",
+      action: "monitor_target_closed",
+      entityType: "monitor_target",
+      entityId: target.collapseKey,
+      fromState: target.status,
+      toState: "closed",
+      createdAt: nowIso,
+    });
+    return { closed: true };
+  }
+  await ctx.db.patch(target._id, { subscriberCount });
+  return { closed: false };
+}
+
+/**
+ * Remove a subscriber (cancelled want) from a target: clears the link and
+ * decrements subscriberCount, closing the target at 0. Kept as the generic
+ * detach entry point (e.g. a future cancel-alert flow); expiry uses expireWant.
  */
 export const removeSubscriber = internalMutation({
   args: { wantKey: v.string(), now: v.optional(v.string()) },
@@ -577,29 +614,8 @@ export const removeSubscriber = internalMutation({
       .query("wants")
       .withIndex("by_key", (q) => q.eq("wantKey", args.wantKey))
       .unique();
-    if (!want || !want.monitorTargetId) return { closed: false };
-
-    const targetId = want.monitorTargetId as Id<"monitor_targets">;
-    const target = await ctx.db.get(targetId);
-    await ctx.db.patch(want._id, { monitorTargetId: undefined });
-    if (!target) return { closed: false };
-
-    const subscriberCount = Math.max(0, target.subscriberCount - 1);
-    if (subscriberCount === 0 && target.status !== "closed") {
-      await ctx.db.patch(target._id, { subscriberCount, status: "closed", lastCheckedAt: nowIso });
-      await appendWatcherAuditLog(ctx, {
-        actorId: "system",
-        action: "monitor_target_closed",
-        entityType: "monitor_target",
-        entityId: target.collapseKey,
-        fromState: target.status,
-        toState: "closed",
-        createdAt: nowIso,
-      });
-      return { closed: true };
-    }
-    await ctx.db.patch(target._id, { subscriberCount });
-    return { closed: false };
+    if (!want) return { closed: false };
+    return await detachSubscriberCore(ctx, want, nowIso);
   },
 });
 
@@ -629,6 +645,89 @@ export const dueTargets = internalQuery({
         (!t.windowEnd || t.windowEnd >= nowIso) &&
         (!t.windowStart || t.windowStart <= nowIso),
     );
+  },
+});
+
+// ===========================================================================
+// INTERNAL expiry/close: expireWants (zwapit-46i.1)
+// ===========================================================================
+
+/**
+ * The instant a watch date is fully past. A want's `expiresAt` on the alert path
+ * is the bare watch DATE (YYYY-MM-DD); comparing that string directly against an
+ * ISO `now` would lexically expire a same-day show ("2026-06-25" < "2026-06-25T..").
+ * So a bare date becomes end-of-day. The UTC end-of-day is intentionally ~5.5h
+ * LATER than IST midnight — it errs toward keeping a same-day alert alive so a
+ * last-minute open can still fire; do NOT "fix" this into early IST expiry.
+ * A value that is already a full timestamp is compared as-is.
+ */
+function endOfWatchDay(expiresAt: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(expiresAt) ? `${expiresAt}T23:59:59.999Z` : expiresAt;
+}
+
+/**
+ * Open alert wants whose watch date has fully passed. Scans the oldest open wants
+ * (most likely expired) and keeps only ALERT wants (monitorTargetId set) past
+ * end-of-watch-day. Non-alert demand wants are left alone (separate lifecycle).
+ */
+export const expiredAlertWants = internalQuery({
+  args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const limit = args.limit ?? 100;
+    const open = await ctx.db
+      .query("wants")
+      .withIndex("by_state_created", (q) => q.eq("state", "open"))
+      .take(limit);
+    return open
+      .filter((w) => Boolean(w.monitorTargetId) && endOfWatchDay(w.expiresAt) < nowIso)
+      .map((w) => ({ wantKey: w.wantKey }));
+  },
+});
+
+/**
+ * Expire one alert want: mark it `expired` and detach it from its shared target
+ * (closing the target when its subscriber count hits 0). Idempotent — a want that
+ * is not `open` is a no-op, so re-runs neither double-decrement nor reopen a
+ * closed target. Atomic: state + detach commit in one mutation.
+ */
+export const expireWant = internalMutation({
+  args: { wantKey: v.string(), now: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const want = await ctx.db
+      .query("wants")
+      .withIndex("by_key", (q) => q.eq("wantKey", args.wantKey))
+      .unique();
+    if (!want || want.state !== "open") return { expired: false, closed: false };
+    const { closed } = await detachSubscriberCore(ctx, want, nowIso);
+    await ctx.db.patch(want._id, { state: "expired" });
+    return { expired: true, closed };
+  },
+});
+
+/**
+ * Cron entry point: expire every alert want past its watch date and close the
+ * targets that empty out — which also STOPS past-date polling, since dueTargets
+ * only returns `watching` targets. Thin action over the query + per-want mutation
+ * (actions have no ctx.db), matching pollDueTargets/dispatchNotifications.
+ */
+export const expireWants = internalAction({
+  args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ expired: number; closed: number }> => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const stale = await ctx.runQuery(internal.watcher.expiredAlertWants, {
+      now: nowIso,
+      ...(args.limit !== undefined ? { limit: args.limit } : {}),
+    });
+    let expired = 0;
+    let closed = 0;
+    for (const { wantKey } of stale) {
+      const r = await ctx.runMutation(internal.watcher.expireWant, { wantKey, now: nowIso });
+      if (r.expired) expired += 1;
+      if (r.closed) closed += 1;
+    }
+    return { expired, closed };
   },
 });
 
