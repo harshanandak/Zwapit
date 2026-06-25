@@ -182,20 +182,35 @@ export const createAlert = mutation({
     const catalogItem = await catalogItemByKey(ctx, args.catalogItemId);
     if (!catalogItem) throw new Error("CATALOG_ITEM_NOT_FOUND");
 
+    // Validate + normalize client input before it flows into the collapse key,
+    // monitor_targets, wants.expiresAt and source URLs (coding guideline: validate
+    // all user input). Trim so semantically-identical alerts collapse; reject an
+    // empty city or malformed date so we never persist an uncollapsible/inert alert.
+    const city = args.city.trim();
+    const date = args.date.trim();
+    const format = args.format?.trim() || undefined;
+    if (!city) throw new Error("ALERT_CITY_REQUIRED");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
+      throw new Error("ALERT_DATE_INVALID");
+    }
+
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
     const collapseKey = computeCollapseKey({
       catalogItemId: args.catalogItemId,
-      city: args.city,
-      date: args.date,
-      format: args.format,
+      city,
+      date,
+      format,
     });
 
     // Platform routing: a target only watches sources whose codes the catalog row
     // actually has (design §Edge: one source has the show).
     const sources: Array<"bms" | "district"> = [];
-    if (buildBmsUrl(catalogItem, args.date) !== null) sources.push("bms");
-    if (buildDistrictUrl(catalogItem, args.date) !== null) sources.push("district");
+    if (buildBmsUrl(catalogItem, date) !== null) sources.push("bms");
+    if (buildDistrictUrl(catalogItem, date) !== null) sources.push("district");
+    // Reject alerts that no official source can watch — otherwise pollDueTargets
+    // fetches nothing and reschedules forever, leaving the user an inert alert.
+    if (sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
 
     // ---- find-or-create the shared monitor target ----
     let target = await monitorTargetByCollapseKey(ctx, collapseKey);
@@ -204,9 +219,9 @@ export const createAlert = mutation({
       const insertedId = await ctx.db.insert("monitor_targets", {
         collapseKey,
         catalogItemId: args.catalogItemId,
-        city: args.city,
-        date: args.date,
-        ...(args.format ? { format: args.format } : {}),
+        city,
+        date,
+        ...(format ? { format } : {}),
         sources,
         status: "watching",
         subscriberCount: 0,
@@ -239,9 +254,9 @@ export const createAlert = mutation({
     let isNewSubscriber = false;
     if (existingForBuyer) {
       await ctx.db.patch(existingForBuyer._id, {
-        watchCity: args.city,
-        watchDate: args.date,
-        ...(args.format ? { watchFormat: args.format } : {}),
+        watchCity: city,
+        watchDate: date,
+        ...(format ? { watchFormat: format } : {}),
         alertTypes: [...alertTypes],
         channels: [...channels],
         monitorTargetId: targetId,
@@ -258,11 +273,11 @@ export const createAlert = mutation({
         quantity: 1,
         maxPricePerUnit: 0,
         state: "open",
-        expiresAt: args.date,
+        expiresAt: date,
         createdAt: nowIso,
-        watchCity: args.city,
-        watchDate: args.date,
-        ...(args.format ? { watchFormat: args.format } : {}),
+        watchCity: city,
+        watchDate: date,
+        ...(format ? { watchFormat: format } : {}),
         alertTypes: [...alertTypes],
         channels: [...channels],
         monitorTargetId: targetId,

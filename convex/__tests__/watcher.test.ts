@@ -188,6 +188,34 @@ describe("createAlert — shared monitor target collapse", () => {
       }),
     ).rejects.toThrow("AUTH_REQUIRED");
   });
+
+  test("rejects an alert no official source can watch (NO_WATCHABLE_SOURCE)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt, "catalog_no_codes", {}); // no bms/district codes → no watchable source
+    await expect(
+      tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_no_codes",
+        city: "mumbai",
+        date: "2026-06-25",
+      }),
+    ).rejects.toThrow("NO_WATCHABLE_SOURCE");
+    const targets = await tt.run((ctx) => ctx.db.query("monitor_targets").collect());
+    expect(targets).toHaveLength(0); // no inert target persisted
+  });
+
+  test("rejects a malformed date (ALERT_DATE_INVALID)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await expect(
+      tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_1",
+        city: "mumbai",
+        date: "25-06-2026",
+      }),
+    ).rejects.toThrow("ALERT_DATE_INVALID");
+  });
 });
 
 describe("recordAvailability — detection → live + snapshot dedup", () => {
