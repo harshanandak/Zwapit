@@ -82,7 +82,7 @@ const allowedFirstSlicePaths = [
   /^tests\//,
   /^src\/components\//,
   /^src\/layouts\//,
-  /^src\/lib\/(auth|convex|flow|mock|rules|state|types|ui|validation)/,
+  /^src\/lib\/(auth|catalog|convex|flow|mock|rules|state|types|ui|validation)/,
   /^src\/pages\/(admin|app|index\.astro)/,
   /^src\/styles\//,
 ];

@@ -108,6 +108,8 @@ const catalogSource = v.union(
   v.literal("manual"),
   v.literal("google_places"),
   v.literal("user_submission"),
+  v.literal("bookmyshow"),
+  v.literal("district"),
 );
 
 const wantState = v.union(
@@ -335,6 +337,8 @@ export default defineSchema({
     imageUrl: v.optional(v.string()),
     isActive: v.boolean(),
     lastSyncedAt: v.string(),
+    // Source sitemap <lastmod> for incremental crawl diffs (skip unchanged entities next run).
+    sourceLastmod: v.optional(v.string()),
   })
     .index("by_key", ["catalogKey"])
     .index("by_kind_active", ["kind", "isActive"])
