@@ -217,6 +217,9 @@ export const defaultParallelFetch: ParallelFetcher = async (urls) => {
       "x-api-key": apiKey,
     },
     body: JSON.stringify({ urls, full_content: true }),
+    // Cap the call so a hung api.parallel.ai can't stall the poll loop — a timeout
+    // rejects like any fetch error and is handled upstream as a source failure.
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {

@@ -824,11 +824,10 @@ export const notificationMessageParts = internalQuery({
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.notificationId);
     if (!row) return null;
-    const event = await ctx.db
-      .query("availability_events")
-      .withIndex("by_target", (q) => q.eq("monitorTargetId", row.monitorTargetId))
-      .order("desc")
-      .first();
+    // Use the notification's OWN event (it was enqueued for a specific
+    // availability_event), not the latest event on the target — otherwise a later
+    // detection would rewrite this notification's deep-link / theatre / time.
+    const event = await ctx.db.get(row.availabilityEventId as Id<"availability_events">);
     const target = await ctx.db.get(row.monitorTargetId as Id<"monitor_targets">);
     const catalogItem = target
       ? await ctx.db
