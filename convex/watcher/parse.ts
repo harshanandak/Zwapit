@@ -196,7 +196,10 @@ export function computeCollapseKey(input: {
 export function snapshotHash(shows: NormalizedShow[]): string {
   const tuples = shows
     .map((s) => [s.source, s.theatreName, s.showTime, s.format].join(""))
-    .sort();
+    // Explicit code-point comparator (S2871): deterministic + environment-
+    // independent, unlike localeCompare. Matches default sort order exactly, so
+    // the hash value is unchanged — we only need a STABLE order for hashing.
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const serialized = tuples.join("");
 
   // Deterministic 32-bit FNV-1a-ish hash -> hex. No crypto needed (not a
