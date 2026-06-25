@@ -623,7 +623,12 @@ export const dueTargets = internalQuery({
         q.eq("status", "watching").lte("nextCheckAt", nowIso),
       )
       .take(limit);
-    return candidates.filter((t) => !t.windowEnd || t.windowEnd >= nowIso);
+    // In-window on BOTH sides: not past windowEnd, and not before windowStart.
+    return candidates.filter(
+      (t) =>
+        (!t.windowEnd || t.windowEnd >= nowIso) &&
+        (!t.windowStart || t.windowStart <= nowIso),
+    );
   },
 });
 
