@@ -213,11 +213,17 @@ describe("watcher e2e — by-event BMS routing", () => {
     });
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, ALERT_ARGS);
 
-    // The injected fetcher echoes the SAME open ShowDetails fixture for whatever
-    // URL is requested — here that URL is the byevent endpoint.
-    __setFetcher(fetcherReturning(openBmsJson()));
+    // Capture the URLs the poll requests so we can assert it actually routed
+    // through the BYEVENT endpoint (eventCode+regionCode → byevent, not byvenue),
+    // preventing a routing regression from slipping past a detection-only check.
+    const requested: string[] = [];
+    __setFetcher(async (urls: string[]) => {
+      requested.push(...urls);
+      return { results: urls.map((url) => ({ url, content: openBmsJson() })) };
+    });
     const poll = await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
     expect(poll.detected).toBe(1);
+    expect(requested.some((u) => u.includes("/api/movies-data/showtimes-by-event"))).toBe(true);
 
     const { target, events } = await tt.run(async (ctx) => ({
       target: (await ctx.db.query("monitor_targets").collect())[0],
