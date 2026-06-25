@@ -248,13 +248,15 @@ const WATCHER_DEMO = {
 // Bare-called from the handler (no branch -> no S3776 regrowth). Replicates the
 // createAlert internals: catalog row -> shared monitor target (find-or-create on
 // collapseKey) -> linked alert want (find-or-create on wantKey).
-async function seedWatcherDemo(ctx: MutationCtx): Promise<void> {
+async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
+  let inserted = false;
   // 1. Catalog movie carrying BOTH sources' codes. Idempotent by catalogKey.
   const existingCatalog = await ctx.db
     .query("catalog_items")
     .withIndex("by_key", (q) => q.eq("catalogKey", WATCHER_DEMO.catalogKey))
     .unique();
   if (!existingCatalog) {
+    inserted = true;
     await ctx.db.insert("catalog_items", {
       catalogKey: WATCHER_DEMO.catalogKey,
       kind: "movie",
@@ -306,6 +308,7 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<void> {
     .withIndex("by_key", (q) => q.eq("wantKey", wantKey))
     .unique();
   if (!existingWant) {
+    inserted = true;
     await ctx.db.insert("wants", {
       wantKey,
       buyerId: WATCHER_DEMO.buyerId,
@@ -325,6 +328,7 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<void> {
     });
     await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
   }
+  return inserted;
 }
 
 export const seedDemoFixture = mutation({
@@ -472,7 +476,7 @@ export const seedDemoFixture = mutation({
     await seedWants(ctx);
     await seedWantMatches(ctx);
     await seedReferrals(ctx);
-    await seedWatcherDemo(ctx);
+    created = (await seedWatcherDemo(ctx)) || created;
 
     // orders
     const order = fixture.order;
