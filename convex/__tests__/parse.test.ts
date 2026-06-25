@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   AVAIL_STATUS_MAP,
   computeCollapseKey,
+  officialBookingUrl,
   parseBmsByEvent,
   parseBmsByVenue,
   parseDistrictMovieCity,
@@ -203,5 +204,31 @@ describe("snapshotHash", () => {
 
   test("empty set has a stable hash", () => {
     expect(snapshotHash([])).toBe(snapshotHash([]));
+  });
+});
+
+describe("officialBookingUrl — deep-link allowlist", () => {
+  test("keeps an https BookMyShow / District URL", () => {
+    expect(officialBookingUrl("https://in.bookmyshow.com/movies/x/ET1")).toBe(
+      "https://in.bookmyshow.com/movies/x/ET1",
+    );
+    expect(officialBookingUrl("https://www.district.in/movies/y")).toBe(
+      "https://www.district.in/movies/y",
+    );
+  });
+
+  test("drops non-https, non-official host, unsafe scheme, and malformed values", () => {
+    for (const u of [
+      "http://in.bookmyshow.com/x", // not https
+      "https://evil.com/in.bookmyshow.com", // wrong host
+      "javascript:alert(1)",
+      "data:text/html,x",
+      "not a url",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(officialBookingUrl(u as string)).toBe("");
+    }
   });
 });

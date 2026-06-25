@@ -186,6 +186,29 @@ export function computeCollapseKey(input: {
   return [input.catalogItemId, input.city, input.date, input.format ?? ""].join("|");
 }
 
+const OFFICIAL_BOOKING_HOSTS = ["bookmyshow.com", "district.in"];
+
+/**
+ * Allowlist a deep-link OUT before it is persisted or returned: only an https URL
+ * on an official BookMyShow/District host survives; any other host, non-https
+ * scheme (javascript:/data:/…), or malformed value collapses to "" — so we never
+ * store or hand a client an arbitrary/unsafe URL. Defense-in-depth: the render
+ * side (alertPayoff.safeBookingHref) guards too.
+ */
+export function officialBookingUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "";
+  }
+  if (parsed.protocol !== "https:") return "";
+  const host = parsed.hostname.toLowerCase();
+  const ok = OFFICIAL_BOOKING_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  return ok ? url : "";
+}
+
 /**
  * Stable hash of a NARROW projection of the shows (source + theatre + showtime +
  * format + open-flag) — NOT the raw NormalizedShow[]. Excludes `bookingUrl`

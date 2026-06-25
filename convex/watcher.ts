@@ -48,6 +48,7 @@ import {
   computeCollapseKey,
   parseBmsByVenue,
   parseDistrictMovieCity,
+  officialBookingUrl,
   snapshotHash,
   unionAndDedupe,
   type UnionResult,
@@ -335,7 +336,9 @@ export const recordAvailability = internalMutation({
       source: args.source,
       detectedAt: args.detectedAt,
       theatresJson: JSON.stringify(args.normalized),
-      bookingUrl: args.bookingUrl,
+      // Allowlist the deep-link before persisting — only official https BMS/District
+      // URLs survive; anything unsafe collapses to "" (defense-in-depth, A03/A10).
+      bookingUrl: officialBookingUrl(args.bookingUrl),
       snapshotHash: args.snapshotHash,
     });
 
