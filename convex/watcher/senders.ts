@@ -83,7 +83,7 @@ export function buildLiveMessage(parts: {
  * `null` if the module is absent at runtime. This is only ever reached when a
  * sender's env key IS set (i.e. someone configured real credentials).
  */
-async function loadOptionalModule(name: string): Promise<unknown | null> {
+async function loadOptionalModule(name: string): Promise<Record<string, unknown> | null> {
   // Indirection: a non-literal specifier types as `any` and is not statically
   // resolved by tsc, so this file stays clean with `resend`/`web-push` absent.
   const specifier: string = name;
@@ -98,27 +98,17 @@ async function loadOptionalModule(name: string): Promise<unknown | null> {
  * Default email sender via Resend. NO-OP + { skipped:true } when RESEND_API_KEY
  * is unset (the env check comes FIRST — no package is touched in that case).
  */
-const emailSender: Sender = async (message) => {
+const emailSender: Sender = async (_message) => {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     return { skipped: true, reason: "RESEND_API_KEY unset — email no-op" };
   }
-  // Real-send branch (only with a configured key; never exercised in tests).
-  const mod = (await loadOptionalModule("resend")) as
-    | { Resend?: new (key: string) => unknown }
-    | null;
-  if (!mod || typeof mod.Resend !== "function") {
-    return { skipped: true, reason: "resend package not installed" };
-  }
-  const client = new mod.Resend(apiKey) as {
-    emails: { send: (args: Record<string, unknown>) => Promise<unknown> };
-  };
-  await client.emails.send({
-    from: process.env.RESEND_FROM ?? "alerts@zwapit.app",
-    subject: message.title,
-    text: `${message.body}\n\n${message.url}`,
-  });
-  return { sent: true };
+  // Recipient plumbing isn't built yet: NotificationMessage carries no `to`, and
+  // dispatchNotifications doesn't resolve a per-user email address. Calling Resend
+  // without a recipient would fail, so this is a deliberate no-op even with a key
+  // set, until recipient support exists (follow-up). Senders are dependency-
+  // injected, so this default branch is never exercised in tests.
+  return { skipped: true, reason: "email recipient plumbing not implemented — no-op" };
 };
 
 /**

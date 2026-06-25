@@ -50,7 +50,7 @@ Ran Parallel Extract directly against the BMS endpoints with the live key:
 | 6 | `in.bookmyshow.com/api/v2/mobile/venues?regionCode=<RC>&eventType=MT` | **JSON** | mobile UA | `arrVenue[]` / `venues[]` → `VenueCode`, `VenueName` (129 venues for BANG) | **JSON live (residential)** | **REUSE for venue seeding** |
 | 7 | `in.bookmyshow.com/api/movies/v1/synopsis/init?eventcode=ET<code>&channel=mobile` | **JSON** | mobile UA | `meta.event.eventName` (resolved "Spider-Man: No Way Home") | **JSON live (residential)** | **REUSE** — ET-code → title resolver |
 | 8 | `in.bookmyshow.com/api/movies/v1/cinema/showcase?vc=<VC>` | **JSON** | mobile UA | `data.venueName` | **JSON live (residential)** | REFERENCE — venue-code → name |
-| 9 | `in.bookmyshow.com/serv/getData?cmd=GETREGIONS` / `cmd=QUICKBOOK&type=MT` (Cookie `Rgn=|Code=<RC>|`) | **JS-blob / JSON** | legacy; QUICKBOOK needs `Rgn` cookie | `var regionlst` city map; `moviesData` now-showing | **Partly live (legacy 2018 path); GETREGIONS is JS-wrapped, not pure JSON** | REFERENCE only |
+| 9 | `in.bookmyshow.com/serv/getData?cmd=GETREGIONS` / `cmd=QUICKBOOK&type=MT` (Cookie `Rgn=\|Code=<RC>\|`) | **JS-blob / JSON** | legacy; QUICKBOOK needs `Rgn` cookie | `var regionlst` city map; `moviesData` now-showing | **Partly live (legacy 2018 path); GETREGIONS is JS-wrapped, not pure JSON** | REFERENCE only |
 | 10 | `in.bookmyshow.com/pwa/api/de/venues?regionCode=<RC>&eventType=MT` | JSON | — | (was venue list) | **DEAD — HTTP 400 `0xa`** | **IGNORE** (use #6) |
 | 11 | `api.insider.in/...` / `api.district.in/...` (District/Insider) | — | — | — | **DEAD — NXDOMAIN / host gone; Insider sunsetting into District** | **IGNORE** — District has no OSS JSON; see §6 |
 
