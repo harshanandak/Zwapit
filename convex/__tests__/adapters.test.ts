@@ -118,8 +118,11 @@ describe("targetSourceUrls — platform routing", () => {
     const urls = targetSourceUrls(movieBothSources, DATE, { cacheBust: 5 });
     expect(urls).toHaveLength(2);
     expect(urls).toEqual([
-      { source: "bms", url: buildBmsUrl(movieBothSources, DATE, { cacheBust: 5 }) },
-      { source: "district", url: buildDistrictUrl(movieBothSources, DATE) },
+      // movieBothSources carries both code sets, so both builders return a string
+      // (never null) — assert non-null so this matches SourceUrl.url: string under
+      // the strict convex tsconfig CI typechecks with.
+      { source: "bms", url: buildBmsUrl(movieBothSources, DATE, { cacheBust: 5 })! },
+      { source: "district", url: buildDistrictUrl(movieBothSources, DATE)! },
     ]);
   });
 
