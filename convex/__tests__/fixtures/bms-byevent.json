@@ -1,0 +1,34 @@
+{
+  "ShowDetails": [
+    {
+      "Event": [
+        {
+          "EventTitle": "He-Man and The Masters of The Universe",
+          "EventCode": "ET00491386",
+          "ChildEvents": [
+            {
+              "EventDimension": "2D",
+              "EventLanguage": "English",
+              "EventCode": "ET00491386",
+              "ShowTimes": [
+                {
+                  "ShowTime": "11:00",
+                  "Availability": "A",
+                  "AvailStatus": 3,
+                  "MinPrice": 180,
+                  "MaxPrice": 320,
+                  "SessionId": "E1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "VenueCode": "CSWO",
+      "VenueName": "Cinepolis: Seawoods, Navi Mumbai"
+    }
+  ],
+  "ShowDatesArray": [
+    { "DateCode": "20260622", "isDisabled": false }
+  ]
+}

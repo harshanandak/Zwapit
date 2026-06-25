@@ -178,6 +178,142 @@ export async function appendAuditLog(ctx: MutationCtx, event: AuditEvent): Promi
   });
 }
 
+// ---- Official-availability watcher helpers (design 2026-06-22) -------------
+//
+// These EXTEND model.ts (no existing export is altered). The shared
+// `AuditEvent` type in src/lib/types.ts (a shared, ownership-gated type) does
+// NOT yet include the watcher entity types, so the watcher logs through its own
+// strongly-typed helper below instead of widening that shared union. The
+// audit_logs SCHEMA union already accepts these entity types (schema.ts).
+
+// Entity types the watcher audits. Mirrors the additive schema union; kept
+// narrow so a typo can't write a non-watcher entityType through this path.
+export type WatcherAuditEntityType =
+  | "monitor_target"
+  | "availability_event"
+  | "notification";
+
+export interface WatcherAuditEvent {
+  actorId: string;
+  action: string;
+  entityType: WatcherAuditEntityType;
+  entityId: string;
+  fromState?: string;
+  toState?: string;
+  createdAt: string;
+}
+
+/**
+ * Append a watcher audit row. All watcher transitions are system-driven, so the
+ * actorRole is always "system". Reuses the same monotonic seq as appendAuditLog
+ * (single audit_logs.by_seq sequence) so the watcher's events interleave with
+ * order/listing events in one ordered, append-only log (design §A09).
+ */
+export async function appendWatcherAuditLog(
+  ctx: MutationCtx,
+  event: WatcherAuditEvent,
+): Promise<void> {
+  const last = await ctx.db.query("audit_logs").withIndex("by_seq").order("desc").first();
+  const seq = (last?.seq ?? 0) + 1;
+  await ctx.db.insert("audit_logs", {
+    actorId: event.actorId,
+    actorRole: "system",
+    action: event.action,
+    entityType: event.entityType,
+    entityId: event.entityId,
+    fromState: event.fromState,
+    toState: event.toState,
+    seq,
+    createdAt: event.createdAt,
+  });
+}
+
+/**
+ * Find the single shared monitor_targets row for a collapseKey, or null. The
+ * collapse key (catalogItemId|city|date|format) is the find-or-create idempotency
+ * anchor: many alerts on the same show collapse to ONE watcher (design §2). Uses
+ * `.first()` (not `.unique()`) so a rare concurrent double-insert degrades to
+ * "reuse the earliest" rather than throwing.
+ */
+export async function monitorTargetByCollapseKey(
+  ctx: MutationCtx,
+  collapseKey: string,
+): Promise<Doc<"monitor_targets"> | null> {
+  return await ctx.db
+    .query("monitor_targets")
+    .withIndex("by_collapse_key", (q) => q.eq("collapseKey", collapseKey))
+    .first();
+}
+
+/** The catalog row backing a want/alert, by its public catalogKey. Null if absent. */
+export async function catalogItemByKey(
+  ctx: MutationCtx,
+  catalogKey: string,
+): Promise<Doc<"catalog_items"> | null> {
+  return await ctx.db
+    .query("catalog_items")
+    .withIndex("by_key", (q) => q.eq("catalogKey", catalogKey))
+    .unique();
+}
+
+/** Last cached snapshot hash for a (target, source), or null if never fetched. */
+export async function sourceSnapshotFor(
+  ctx: MutationCtx,
+  monitorTargetId: string,
+  source: "bms" | "district",
+): Promise<Doc<"source_snapshots"> | null> {
+  return await ctx.db
+    .query("source_snapshots")
+    .withIndex("by_target_source", (q) =>
+      q.eq("monitorTargetId", monitorTargetId).eq("source", source),
+    )
+    .unique();
+}
+
+/** Upsert the per-(target, source) snapshot cache used to suppress unchanged polls. */
+export async function upsertSourceSnapshot(
+  ctx: MutationCtx,
+  args: {
+    monitorTargetId: string;
+    source: "bms" | "district";
+    snapshotHash: string;
+    fetchedAt: string;
+  },
+): Promise<void> {
+  const existing = await sourceSnapshotFor(ctx, args.monitorTargetId, args.source);
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      snapshotHash: args.snapshotHash,
+      fetchedAt: args.fetchedAt,
+    });
+    return;
+  }
+  await ctx.db.insert("source_snapshots", args);
+}
+
+/** The most recent availability_event for a target (the one a late subscriber fires from). */
+export async function latestAvailabilityEvent(
+  ctx: MutationCtx,
+  monitorTargetId: string,
+): Promise<Doc<"availability_events"> | null> {
+  return await ctx.db
+    .query("availability_events")
+    .withIndex("by_target", (q) => q.eq("monitorTargetId", monitorTargetId))
+    .order("desc")
+    .first();
+}
+
+/** Subscribed wants (alerts) pointing at a monitor target. */
+export async function subscribersForTarget(
+  ctx: MutationCtx,
+  monitorTargetId: string,
+): Promise<Array<Doc<"wants">>> {
+  return await ctx.db
+    .query("wants")
+    .withIndex("by_monitor_target", (q) => q.eq("monitorTargetId", monitorTargetId))
+    .collect();
+}
+
 // ---- Transition helpers (load -> pure transition -> persist -> audit) ----
 
 export async function applyMockPay(ctx: MutationCtx, orderKey: string): Promise<MockOrder> {
