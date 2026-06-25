@@ -11,6 +11,7 @@
 import type * as alerts from "../alerts.js";
 import type * as authModel from "../authModel.js";
 import type * as catalog from "../catalog.js";
+import type * as catalogCrawl from "../catalogCrawl.js";
 import type * as crons from "../crons.js";
 import type * as identity from "../identity.js";
 import type * as listings from "../listings.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
   authModel: typeof authModel;
   catalog: typeof catalog;
+  catalogCrawl: typeof catalogCrawl;
   crons: typeof crons;
   identity: typeof identity;
   listings: typeof listings;

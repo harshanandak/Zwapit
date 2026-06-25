@@ -108,6 +108,8 @@ const catalogSource = v.union(
   v.literal("manual"),
   v.literal("google_places"),
   v.literal("user_submission"),
+  v.literal("bookmyshow"),
+  v.literal("district"),
 );
 
 const wantState = v.union(
@@ -378,6 +380,8 @@ export default defineSchema({
     districtCitySlug: v.optional(v.string()),
     lat: v.optional(v.number()),
     long: v.optional(v.number()),
+    // Source sitemap <lastmod> for incremental crawl diffs (skip unchanged entities next run, from #34).
+    sourceLastmod: v.optional(v.string()),
   })
     .index("by_key", ["catalogKey"])
     .index("by_kind_active", ["kind", "isActive"])
