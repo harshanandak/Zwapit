@@ -109,3 +109,63 @@ model feed back into this doc before /dev.
 - TDD scenarios (≥3) for the curated availability path.
 - DRY check: confirm the reused engine functions (createAlert, enqueue/dispatch, expire) generalize
   without forking; identify the minimal events-specific additions.
+
+## Technical Research
+
+### DRY / reuse boundary (verified against code at master `4da67c6`)
+**Generic — reuse as-is:** `monitor_targets` (collapse + state machine), `availability_events`,
+`notification_queue` + `enqueueForEvent`/`dispatchNotifications` (claim/retry/lease), `expire-wants`
+cron + `expireWants`/`detachSubscriberCore`, snapshot-hash caching, `appendWatcherAuditLog`,
+`requireAuthenticatedAppUser` (A01). None assume "movie".
+
+**`createAlert` — two movie-specific assumptions to generalize** (convex/watcher.ts):
+- `:253–257` builds `sources` from `buildBmsUrl`/`buildDistrictUrl` and throws `NO_WATCHABLE_SOURCE`
+  when none exist. **Curated events have no pollable source**, so this would wrongly reject them. Fix:
+  allow a curated target with `sources: []` (it is admin-driven, never polled) — derive "watchable"
+  from catalog kind, not only from a buildable URL.
+- `:316` hardcodes `category: "movie_ticket"` on the want insert. Fix: derive category from
+  `catalog_items.kind` (`live_event` → `event_ticket`).
+
+**Net-new (small):** an internal `markEventAvailable` mutation (admin/curated) that records an
+`availability_event` (official booking URL) + advances the target to `live` + calls `enqueueForEvent`
+— i.e. the manual analog of `pollDueTargets`→`recordAvailability`. No new tables.
+
+**Conclusion:** extend, don't fork. Generalize `createAlert` (or add a thin `createEventAlert` that
+shares a core), add `markEventAvailable`, seed curated `live_event` rows. Movie watcher untouched.
+
+### OWASP Top-10 (this slice's surface = client alert-create + payoff query + internal admin mutation)
+- **A01 Broken Access Control** — APPLIES. Payoff returns only the caller's own alert (reuse the
+  `buyerId === user.appUserId` check). The availability mutation MUST be `internalMutation` (never in
+  the client `api`); curated-admin authorization gated internally. *Mitigation:* internal-only +
+  identity checks, all audited.
+- **A03 Injection / unsafe URL** — APPLIES. `bookingUrl` allowlisted to official https BMS/District/
+  organiser hosts before persisting (reuse `officialBookingUrl`). City/date/event inputs trimmed +
+  validated (reuse the `normalizeAlertInput` pattern).
+- **A04 Insecure Design** — curated-first avoids fragile scraping; deep-link OUT only; no custody/money.
+- **A08 Data Integrity** — snapshot-hash dedup + idempotent `dedupeKey` enqueue (reused) prevent
+  duplicate/false-fire notifications.
+- **A09 Logging** — every transition writes an `audit_logs` row (reused).
+- **A10 SSRF** — NOT in this slice (no outbound fetch on the curated path). The FUTURE automated adapter
+  must allowlist source hosts and fetch only catalog-derived URLs, never user-supplied ones.
+
+### TDD scenarios (≥3)
+1. **Happy path:** seed a curated `live_event` → user sets an event alert → two subscribers collapse to
+   ONE `monitor_target` → admin `markEventAvailable` (with official URL) → exactly one pending
+   notification per subscriber × channel, each carrying the deep-link OUT → payoff returns `live` with
+   event/venue/date/bookingUrl.
+2. **Error / access control (A01):** another user's `getAlertPayoff` for this alert returns `null`;
+   `markEventAvailable` is internal-only (absent from the client `api`, only `internal`); a non-official
+   `bookingUrl` is rejected/sanitised to "".
+3. **Edge:** a curated event with NO automated source does **not** throw `NO_WATCHABLE_SOURCE` (curated
+   target allowed); a past-date event alert is expired + its target closed by `expireWants`; a late
+   subscriber arming an already-live event is notified immediately from the last `availability_event`.
+
+### Research spike — BMS/District EVENT availability endpoints (deferred to first /dev task, time-boxed)
+All prior reverse-engineering (`docs/work/2026-06-20-catalog-data-maps-research/*`) covered **movies
+only** (BMS `showtimes/byvenue` + `showtimes-by-event`; District SSR `/movies/...-MV<id>`). Whether
+BMS/District expose an **event** availability analog is **unvalidated**. Because the v1 curated path
+needs no source, the spike does **not** gate this slice — it is the **first task** (time-boxed: inspect
+a BMS event page's embedded JSON + a District event page's `__NEXT_DATA__` for an availability signal;
+note URL/payload shape or conclude "no clean API"). Output: a go/no-go + (if go) a data map that gates a
+**separate follow-up adapter slice**. Egress note: the eventual adapter must reuse shared-collapse +
+snapshot caching + conditional requests (see constraint above). If no-go, v1 ships curated-only.
