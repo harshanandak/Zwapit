@@ -100,4 +100,31 @@ describe("seedDemoFixture — watcher demo slice", () => {
     expect(targets[0].subscriberCount).toBe(1);
     expect(wants).toHaveLength(1);
   });
+
+  // events-phase2 T4: the events watcher relies on curated live_event catalog rows
+  // (no BMS/District codes → createAlert yields a curated, sources:[] target). Lock
+  // that contract so a later edit (e.g. adding source codes) can't silently break
+  // the curated path.
+  test("seeds curated live_event rows that stay alert-ready (no source codes)", async () => {
+    const tt = t();
+    await tt.mutation(api.seed.seedDemoFixture, {});
+
+    const events = await tt.run((ctx) =>
+      ctx.db
+        .query("catalog_items")
+        .withIndex("by_kind_active", (q) => q.eq("kind", "live_event").eq("isActive", true))
+        .collect(),
+    );
+
+    expect(events.length).toBeGreaterThanOrEqual(2); // Alan Walker + Coldplay
+    for (const e of events) {
+      expect(e.city).toBeTruthy();
+      expect(e.startAt).toBeTruthy();
+      // Curated: NO pollable source codes, so the watcher never polls these.
+      expect(e.bmsEventCode).toBeUndefined();
+      expect(e.bmsVenueCode).toBeUndefined();
+      expect(e.districtMvCode).toBeUndefined();
+      expect(e.districtCdCode).toBeUndefined();
+    }
+  });
 });
