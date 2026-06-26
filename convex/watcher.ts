@@ -716,7 +716,7 @@ export const expireWant = internalMutation({
   handler: async (ctx, args) => {
     const nowIso = args.now ?? new Date().toISOString();
     const want = await wantByKey(ctx, args.wantKey);
-    if (!want || want.state !== "open") return { expired: false, closed: false };
+    if (want?.state !== "open") return { expired: false, closed: false };
     const { closed } = await detachSubscriberCore(ctx, want, nowIso);
     await ctx.db.patch(want._id, { state: "expired" });
     return { expired: true, closed };
@@ -735,7 +735,7 @@ export const expireWants = internalAction({
     const nowIso = args.now ?? new Date().toISOString();
     const stale = await ctx.runQuery(internal.watcher.expiredAlertWants, {
       now: nowIso,
-      ...(args.limit !== undefined ? { limit: args.limit } : {}),
+      ...(args.limit === undefined ? {} : { limit: args.limit }),
     });
     let expired = 0;
     let closed = 0;
@@ -943,7 +943,7 @@ export const claimNotification = internalMutation({
   args: { notificationId: v.id("notification_queue"), now: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.notificationId);
-    if (!row || row.status !== "pending") return { claimed: false };
+    if (row?.status !== "pending") return { claimed: false };
     await ctx.db.patch(args.notificationId, { status: "sending" });
     return { claimed: true };
   },
