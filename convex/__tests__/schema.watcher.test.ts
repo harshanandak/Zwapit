@@ -169,4 +169,35 @@ describe("watcher schema migration", () => {
     });
     expect(id).toBeTruthy();
   });
+
+  test("curated (non-polled) availability: empty sources + source 'curated' (events)", async () => {
+    const t = testDb();
+    await t.run(async (ctx) => {
+      // A curated event target carries NO pollable source — it is admin-driven.
+      const targetId = await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_1|mumbai|2027-02-14",
+        catalogItemId: "catalog_event_1",
+        city: "mumbai",
+        date: "2027-02-14",
+        sources: [],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2026-06-26T10:00:00.000Z",
+      });
+      expect(targetId).toBeTruthy();
+
+      // Availability recorded by the curated/admin path uses source "curated".
+      const eventId = await ctx.db.insert("availability_events", {
+        monitorTargetId: "monitor_target_event_1",
+        source: "curated",
+        detectedAt: "2026-06-26T10:05:00.000Z",
+        theatresJson: JSON.stringify([
+          { theatreName: "Manpho Convention Centre", showTime: "19:00" },
+        ]),
+        bookingUrl: "https://in.bookmyshow.com/events/demo",
+        snapshotHash: "hash_curated_1",
+      });
+      expect(eventId).toBeTruthy();
+    });
+  });
 });
