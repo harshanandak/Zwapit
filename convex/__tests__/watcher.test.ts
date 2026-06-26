@@ -542,7 +542,7 @@ describe("pollDueTargets — detection + platform routing", () => {
 });
 
 describe("dispatchNotifications — sender routing", () => {
-  test("pending → sent with a mock sender; a throwing sender → failed", async () => {
+  test("pending → sent with a mock sender; a throwing sender requeues to pending (retry)", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
@@ -578,14 +578,142 @@ describe("dispatchNotifications — sender routing", () => {
 
     const dispatch = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
     expect(dispatch.sent).toBe(1);
-    expect(dispatch.failed).toBe(1);
+    expect(dispatch.failed).toBe(1); // run-level: one send threw this wave
 
     const notifs = await tt.run((ctx) => ctx.db.query("notification_queue").collect());
     const byStatus = (s: string) => notifs.filter((n) => n.status === s).length;
     expect(byStatus("sent")).toBe(1);
-    expect(byStatus("failed")).toBe(1);
+    // A single transient throw requeues to "pending" (retry), NOT terminal "failed".
+    expect(byStatus("failed")).toBe(0);
+    const requeued = notifs.find((n) => n.channel === "web_push");
+    expect(requeued?.status).toBe("pending");
+    expect(requeued?.attempts).toBe(1);
     expect(sentMessages[0].title).toBe("Tickets are live");
     expect(sentMessages[0].url).toContain("bookmyshow");
+  });
+});
+
+describe("dispatchNotifications — claim race guard + bounded retry (zwapit-46i.4)", () => {
+  const ALERT = {
+    catalogItemId: "catalog_movie_1",
+    city: "mumbai",
+    date: "2026-06-25",
+    format: "2D",
+    alertTypes: ["availability" as const],
+    channels: ["email" as const],
+  };
+
+  async function armAndOpenOne(tt: ReturnType<typeof t>) {
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, ALERT);
+    __setFetcher(fetcherReturning(openBmsJson()));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    return (await tt.run((ctx) => ctx.db.query("notification_queue").collect()))[0];
+  }
+
+  test("claim prevents double-send: a row already 'sending' is not dispatched again", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+
+    // First claim wins (pending → sending); a second claim loses (already sending).
+    // Claim at POLL_NOW so claimedAt shares the dispatch's clock — otherwise the
+    // wall-clock claim would look lease-stale to the far-future POLL_NOW dispatch.
+    const first = await tt.mutation(internal.watcher.claimNotification, {
+      notificationId: row._id,
+      now: POLL_NOW,
+    });
+    expect(first.claimed).toBe(true);
+    const second = await tt.mutation(internal.watcher.claimNotification, {
+      notificationId: row._id,
+      now: POLL_NOW,
+    });
+    expect(second.claimed).toBe(false);
+
+    // Dispatch (same clock) finds nothing claimable (fresh 'sending'), so never sends.
+    const sent: NotificationMessage[] = [];
+    __setSenders({
+      email: async (m): Promise<SenderResult> => { sent.push(m); return { sent: true }; },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+    const dispatch = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(dispatch.sent).toBe(0);
+    expect(sent).toHaveLength(0);
+
+    const after = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(after?.status).toBe("sending"); // claimed but undispatched (no double-send)
+  });
+
+  test("transient fail then success: requeued to pending, the next wave delivers it", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+
+    let calls = 0;
+    __setSenders({
+      email: async (m): Promise<SenderResult> => {
+        calls += 1;
+        if (calls === 1) throw new Error("smtp blip");
+        return { sent: true };
+      },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+
+    const d1 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(d1.sent).toBe(0);
+    expect(d1.failed).toBe(1);
+    const afterFail = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(afterFail?.status).toBe("pending"); // requeued
+    expect(afterFail?.attempts).toBe(1);
+
+    const d2 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(d2.sent).toBe(1);
+    const afterOk = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(afterOk?.status).toBe("sent");
+  });
+
+  test("persistent fail: parked as 'failed' after 3 attempts, no infinite loop", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+
+    __setSenders({
+      email: async (): Promise<SenderResult> => { throw new Error("smtp down"); },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+
+    for (let i = 0; i < 3; i++) {
+      await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    }
+    const parked = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(parked?.status).toBe("failed");
+    expect(parked?.attempts).toBe(3);
+
+    // A 4th wave finds nothing pending → no further work, no loop.
+    const d4 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
+    expect(d4.dispatched).toBe(0);
+  });
+
+  test("reclaims a stale 'sending' claim (crashed worker) and delivers it on a later wave", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+    // Simulate a worker that claimed then died: stuck "sending" with an OLD claimedAt.
+    await tt.run(async (ctx) => {
+      await ctx.db.patch(row._id, { status: "sending", claimedAt: "2030-01-01T00:00:00.000Z" });
+    });
+
+    const sent: NotificationMessage[] = [];
+    __setSenders({
+      email: async (m): Promise<SenderResult> => { sent.push(m); return { sent: true }; },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+
+    // A wave well past the 10-min lease reclaims the orphaned row and delivers it.
+    const d = await tt.action(internal.watcher.dispatchNotifications, {
+      now: "2030-01-01T00:20:00.000Z",
+    });
+    expect(d.sent).toBe(1);
+    expect(sent).toHaveLength(1);
+    const after = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(after?.status).toBe("sent");
   });
 });
 
@@ -633,6 +761,173 @@ describe("getAlertPayoff — live payoff with deep-link OUT", () => {
   });
 });
 
+describe("expireWants — close a target once every subscriber's date has passed (zwapit-46i.1)", () => {
+  // Watch date is 2026-06-25; this "now" is years later so the alert is unambiguously
+  // past its watch window (mirrors POLL_NOW — only the watch DATE is fixed in fixtures).
+  const PAST_EXPIRY_NOW = "2030-01-01T00:00:00.000Z";
+
+  test("the only subscriber's past-date alert → want expired + target closed", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const { wantKey } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_1",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+
+    const res = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(res.expired).toBe(1);
+    expect(res.closed).toBe(1);
+
+    const { target, want } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      want: (await ctx.db.query("wants").collect()).find((w) => w.wantKey === wantKey),
+    }));
+    expect(target?.status).toBe("closed");
+    expect(target?.subscriberCount).toBe(0);
+    expect(want?.state).toBe("expired");
+    expect(want?.monitorTargetId).toBeUndefined();
+  });
+
+  test("two subscribers on the same past-date target → both expired, target closed once", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+
+    const res = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(res.expired).toBe(2);
+    expect(res.closed).toBe(1); // one shared target closes exactly once
+
+    const { target, wants } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      wants: await ctx.db.query("wants").collect(),
+    }));
+    expect(target.status).toBe("closed");
+    expect(target.subscriberCount).toBe(0);
+    expect(wants.every((w) => w.state === "expired")).toBe(true);
+  });
+
+  test("a show TODAY is NOT expired — UTC end-of-day grace keeps it watching", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    // "now" is the morning of the watch date → end-of-day is still ahead, so a
+    // bare-date expiresAt must NOT lexically expire the same-day show.
+    const res = await tt.action(internal.watcher.expireWants, {
+      now: "2026-06-25T06:00:00.000Z",
+    });
+    expect(res.expired).toBe(0);
+
+    const { target, want } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      want: (await ctx.db.query("wants").collect())[0],
+    }));
+    expect(target.status).toBe("watching");
+    expect(want.state).toBe("open");
+  });
+
+  test("idempotent — a second run expires nothing new and leaves the target closed", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+    });
+
+    const first = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(first.expired).toBe(1);
+    const second = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+    expect(second.expired).toBe(0);
+    expect(second.closed).toBe(0);
+
+    const target = await tt.run(
+      async (ctx) => (await ctx.db.query("monitor_targets").collect())[0],
+    );
+    expect(target.status).toBe("closed");
+  });
+
+  test("stops past-date polling — a closed target is no longer polled", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
+
+    // Even with an OPEN fetcher, a closed target is excluded from dueTargets → no poll.
+    __setFetcher(fetcherReturning(openBmsJson()));
+    const poll = await tt.action(internal.watcher.pollDueTargets, { now: PAST_EXPIRY_NOW });
+    expect(poll.polled).toBe(0);
+    expect(poll.detected).toBe(0);
+  });
+
+  test("does not starve a later-created expired alert behind an older non-expiring want", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    // Oldest open want: a non-alert demand want (no monitorTargetId) with a FAR-FUTURE
+    // expiry. With a createdAt-ordered take(limit) prefix this fills the only slot and
+    // hides the alert behind it — the bug CodeRabbit flagged.
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("wants", {
+        wantKey: "want_demand_future",
+        buyerId: APP_A,
+        catalogItemId: "catalog_movie_1",
+        category: "movie_ticket",
+        quantity: 1,
+        maxPricePerUnit: 0,
+        state: "open",
+        expiresAt: "2999-01-01",
+        createdAt: "2000-01-01T00:00:00.000Z",
+      });
+    });
+    // Later-created alert want with a PAST watch date (createAlert stamps createdAt ~now).
+    const { wantKey } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    // limit=1 makes the starvation observable: a take(1)+filter prefix returns the
+    // future demand want → filters to empty → expired alert never reached.
+    const res = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW, limit: 1 });
+    expect(res.expired).toBe(1);
+
+    const want = await tt.run(async (ctx) =>
+      (await ctx.db.query("wants").collect()).find((w) => w.wantKey === wantKey),
+    );
+    expect(want?.state).toBe("expired");
+  });
+});
+
 describe("crons — poll job registered (Task 10)", () => {
   test("poll-availability is scheduled on an interval to watcher.pollDueTargets", () => {
     const registered = (crons as unknown as {
@@ -646,5 +941,8 @@ describe("crons — poll job registered (Task 10)", () => {
 
     const dispatch = registered["dispatch-notifications"];
     expect(dispatch?.name).toBe("watcher:dispatchNotifications");
+
+    const expire = registered["expire-wants"];
+    expect(expire?.name).toBe("watcher:expireWants");
   });
 });

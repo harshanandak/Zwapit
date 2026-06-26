@@ -18,7 +18,7 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import {
   internalAction,
@@ -35,6 +35,7 @@ import {
   monitorTargetByCollapseKey,
   subscribersForTarget,
   upsertSourceSnapshot,
+  wantByKey,
 } from "./model";
 import {
   buildBmsUrl,
@@ -63,6 +64,13 @@ import type { NormalizedShow } from "./watcher/types";
 
 // Degrade threshold: K consecutive empty/blocked polls → "degraded" (design §Edge).
 const DEGRADE_AFTER = 3;
+// Max delivery attempts before a notification is parked as permanently "failed".
+const MAX_NOTIFICATION_ATTEMPTS = 3;
+// How long a "sending" claim is honored before a later dispatch wave may reclaim
+// it. Sized well above a dispatch wave's runtime: if a wave dies mid-send, the
+// next wave reclaims the row rather than dropping it. Comfortably under the poll
+// cadence so reclaim is timely.
+const NOTIFICATION_CLAIM_LEASE_MS = 10 * 60_000;
 // Delivered alert types in this slice (design §Out of scope): Discount / Price-drop
 // are captured on the want but NOT delivered yet.
 const DELIVERED_ALERT_TYPES = ["availability", "last_minute"] as const;
@@ -151,6 +159,30 @@ function dedupeKey(parts: {
     parts.alertType,
     parts.channel,
   ].join("|");
+}
+
+/**
+ * Audit a notification status transition. All are system-driven and entityType
+ * "notification", keyed by the row's dedupeKey; fromState is omitted for the
+ * initial enqueue (no prior state).
+ */
+async function auditNotification(
+  ctx: MutationCtx,
+  dedupeKey: string,
+  action: string,
+  toState: string,
+  nowIso: string,
+  fromState?: string,
+): Promise<void> {
+  await appendWatcherAuditLog(ctx, {
+    actorId: "system",
+    action,
+    entityType: "notification",
+    entityId: dedupeKey,
+    ...(fromState ? { fromState } : {}),
+    toState,
+    createdAt: nowIso,
+  });
 }
 
 // ===========================================================================
@@ -448,14 +480,7 @@ async function enqueueForEvent(
           dedupeKey: key,
           createdAt: nowIso,
         });
-        await appendWatcherAuditLog(ctx, {
-          actorId: "system",
-          action: "notification_enqueued",
-          entityType: "notification",
-          entityId: key,
-          toState: "pending",
-          createdAt: nowIso,
-        });
+        await auditNotification(ctx, key, "notification_enqueued", "pending", nowIso);
         inserted += 1;
       }
     }
@@ -564,42 +589,55 @@ export const rescheduleTarget = internalMutation({
 });
 
 /**
- * Remove a subscriber (expired/cancelled want) from a target: clears the link and
- * decrements subscriberCount. When the count reaches 0 the target → closed
- * (design §Edge: out-of-window / expired alert). Live targets still close when
- * empty (no one left to notify).
+ * Detach a want from its monitor target: clear the link and decrement
+ * subscriberCount. When the count reaches 0 the target → closed (design §Edge:
+ * out-of-window / expired alert) and we audit the transition. Live targets still
+ * close when empty (no one left to notify). The CALLER decides the want's own
+ * terminal state (cancelled vs expired), so this core never touches want.state.
+ * Shared by removeSubscriber (cancel path) and expireWant (expiry path).
+ */
+async function detachSubscriberCore(
+  ctx: MutationCtx,
+  want: Doc<"wants">,
+  nowIso: string,
+): Promise<{ closed: boolean }> {
+  if (!want.monitorTargetId) return { closed: false };
+
+  const targetId = want.monitorTargetId as Id<"monitor_targets">;
+  const target = await ctx.db.get(targetId);
+  await ctx.db.patch(want._id, { monitorTargetId: undefined });
+  if (!target) return { closed: false };
+
+  const subscriberCount = Math.max(0, target.subscriberCount - 1);
+  if (subscriberCount === 0 && target.status !== "closed") {
+    await ctx.db.patch(target._id, { subscriberCount, status: "closed", lastCheckedAt: nowIso });
+    await appendWatcherAuditLog(ctx, {
+      actorId: "system",
+      action: "monitor_target_closed",
+      entityType: "monitor_target",
+      entityId: target.collapseKey,
+      fromState: target.status,
+      toState: "closed",
+      createdAt: nowIso,
+    });
+    return { closed: true };
+  }
+  await ctx.db.patch(target._id, { subscriberCount });
+  return { closed: false };
+}
+
+/**
+ * Remove a subscriber (cancelled want) from a target: clears the link and
+ * decrements subscriberCount, closing the target at 0. Kept as the generic
+ * detach entry point (e.g. a future cancel-alert flow); expiry uses expireWant.
  */
 export const removeSubscriber = internalMutation({
   args: { wantKey: v.string(), now: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const nowIso = args.now ?? new Date().toISOString();
-    const want = await ctx.db
-      .query("wants")
-      .withIndex("by_key", (q) => q.eq("wantKey", args.wantKey))
-      .unique();
-    if (!want || !want.monitorTargetId) return { closed: false };
-
-    const targetId = want.monitorTargetId as Id<"monitor_targets">;
-    const target = await ctx.db.get(targetId);
-    await ctx.db.patch(want._id, { monitorTargetId: undefined });
-    if (!target) return { closed: false };
-
-    const subscriberCount = Math.max(0, target.subscriberCount - 1);
-    if (subscriberCount === 0 && target.status !== "closed") {
-      await ctx.db.patch(target._id, { subscriberCount, status: "closed", lastCheckedAt: nowIso });
-      await appendWatcherAuditLog(ctx, {
-        actorId: "system",
-        action: "monitor_target_closed",
-        entityType: "monitor_target",
-        entityId: target.collapseKey,
-        fromState: target.status,
-        toState: "closed",
-        createdAt: nowIso,
-      });
-      return { closed: true };
-    }
-    await ctx.db.patch(target._id, { subscriberCount });
-    return { closed: false };
+    const want = await wantByKey(ctx, args.wantKey);
+    if (!want) return { closed: false };
+    return await detachSubscriberCore(ctx, want, nowIso);
   },
 });
 
@@ -623,7 +661,102 @@ export const dueTargets = internalQuery({
         q.eq("status", "watching").lte("nextCheckAt", nowIso),
       )
       .take(limit);
-    return candidates.filter((t) => !t.windowEnd || t.windowEnd >= nowIso);
+    // In-window on BOTH sides: not past windowEnd, and not before windowStart.
+    return candidates.filter(
+      (t) =>
+        (!t.windowEnd || t.windowEnd >= nowIso) &&
+        (!t.windowStart || t.windowStart <= nowIso),
+    );
+  },
+});
+
+// ===========================================================================
+// INTERNAL expiry/close: expireWants (zwapit-46i.1)
+// ===========================================================================
+
+/**
+ * The instant a watch date is fully past. A want's `expiresAt` on the alert path
+ * is the bare watch DATE (YYYY-MM-DD); comparing that string directly against an
+ * ISO `now` would lexically expire a same-day show ("2026-06-25" < "2026-06-25T..").
+ * So a bare date becomes end-of-day. The UTC end-of-day is intentionally ~5.5h
+ * LATER than IST midnight — it errs toward keeping a same-day alert alive so a
+ * last-minute open can still fire; do NOT "fix" this into early IST expiry.
+ * A value that is already a full timestamp is compared as-is.
+ */
+function endOfWatchDay(expiresAt: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(expiresAt) ? `${expiresAt}T23:59:59.999Z` : expiresAt;
+}
+
+/**
+ * Open ALERT wants (monitorTargetId set) whose watch date has fully passed.
+ * Scans the expiry-ordered index bounded to past-due rows (expiresAt before
+ * today's UTC date — which matches endOfWatchDay's same-day grace), so EVERY
+ * expired alert is a candidate regardless of when it was created; the `limit`
+ * slice then keeps the soonest-expiring. This avoids the creation-ordered-prefix
+ * trap where older future or non-alert wants could permanently hide later-created
+ * expired alerts. Non-alert demand wants in the range are filtered out (separate
+ * lifecycle).
+ */
+export const expiredAlertWants = internalQuery({
+  args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const limit = args.limit ?? 100;
+    // A bare-date alert is expired once its end-of-day is past, i.e. the next
+    // calendar day — so bounding at expiresAt < today's UTC date matches
+    // endOfWatchDay exactly while only touching past-due rows.
+    const todayUtc = nowIso.slice(0, 10);
+    const candidates = await ctx.db
+      .query("wants")
+      .withIndex("by_state_expires", (q) => q.eq("state", "open").lt("expiresAt", todayUtc))
+      .collect();
+    return candidates
+      .filter((w) => Boolean(w.monitorTargetId) && endOfWatchDay(w.expiresAt) < nowIso)
+      .slice(0, limit)
+      .map((w) => ({ wantKey: w.wantKey }));
+  },
+});
+
+/**
+ * Expire one alert want: mark it `expired` and detach it from its shared target
+ * (closing the target when its subscriber count hits 0). Idempotent — a want that
+ * is not `open` is a no-op, so re-runs neither double-decrement nor reopen a
+ * closed target. Atomic: state + detach commit in one mutation.
+ */
+export const expireWant = internalMutation({
+  args: { wantKey: v.string(), now: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const want = await wantByKey(ctx, args.wantKey);
+    if (want?.state !== "open") return { expired: false, closed: false };
+    const { closed } = await detachSubscriberCore(ctx, want, nowIso);
+    await ctx.db.patch(want._id, { state: "expired" });
+    return { expired: true, closed };
+  },
+});
+
+/**
+ * Cron entry point: expire every alert want past its watch date and close the
+ * targets that empty out — which also STOPS past-date polling, since dueTargets
+ * only returns `watching` targets. Thin action over the query + per-want mutation
+ * (actions have no ctx.db), matching pollDueTargets/dispatchNotifications.
+ */
+export const expireWants = internalAction({
+  args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ expired: number; closed: number }> => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const stale = await ctx.runQuery(internal.watcher.expiredAlertWants, {
+      now: nowIso,
+      ...(args.limit === undefined ? {} : { limit: args.limit }),
+    });
+    let expired = 0;
+    let closed = 0;
+    for (const { wantKey } of stale) {
+      const r = await ctx.runMutation(internal.watcher.expireWant, { wantKey, now: nowIso });
+      if (r.expired) expired += 1;
+      if (r.closed) closed += 1;
+    }
+    return { expired, closed };
   },
 });
 
@@ -794,18 +927,61 @@ export const catalogItemForTarget = internalQuery({
 // INTERNAL action: dispatchNotifications (Task 11 dispatch)
 // ===========================================================================
 
-/** Drain a batch of pending notifications (internal query feeding the dispatch action). */
-export const pendingNotifications = internalQuery({
-  args: { limit: v.optional(v.number()) },
+/**
+ * Notifications a dispatch wave may claim: every "pending" row, plus "sending"
+ * rows whose claim lease has expired (orphaned by a crashed wave). Bounded by
+ * `limit`. claimNotification re-checks claimability atomically, so two waves that
+ * both surface the same stale row still deliver it at most once.
+ */
+export const claimableNotifications = internalQuery({
+  args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const nowIso = args.now ?? new Date().toISOString();
+    const limit = args.limit ?? 100;
+    const pending = await ctx.db
       .query("notification_queue")
       .withIndex("by_status", (q) => q.eq("status", "pending"))
-      .take(args.limit ?? 100);
+      .take(limit);
+    const sending = await ctx.db
+      .query("notification_queue")
+      .withIndex("by_status", (q) => q.eq("status", "sending"))
+      .take(limit);
+    const stale = sending.filter((r) => isClaimExpired(r.claimedAt, nowIso));
+    return [...pending, ...stale].slice(0, limit);
   },
 });
 
-/** Mark a notification row sent or failed (internal mutation, audited). */
+/** True when a "sending" claim is stale (older than the lease) and may be reclaimed. */
+function isClaimExpired(claimedAt: string | undefined, nowIso: string): boolean {
+  if (!claimedAt) return true; // missing timestamp ⇒ reclaimable (defensive)
+  return Date.parse(claimedAt) + NOTIFICATION_CLAIM_LEASE_MS <= Date.parse(nowIso);
+}
+
+/**
+ * Atomically claim a notification for delivery. Convex mutations are
+ * serializable, so this read-then-write is the atomic gate: a row is claimable if
+ * it is "pending", OR it is "sending" but its claim lease has expired — meaning a
+ * prior dispatch wave claimed it then died before mark/fail, so reclaiming it
+ * keeps the notification from being lost forever. The winner flips it to
+ * "sending" and stamps claimedAt; an overlapping wave that loses the race gets
+ * { claimed: false }, so a row reaches a sender at most once per active lease.
+ */
+export const claimNotification = internalMutation({
+  args: { notificationId: v.id("notification_queue"), now: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const row = await ctx.db.get(args.notificationId);
+    if (!row) return { claimed: false };
+    const claimable =
+      row.status === "pending" ||
+      (row.status === "sending" && isClaimExpired(row.claimedAt, nowIso));
+    if (!claimable) return { claimed: false };
+    await ctx.db.patch(args.notificationId, { status: "sending", claimedAt: nowIso });
+    return { claimed: true };
+  },
+});
+
+/** Mark a notification row sent (internal mutation, audited). */
 export const markNotification = internalMutation({
   args: {
     notificationId: v.id("notification_queue"),
@@ -820,15 +996,46 @@ export const markNotification = internalMutation({
       status: args.status,
       ...(args.status === "sent" ? { sentAt: nowIso } : {}),
     });
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      action: args.status === "sent" ? "notification_sent" : "notification_failed",
-      entityType: "notification",
-      entityId: row.dedupeKey,
-      fromState: "pending",
-      toState: args.status,
-      createdAt: nowIso,
-    });
+    await auditNotification(
+      ctx,
+      row.dedupeKey,
+      args.status === "sent" ? "notification_sent" : "notification_failed",
+      args.status,
+      nowIso,
+      row.status,
+    );
+  },
+});
+
+/**
+ * Record a failed delivery attempt: increment `attempts` and decide the next
+ * state. Under the cap → requeue to "pending" (a later wave retries it). At the
+ * cap → "failed" (terminal), so a persistently-broken send cannot loop forever.
+ * claimableNotifications surfaces "pending" rows, so the requeue IS the retry.
+ */
+export const failNotification = internalMutation({
+  args: {
+    notificationId: v.id("notification_queue"),
+    now: v.optional(v.string()),
+    maxAttempts: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
+    const max = args.maxAttempts ?? MAX_NOTIFICATION_ATTEMPTS;
+    const row = await ctx.db.get(args.notificationId);
+    if (!row) return { status: "failed" as const, attempts: 0 };
+    const attempts = (row.attempts ?? 0) + 1;
+    const status = attempts >= max ? ("failed" as const) : ("pending" as const);
+    await ctx.db.patch(args.notificationId, { status, attempts });
+    await auditNotification(
+      ctx,
+      row.dedupeKey,
+      status === "failed" ? "notification_failed" : "notification_retry",
+      status,
+      nowIso,
+      row.status,
+    );
+    return { status, attempts };
   },
 });
 
@@ -868,17 +1075,35 @@ export const dispatchNotifications = internalAction({
     args,
   ): Promise<{ dispatched: number; sent: number; failed: number }> => {
     const nowIso = args.now ?? new Date().toISOString();
-    const pending = await ctx.runQuery(internal.watcher.pendingNotifications, {
+    const batch = await ctx.runQuery(internal.watcher.claimableNotifications, {
+      now: nowIso,
       limit: args.limit,
     });
 
     let sent = 0;
     let failed = 0;
-    for (const row of pending) {
+    for (const row of batch) {
+      // Claim first (pending → sending). If a concurrent wave already claimed it,
+      // skip — never hand the same row to a sender twice.
+      const claim = await ctx.runMutation(internal.watcher.claimNotification, {
+        notificationId: row._id,
+        now: nowIso,
+      });
+      if (!claim.claimed) continue;
+
       const parts = await ctx.runQuery(internal.watcher.notificationMessageParts, {
         notificationId: row._id,
       });
-      if (!parts) continue;
+      if (!parts) {
+        // Message parts vanished (event/target gone) — count the attempt; the
+        // retry cap keeps this bounded rather than leaving the row stuck "sending".
+        await ctx.runMutation(internal.watcher.failNotification, {
+          notificationId: row._id,
+          now: nowIso,
+        });
+        failed += 1;
+        continue;
+      }
       const message = buildLiveMessage({
         movie: parts.movie,
         theatre: parts.theatre,
@@ -895,15 +1120,16 @@ export const dispatchNotifications = internalAction({
         });
         sent += 1;
       } catch {
-        await ctx.runMutation(internal.watcher.markNotification, {
+        // Transient failure → increment attempts; requeue to "pending" under the
+        // cap, else park "failed". The cap makes the retry loop terminate.
+        await ctx.runMutation(internal.watcher.failNotification, {
           notificationId: row._id,
-          status: "failed",
           now: nowIso,
         });
         failed += 1;
       }
     }
-    return { dispatched: pending.length, sent, failed };
+    return { dispatched: batch.length, sent, failed };
   },
 });
 

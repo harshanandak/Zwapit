@@ -245,6 +245,17 @@ export async function monitorTargetByCollapseKey(
     .first();
 }
 
+/** A want (alert/request) by its public wantKey, or null. Mirrors catalogItemByKey. */
+export async function wantByKey(
+  ctx: MutationCtx,
+  wantKey: string,
+): Promise<Doc<"wants"> | null> {
+  return await ctx.db
+    .query("wants")
+    .withIndex("by_key", (q) => q.eq("wantKey", wantKey))
+    .unique();
+}
+
 /** The catalog row backing a want/alert, by its public catalogKey. Null if absent. */
 export async function catalogItemByKey(
   ctx: MutationCtx,
