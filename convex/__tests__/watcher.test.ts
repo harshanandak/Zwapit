@@ -218,6 +218,69 @@ describe("createAlert — shared monitor target collapse", () => {
   });
 });
 
+describe("createAlert — curated live events (events-phase2 T2)", () => {
+  // A curated event catalog row (kind live_event, no BMS/District codes).
+  async function seedEvent(tt: ReturnType<typeof t>, catalogKey = "catalog_event_1"): Promise<void> {
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey,
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Demo Concert",
+        city: "mumbai",
+        venueOrDestination: "Manpho Convention Centre",
+        startAt: "2027-02-14T19:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+      });
+    });
+  }
+
+  test("a live_event alert creates a curated watching target (sources [], event_ticket) — no throw", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+
+    const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_1",
+      city: "mumbai",
+      date: "2027-02-14",
+    });
+
+    const { target, want } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      want: (await ctx.db.query("wants").collect())[0],
+    }));
+    expect(target.status).toBe("watching");
+    expect(target.sources).toEqual([]); // curated: no pollable source
+    expect(want.category).toBe("event_ticket"); // derived from catalog kind
+
+    // Curated target is NEVER polled: excluded from dueTargets despite watching + due.
+    const due = await tt.query(internal.watcher.dueTargets, { now: POLL_NOW });
+    expect(due.find((d) => d._id === monitorTargetId)).toBeUndefined();
+  });
+
+  test("two buyers on the same event occurrence collapse to ONE curated target", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedEvent(tt);
+    const args = { catalogItemId: "catalog_event_1", city: "mumbai", date: "2027-02-14" };
+
+    const r1 = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const r2 = await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+    expect(r1.monitorTargetId).toBe(r2.monitorTargetId);
+
+    const { targets, wants } = await tt.run(async (ctx) => ({
+      targets: await ctx.db.query("monitor_targets").collect(),
+      wants: await ctx.db.query("wants").collect(),
+    }));
+    expect(targets).toHaveLength(1);
+    expect(targets[0].subscriberCount).toBe(2);
+    expect(wants.every((w) => w.category === "event_ticket")).toBe(true);
+  });
+});
+
 describe("recordAvailability — detection → live + snapshot dedup", () => {
   test("first open writes one event and flips target to live; identical hash is a no-op", async () => {
     const tt = t();

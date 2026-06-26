@@ -248,13 +248,16 @@ export const createAlert = mutation({
     });
 
     // Platform routing: a target only watches sources whose codes the catalog row
-    // actually has (design §Edge: one source has the show).
+    // actually has (design §Edge: one source has the show). Curated kinds
+    // (live_event) have no pollable source — availability is admin-driven, so they
+    // carry sources: [] and are never polled (dueTargets skips empty-source targets).
+    const isCurated = catalogItem.kind === "live_event";
     const sources: Array<"bms" | "district"> = [];
     if (buildBmsUrl(catalogItem, date) !== null) sources.push("bms");
     if (buildDistrictUrl(catalogItem, date) !== null) sources.push("district");
-    // Reject alerts that no official source can watch — otherwise pollDueTargets
-    // fetches nothing and reschedules forever, leaving the user an inert alert.
-    if (sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
+    // A pollable kind with no source is inert (pollDueTargets fetches nothing and
+    // reschedules forever); reject it. Curated kinds are allowed with no source.
+    if (!isCurated && sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
 
     // ---- find-or-create the shared monitor target ----
     let target = await monitorTargetByCollapseKey(ctx, collapseKey);
@@ -288,6 +291,14 @@ export const createAlert = mutation({
 
     const alertTypes = args.alertTypes ?? (["availability"] as const);
     const channels = args.channels ?? (["email"] as const);
+    // Want category mirrors the catalog kind (movie → movie_ticket, live_event →
+    // event_ticket, bus_route → bus_travel) instead of a hardcoded movie value.
+    const category =
+      catalogItem.kind === "live_event"
+        ? ("event_ticket" as const)
+        : catalogItem.kind === "bus_route"
+          ? ("bus_travel" as const)
+          : ("movie_ticket" as const);
 
     // ---- find-or-create THIS buyer's want for the target (dedupe per buyer) ----
     const existingForBuyer = (await subscribersForTarget(ctx, targetId)).find(
@@ -313,7 +324,7 @@ export const createAlert = mutation({
         wantKey,
         buyerId,
         catalogItemId: args.catalogItemId,
-        category: "movie_ticket",
+        category,
         quantity: 1,
         maxPricePerUnit: 0,
         state: "open",
@@ -662,8 +673,11 @@ export const dueTargets = internalQuery({
       )
       .take(limit);
     // In-window on BOTH sides: not past windowEnd, and not before windowStart.
+    // Curated/admin-driven targets (sources []) have nothing to fetch, so they are
+    // never polled — their availability is set by markEventAvailable, not the cron.
     return candidates.filter(
       (t) =>
+        t.sources.length > 0 &&
         (!t.windowEnd || t.windowEnd >= nowIso) &&
         (!t.windowStart || t.windowStart <= nowIso),
     );
