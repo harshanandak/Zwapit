@@ -282,6 +282,40 @@ describe("createAlert — curated live events (events-phase2 T2)", () => {
     expect(targets[0].subscriberCount).toBe(2);
     expect(wants.every((w) => w.category === "event_ticket")).toBe(true);
   });
+
+  test("curated targets never consume the poll budget — a pollable target is still due behind many curated ones", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    // Curated event targets created FIRST (would sort first by nextCheckAt and, with
+    // a .take(limit)-then-filter, crowd the pollable target out of the budget).
+    await seedEvent(tt, "catalog_event_a");
+    await seedEvent(tt, "catalog_event_b");
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_a",
+      city: "mumbai",
+      date: "2027-02-14",
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_b",
+      city: "mumbai",
+      date: "2027-02-14",
+    });
+    // A pollable movie target created LAST.
+    await seedMovie(tt, "catalog_movie_x");
+    const { monitorTargetId: movieTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_x",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+
+    // With limit 1, curated targets must NOT be selected ahead of the pollable one.
+    const due = await tt.query(internal.watcher.dueTargets, { now: POLL_NOW, limit: 1 });
+    expect(due).toHaveLength(1);
+    expect(due[0]._id as string).toBe(movieTargetId);
+  });
 });
 
 describe("markEventAvailable — curated availability → notify + deep-link OUT (events-phase2 T3)", () => {

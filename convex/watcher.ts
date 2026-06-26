@@ -71,6 +71,13 @@ const MAX_NOTIFICATION_ATTEMPTS = 3;
 // next wave reclaims the row rather than dropping it. Comfortably under the poll
 // cadence so reclaim is timely.
 const NOTIFICATION_CLAIM_LEASE_MS = 10 * 60_000;
+// Curated (admin-driven) targets are never polled. nextCheckAt is set on every
+// target insert, so curated targets get a far-future sentinel that the dueTargets
+// index range (nextCheckAt <= now) can NEVER select — keeping them out of the poll
+// budget entirely, not merely filtered out after `.take()` (which would let them
+// crowd real targets out of a wave). `sources.length > 0` in dueTargets stays as
+// defense-in-depth.
+const NEVER_POLL_AT = "9999-12-31T23:59:59.999Z";
 // Delivered alert types in this slice (design §Out of scope): Discount / Price-drop
 // are captured on the want but NOT delivered yet.
 const DELIVERED_ALERT_TYPES = ["availability", "last_minute"] as const;
@@ -273,7 +280,9 @@ export const createAlert = mutation({
         status: "watching",
         subscriberCount: 0,
         failCount: 0,
-        nextCheckAt: nowIso,
+        // Curated targets are never polled → far-future sentinel keeps them out of
+        // the dueTargets index range (not just the post-take filter).
+        nextCheckAt: isCurated ? NEVER_POLL_AT : nowIso,
       });
       target = (await ctx.db.get(insertedId))!;
       targetId = insertedId;

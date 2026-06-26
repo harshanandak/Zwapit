@@ -71,6 +71,10 @@ genuine unknown (event APIs), defers the heavy/risky money path, and is the lowe
   no-op), windowed + stop-on-detect polling, expiry/close (stop past-date polling). Any future automated
   adapter must use **conditional requests** (ETag / If-Modified-Since), coalesced/batched fetches, and
   never poll per-user. Cache catalog/read-models so reads make no external calls.
+  **Index-range rule:** index-range queries (e.g. `dueTargets` on `by_status_next_check`) must
+  exclude non-eligible rows IN the range — via a sentinel key (curated targets get a far-future
+  `nextCheckAt`) or a range bound — never via a post-`.take()` filter, which lets ineligible rows
+  consume the budget and starve eligible ones. (Same trap as Phase B's `expiredAlertWants`.)
 - **Internal-only mutations:** matching/monitor/availability/notification mutations stay
   `internalMutation`/`internalAction` — never client-callable. Only alert-create (client mutation) +
   payoff (query) face the client, both authorized via the identity helper (A01).

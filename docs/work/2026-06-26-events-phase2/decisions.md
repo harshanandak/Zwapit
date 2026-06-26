@@ -6,7 +6,7 @@ subagents, and subagents have been timing out this session), the per-task TDD is
 RED→GREEN→REFACTOR with shown failing output, the advisor, and the downstream `/validate` +
 `/code-review` (CodeRabbit/SonarCloud) gates.
 
-Decision-gate count: 2 (Good — minor gaps)
+Decision-gate count: 3 (Good — minor gaps; gate 3 was caught by the advisor final review)
 
 ---
 
@@ -38,6 +38,27 @@ later edit can't silently break the curated path. **Deferred**: an end-to-end ev
 fixture (parallel to the movie WATCHER_DEMO — target + want + availability) belongs with the events
 UI follow-up, since seeded demo data is only valuable once a screen displays it.
 **Status**: RESOLVED
+
+## Decision 3
+**Date**: 2026-06-26
+**Task**: Task 2 follow-up (advisor final review) — curated target scheduling vs the poll budget
+**Gap**: `createAlert` set `nextCheckAt: nowIso` for ALL new targets including curated ones, so a
+curated target ENTERED the `dueTargets` `by_status_next_check` index range and consumed the
+`.take(limit)` budget BEFORE the `sources.length > 0` post-filter dropped it. Curated targets sort
+first (ascending `nextCheckAt`) → they preferentially crowd real pollable (movie) targets out of a
+poll wave. This is the SAME `.take`-then-filter starvation pattern fixed in Phase B's
+`expiredAlertWants` (zwapit-46i.1), reintroduced — wasted poll budget (egress).
+**Score**: 3/14 (same-file; touches polling selection; no schema/auth/data change; reversible)
+**Route**: PROCEED
+**Choice made**: Curated targets get a far-future `nextCheckAt` sentinel (`NEVER_POLL_AT`) so the
+index range `nextCheckAt <= now` can NEVER select them — excluded from the budget, not merely
+post-`.take` filtered. Kept `sources.length > 0` in `dueTargets` as defense-in-depth. Regression
+test: N curated + 1 pollable target, `dueTargets({limit:1})` returns the pollable one (RED before the
+sentinel — `due` was empty).
+**Status**: RESOLVED
+
+**Reusable lesson** (written into design.md §Constraints): index-range queries must exclude
+non-eligible rows IN the range (sentinel/bound), never via a post-`.take()` filter.
 
 ---
 
