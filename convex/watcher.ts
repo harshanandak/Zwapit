@@ -60,7 +60,7 @@ import {
   defaultSenders,
   type Senders,
 } from "./watcher/senders";
-import type { NormalizedShow } from "./watcher/types";
+import type { NormalizedShow, ShowSource } from "./watcher/types";
 
 // Degrade threshold: K consecutive empty/blocked polls → "degraded" (design §Edge).
 const DEGRADE_AFTER = 3;
@@ -105,7 +105,7 @@ const alertTypeV = v.union(
   v.literal("last_minute"),
 );
 const channelV = v.union(v.literal("email"), v.literal("web_push"));
-const sourceV = v.union(v.literal("bms"), v.literal("district"));
+const sourceV = v.union(v.literal("bms"), v.literal("district"), v.literal("curated"));
 
 const normalizedShowV = v.object({
   source: sourceV,
@@ -362,6 +362,83 @@ export const createAlert = mutation({
  * writes an availability_events row, upserts the snapshot cache, and advances the
  * target watching → live on the first open. Returns the new event id (or null).
  */
+/**
+ * Core of recordAvailability, shared with the curated markEventAvailable path:
+ * snapshot-hash dedup → write the availability_event (allowlisted deep-link OUT)
+ * → audit → advance the target to live (stop-on-detect). Does NOT touch the
+ * per-(target, source) snapshot cache — that is a polling-only concern, so
+ * recordAvailability adds it and the curated path skips it.
+ */
+async function recordAvailabilityCore(
+  ctx: MutationCtx,
+  args: {
+    monitorTargetId: Id<"monitor_targets">;
+    source: NormalizedShow["source"];
+    normalized: NormalizedShow[];
+    bookingUrl: string;
+    detectedAt: string;
+    snapshotHash: string;
+  },
+): Promise<{ availabilityEventId: Id<"availability_events"> | null; deduped: boolean }> {
+  const target = await ctx.db.get(args.monitorTargetId);
+  if (!target) throw new Error("MONITOR_TARGET_NOT_FOUND");
+
+  // Dedup against the TARGET UNION hash (target.lastSnapshotHash), NOT the
+  // per-(target, source) cache. pollDueTargets hashes the whole cross-source
+  // union and records under whichever source won the booking URL, so the primary
+  // source can flip (bms→district) on an UNCHANGED union. Gating on the per-source
+  // cache would miss that flip and re-fire; gating on the union hash is
+  // independent of which source won, so an unchanged union is a true no-op.
+  if (target.lastSnapshotHash === args.snapshotHash) {
+    return { availabilityEventId: null, deduped: true };
+  }
+
+  const eventId = await ctx.db.insert("availability_events", {
+    monitorTargetId: args.monitorTargetId,
+    source: args.source,
+    detectedAt: args.detectedAt,
+    theatresJson: JSON.stringify(args.normalized),
+    // Allowlist the deep-link before persisting — only official https BMS/District
+    // URLs survive; anything unsafe collapses to "" (defense-in-depth, A03/A10).
+    bookingUrl: officialBookingUrl(args.bookingUrl),
+    snapshotHash: args.snapshotHash,
+  });
+
+  await appendWatcherAuditLog(ctx, {
+    actorId: "system",
+    action: "availability_detected",
+    entityType: "availability_event",
+    entityId: eventId,
+    createdAt: args.detectedAt,
+  });
+
+  // Advance to live on the first open (stop-on-detect).
+  if (target.status !== "live") {
+    await ctx.db.patch(args.monitorTargetId, {
+      status: "live",
+      lastSnapshotHash: args.snapshotHash,
+      failCount: 0,
+      lastCheckedAt: args.detectedAt,
+    });
+    await appendWatcherAuditLog(ctx, {
+      actorId: "system",
+      action: "monitor_target_live",
+      entityType: "monitor_target",
+      entityId: target.collapseKey,
+      fromState: target.status,
+      toState: "live",
+      createdAt: args.detectedAt,
+    });
+  } else {
+    await ctx.db.patch(args.monitorTargetId, {
+      lastSnapshotHash: args.snapshotHash,
+      lastCheckedAt: args.detectedAt,
+    });
+  }
+
+  return { availabilityEventId: eventId, deduped: false };
+}
+
 export const recordAvailability = internalMutation({
   args: {
     monitorTargetId: v.id("monitor_targets"),
@@ -372,70 +449,64 @@ export const recordAvailability = internalMutation({
     snapshotHash: v.string(),
   },
   handler: async (ctx, args) => {
-    const target = await ctx.db.get(args.monitorTargetId);
-    if (!target) throw new Error("MONITOR_TARGET_NOT_FOUND");
-
-    // Dedup against the TARGET UNION hash (target.lastSnapshotHash), NOT the
-    // per-(target, source) cache. pollDueTargets hashes the whole cross-source
-    // union and records under whichever source won the booking URL, so the
-    // primary source can flip (bms→district) on an UNCHANGED union. Gating on the
-    // per-source cache would miss that flip and re-fire; gating on the union hash
-    // is independent of which source won, so an unchanged union is a true no-op.
-    if (target.lastSnapshotHash === args.snapshotHash) {
-      return { availabilityEventId: null, deduped: true };
-    }
-
-    const eventId = await ctx.db.insert("availability_events", {
-      monitorTargetId: args.monitorTargetId,
-      source: args.source,
-      detectedAt: args.detectedAt,
-      theatresJson: JSON.stringify(args.normalized),
-      // Allowlist the deep-link before persisting — only official https BMS/District
-      // URLs survive; anything unsafe collapses to "" (defense-in-depth, A03/A10).
-      bookingUrl: officialBookingUrl(args.bookingUrl),
-      snapshotHash: args.snapshotHash,
-    });
-
-    await upsertSourceSnapshot(ctx, {
-      monitorTargetId: args.monitorTargetId,
-      source: args.source,
-      snapshotHash: args.snapshotHash,
-      fetchedAt: args.detectedAt,
-    });
-
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      action: "availability_detected",
-      entityType: "availability_event",
-      entityId: eventId,
-      createdAt: args.detectedAt,
-    });
-
-    // Advance to live on the first open (stop-on-detect).
-    if (target.status !== "live") {
-      await ctx.db.patch(args.monitorTargetId, {
-        status: "live",
-        lastSnapshotHash: args.snapshotHash,
-        failCount: 0,
-        lastCheckedAt: args.detectedAt,
-      });
-      await appendWatcherAuditLog(ctx, {
-        actorId: "system",
-        action: "monitor_target_live",
-        entityType: "monitor_target",
-        entityId: target.collapseKey,
-        fromState: target.status,
-        toState: "live",
-        createdAt: args.detectedAt,
-      });
-    } else {
-      await ctx.db.patch(args.monitorTargetId, {
-        lastSnapshotHash: args.snapshotHash,
-        lastCheckedAt: args.detectedAt,
+    const result = await recordAvailabilityCore(ctx, args);
+    if (!result.deduped && args.source !== "curated") {
+      // Polling-only: cache the per-(target, source) snapshot so an unchanged
+      // poll is a no-op. The curated path has no source cache to maintain.
+      await upsertSourceSnapshot(ctx, {
+        monitorTargetId: args.monitorTargetId,
+        source: args.source,
+        snapshotHash: args.snapshotHash,
+        fetchedAt: args.detectedAt,
       });
     }
+    return result;
+  },
+});
 
-    return { availabilityEventId: eventId, deduped: false };
+// Admin/curated availability input: an event has a venue + time (+ optional
+// section/tier as `format`); no per-show source (it is all "curated").
+const eventShowV = v.object({
+  theatreName: v.string(),
+  showTime: v.string(),
+  format: v.optional(v.string()),
+});
+
+/**
+ * Curated/admin availability for a live event — the manual analog of
+ * pollDueTargets→recordAvailability for catalog kinds with no pollable source.
+ * Records the official deep-link OUT + advances the target to live (reusing
+ * recordAvailabilityCore: snapshot dedup, audit, stop-on-detect), then fans out
+ * notifications via enqueueForEvent. Internal-only; never client-callable. Zero
+ * external egress.
+ */
+export const markEventAvailable = internalMutation({
+  args: {
+    monitorTargetId: v.id("monitor_targets"),
+    shows: v.array(eventShowV),
+    bookingUrl: v.string(),
+    detectedAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const nowIso = args.detectedAt ?? new Date().toISOString();
+    const normalized: NormalizedShow[] = args.shows.map((s) => ({
+      source: "curated" as const,
+      theatreName: s.theatreName,
+      showTime: s.showTime,
+      format: s.format ?? "",
+    }));
+    const result = await recordAvailabilityCore(ctx, {
+      monitorTargetId: args.monitorTargetId,
+      source: "curated",
+      normalized,
+      bookingUrl: args.bookingUrl,
+      detectedAt: nowIso,
+      snapshotHash: snapshotHash(normalized),
+    });
+    if (result.availabilityEventId) {
+      await enqueueForEvent(ctx, result.availabilityEventId, nowIso);
+    }
+    return result;
   },
 });
 
@@ -779,7 +850,8 @@ export const expireWants = internalAction({
 // ===========================================================================
 
 /** Parse one Parallel result row per its source into NormalizedShow[]. */
-function parseResultForSource(source: "bms" | "district", content: string): NormalizedShow[] {
+function parseResultForSource(source: ShowSource, content: string): NormalizedShow[] {
+  if (source === "curated") return []; // curated availability is admin-set, never polled
   if (source === "district") return parseDistrictMovieCity(content);
   // BMS: content is raw JSON. Tolerate parse failure (untrusted bytes, A03).
   let json: unknown = {};

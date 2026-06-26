@@ -122,6 +122,26 @@ async function seedMovie(
   });
 }
 
+// A curated event catalog row (kind live_event, no BMS/District codes) — events-phase2.
+async function seedEvent(
+  tt: ReturnType<typeof t>,
+  catalogKey = "catalog_event_1",
+): Promise<void> {
+  await tt.run(async (ctx) => {
+    await ctx.db.insert("catalog_items", {
+      catalogKey,
+      kind: "live_event",
+      externalSource: "manual",
+      title: "Demo Concert",
+      city: "mumbai",
+      venueOrDestination: "Manpho Convention Centre",
+      startAt: "2027-02-14T19:00:00.000Z",
+      isActive: true,
+      lastSyncedAt: NOW,
+    });
+  });
+}
+
 afterEach(() => {
   __setFetcher(null);
   __setSenders(null);
@@ -219,23 +239,6 @@ describe("createAlert — shared monitor target collapse", () => {
 });
 
 describe("createAlert — curated live events (events-phase2 T2)", () => {
-  // A curated event catalog row (kind live_event, no BMS/District codes).
-  async function seedEvent(tt: ReturnType<typeof t>, catalogKey = "catalog_event_1"): Promise<void> {
-    await tt.run(async (ctx) => {
-      await ctx.db.insert("catalog_items", {
-        catalogKey,
-        kind: "live_event",
-        externalSource: "manual",
-        title: "Demo Concert",
-        city: "mumbai",
-        venueOrDestination: "Manpho Convention Centre",
-        startAt: "2027-02-14T19:00:00.000Z",
-        isActive: true,
-        lastSyncedAt: NOW,
-      });
-    });
-  }
-
   test("a live_event alert creates a curated watching target (sources [], event_ticket) — no throw", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
@@ -278,6 +281,79 @@ describe("createAlert — curated live events (events-phase2 T2)", () => {
     expect(targets).toHaveLength(1);
     expect(targets[0].subscriberCount).toBe(2);
     expect(wants.every((w) => w.category === "event_ticket")).toBe(true);
+  });
+});
+
+describe("markEventAvailable — curated availability → notify + deep-link OUT (events-phase2 T3)", () => {
+  const EVENT_ARGS = { catalogItemId: "catalog_event_1", city: "mumbai", date: "2027-02-14" };
+  const EVENT_SHOWS = [{ theatreName: "Manpho Convention Centre", showTime: "19:00", format: "GA" }];
+  const OFFICIAL_URL = "https://in.bookmyshow.com/events/demo-concert";
+
+  test("admin marks a curated event live → each subscriber notified (deep-link OUT); payoff live, owner only", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedEvent(tt);
+    const { wantKey, monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    const rec = await tt.mutation(internal.watcher.markEventAvailable, {
+      monitorTargetId: monitorTargetId as never,
+      shows: EVENT_SHOWS,
+      bookingUrl: OFFICIAL_URL,
+      detectedAt: NOW,
+    });
+    expect(rec.availabilityEventId).toBeTruthy();
+
+    const { target, events, notifs } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      events: await ctx.db.query("availability_events").collect(),
+      notifs: await ctx.db.query("notification_queue").collect(),
+    }));
+    expect(target.status).toBe("live");
+    expect(events).toHaveLength(1);
+    expect(events[0].source).toBe("curated");
+    expect(events[0].bookingUrl).toContain("bookmyshow");
+    expect(notifs).toHaveLength(2); // A + B on the default email channel
+    expect(new Set(notifs.map((n) => n.userId))).toEqual(new Set([APP_A, APP_B]));
+
+    const payoff = await tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey });
+    expect(payoff?.isLive).toBe(true);
+    expect(payoff?.status).toBe("live");
+    expect(payoff?.bookingUrl).toContain("bookmyshow");
+    expect(payoff?.theatres).toContain("Manpho Convention Centre");
+    // A01: another user cannot read this alert.
+    const leaked = await tt.withIdentity(BUYER_B).query(api.watcher.getAlertPayoff, { wantKey });
+    expect(leaked).toBeNull();
+  });
+
+  test('an unsafe bookingUrl is sanitised to ""; idempotent re-call (same shows) adds no new event', async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    await tt.mutation(internal.watcher.markEventAvailable, {
+      monitorTargetId: monitorTargetId as never,
+      shows: EVENT_SHOWS,
+      bookingUrl: "javascript:alert(1)",
+      detectedAt: NOW,
+    });
+    const second = await tt.mutation(internal.watcher.markEventAvailable, {
+      monitorTargetId: monitorTargetId as never,
+      shows: EVENT_SHOWS,
+      bookingUrl: "javascript:alert(1)",
+      detectedAt: NOW,
+    });
+    expect(second.deduped).toBe(true); // same snapshot hash → no-op
+
+    const events = await tt.run((ctx) => ctx.db.query("availability_events").collect());
+    expect(events).toHaveLength(1);
+    expect(events[0].bookingUrl).toBe(""); // unsafe URL collapsed (A03/A10)
   });
 });
 

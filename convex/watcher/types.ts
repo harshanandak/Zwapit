@@ -9,8 +9,9 @@
 // type names. They never surface to users; user-facing copy uses approved terms
 // ("Tickets are live", "Notify me"). See design.md §Constraints.
 
-/** Which official platform a normalized show was read from. */
-export type ShowSource = "bms" | "district";
+/** Which official platform a normalized show was read from. "curated" = an
+ *  admin-marked live-event availability (no automated source). */
+export type ShowSource = "bms" | "district" | "curated";
 
 /**
  * Decoded per-show fill status. BMS supplies this via `AVAIL_STATUS_MAP`;
