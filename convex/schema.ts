@@ -430,6 +430,10 @@ export default defineSchema({
     .index("by_buyer", ["buyerId"])
     .index("by_catalog_state", ["catalogItemId", "state"])
     .index("by_state_created", ["state", "createdAt"])
+    // Expiry sweep: open wants ordered by expiresAt so the expiry cron scans only
+    // past-due rows (soonest-expiring first), never a creation-ordered prefix that
+    // could starve later-created expired alerts.
+    .index("by_state_expires", ["state", "expiresAt"])
     .index("by_monitor_target", ["monitorTargetId"]),
 
   // One proposed pairing of a want and a listing. `reservedUntil` bounds the
@@ -519,6 +523,10 @@ export default defineSchema({
     // Delivery attempts so far; a failed send requeues to "pending" until this
     // reaches the cap, then parks as "failed" (no infinite retry).
     attempts: v.optional(v.number()),
+    // When the current "sending" claim was taken. A dispatch wave reclaims a
+    // "sending" row whose claim is older than the lease (the prior wave died
+    // before mark/fail), so a crash can't strand a notification forever.
+    claimedAt: v.optional(v.string()),
   })
     .index("by_dedupe", ["dedupeKey"])
     .index("by_status", ["status"]),

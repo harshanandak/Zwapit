@@ -46,4 +46,3 @@ WORKING version of option b — name↔name, not code-keyed), design-first as it
 
 ## Ship
 - When all done: `bun run build`, push feat/watcher-hardening, open PR, /code-review, close the beads issues.
-</content>

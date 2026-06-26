@@ -66,6 +66,11 @@ import type { NormalizedShow } from "./watcher/types";
 const DEGRADE_AFTER = 3;
 // Max delivery attempts before a notification is parked as permanently "failed".
 const MAX_NOTIFICATION_ATTEMPTS = 3;
+// How long a "sending" claim is honored before a later dispatch wave may reclaim
+// it. Sized well above a dispatch wave's runtime: if a wave dies mid-send, the
+// next wave reclaims the row rather than dropping it. Comfortably under the poll
+// cadence so reclaim is timely.
+const NOTIFICATION_CLAIM_LEASE_MS = 10 * 60_000;
 // Delivered alert types in this slice (design §Out of scope): Discount / Price-drop
 // are captured on the want but NOT delivered yet.
 const DELIVERED_ALERT_TYPES = ["availability", "last_minute"] as const;
@@ -683,24 +688,31 @@ function endOfWatchDay(expiresAt: string): string {
 }
 
 /**
- * Open alert wants whose watch date has fully passed. Scans the oldest open wants
- * (most likely expired) and keeps only ALERT wants (monitorTargetId set) past
- * end-of-watch-day. Non-alert demand wants are left alone (separate lifecycle).
- * Batched at `limit`, oldest-first by createdAt: at v1 scale one hourly wave
- * clears the backlog; if expired wants ever exceed a batch, successive waves
- * drain the remainder (no single run is unbounded).
+ * Open ALERT wants (monitorTargetId set) whose watch date has fully passed.
+ * Scans the expiry-ordered index bounded to past-due rows (expiresAt before
+ * today's UTC date — which matches endOfWatchDay's same-day grace), so EVERY
+ * expired alert is a candidate regardless of when it was created; the `limit`
+ * slice then keeps the soonest-expiring. This avoids the creation-ordered-prefix
+ * trap where older future or non-alert wants could permanently hide later-created
+ * expired alerts. Non-alert demand wants in the range are filtered out (separate
+ * lifecycle).
  */
 export const expiredAlertWants = internalQuery({
   args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const nowIso = args.now ?? new Date().toISOString();
     const limit = args.limit ?? 100;
-    const open = await ctx.db
+    // A bare-date alert is expired once its end-of-day is past, i.e. the next
+    // calendar day — so bounding at expiresAt < today's UTC date matches
+    // endOfWatchDay exactly while only touching past-due rows.
+    const todayUtc = nowIso.slice(0, 10);
+    const candidates = await ctx.db
       .query("wants")
-      .withIndex("by_state_created", (q) => q.eq("state", "open"))
-      .take(limit);
-    return open
+      .withIndex("by_state_expires", (q) => q.eq("state", "open").lt("expiresAt", todayUtc))
+      .collect();
+    return candidates
       .filter((w) => Boolean(w.monitorTargetId) && endOfWatchDay(w.expiresAt) < nowIso)
+      .slice(0, limit)
       .map((w) => ({ wantKey: w.wantKey }));
   },
 });
@@ -915,36 +927,56 @@ export const catalogItemForTarget = internalQuery({
 // INTERNAL action: dispatchNotifications (Task 11 dispatch)
 // ===========================================================================
 
-/** Drain a batch of pending notifications (internal query feeding the dispatch action). */
-export const pendingNotifications = internalQuery({
-  args: { limit: v.optional(v.number()) },
+/**
+ * Notifications a dispatch wave may claim: every "pending" row, plus "sending"
+ * rows whose claim lease has expired (orphaned by a crashed wave). Bounded by
+ * `limit`. claimNotification re-checks claimability atomically, so two waves that
+ * both surface the same stale row still deliver it at most once.
+ */
+export const claimableNotifications = internalQuery({
+  args: { now: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const nowIso = args.now ?? new Date().toISOString();
+    const limit = args.limit ?? 100;
+    const pending = await ctx.db
       .query("notification_queue")
       .withIndex("by_status", (q) => q.eq("status", "pending"))
-      .take(args.limit ?? 100);
+      .take(limit);
+    const sending = await ctx.db
+      .query("notification_queue")
+      .withIndex("by_status", (q) => q.eq("status", "sending"))
+      .take(limit);
+    const stale = sending.filter((r) => isClaimExpired(r.claimedAt, nowIso));
+    return [...pending, ...stale].slice(0, limit);
   },
 });
 
+/** True when a "sending" claim is stale (older than the lease) and may be reclaimed. */
+function isClaimExpired(claimedAt: string | undefined, nowIso: string): boolean {
+  if (!claimedAt) return true; // missing timestamp ⇒ reclaimable (defensive)
+  return Date.parse(claimedAt) + NOTIFICATION_CLAIM_LEASE_MS <= Date.parse(nowIso);
+}
+
 /**
- * Atomically claim a pending notification for delivery: re-check `status ===
- * "pending"` INSIDE the mutation (Convex mutations are serializable, so this
- * read-then-write is the atomic gate) and flip it to "sending". An overlapping
- * dispatch wave that loses the race sees a non-pending row and gets
- * { claimed: false } — so each row is handed to a sender at most once per claim.
- *
- * KNOWN LIMITATION (out of scope for zwapit-46i.4): if the dispatch action dies
- * AFTER this commit but BEFORE markNotification/failNotification, the row is
- * stranded in "sending" (pendingNotifications only drains "pending"). Reclaiming
- * stale "sending" rows would need a claimedAt timestamp + age threshold; not
- * handled in this slice and flagged to the user as a follow-up.
+ * Atomically claim a notification for delivery. Convex mutations are
+ * serializable, so this read-then-write is the atomic gate: a row is claimable if
+ * it is "pending", OR it is "sending" but its claim lease has expired — meaning a
+ * prior dispatch wave claimed it then died before mark/fail, so reclaiming it
+ * keeps the notification from being lost forever. The winner flips it to
+ * "sending" and stamps claimedAt; an overlapping wave that loses the race gets
+ * { claimed: false }, so a row reaches a sender at most once per active lease.
  */
 export const claimNotification = internalMutation({
   args: { notificationId: v.id("notification_queue"), now: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const nowIso = args.now ?? new Date().toISOString();
     const row = await ctx.db.get(args.notificationId);
-    if (row?.status !== "pending") return { claimed: false };
-    await ctx.db.patch(args.notificationId, { status: "sending" });
+    if (!row) return { claimed: false };
+    const claimable =
+      row.status === "pending" ||
+      (row.status === "sending" && isClaimExpired(row.claimedAt, nowIso));
+    if (!claimable) return { claimed: false };
+    await ctx.db.patch(args.notificationId, { status: "sending", claimedAt: nowIso });
     return { claimed: true };
   },
 });
@@ -979,7 +1011,7 @@ export const markNotification = internalMutation({
  * Record a failed delivery attempt: increment `attempts` and decide the next
  * state. Under the cap → requeue to "pending" (a later wave retries it). At the
  * cap → "failed" (terminal), so a persistently-broken send cannot loop forever.
- * pendingNotifications only ever drains "pending", so the requeue IS the retry.
+ * claimableNotifications surfaces "pending" rows, so the requeue IS the retry.
  */
 export const failNotification = internalMutation({
   args: {
@@ -1043,13 +1075,14 @@ export const dispatchNotifications = internalAction({
     args,
   ): Promise<{ dispatched: number; sent: number; failed: number }> => {
     const nowIso = args.now ?? new Date().toISOString();
-    const pending = await ctx.runQuery(internal.watcher.pendingNotifications, {
+    const batch = await ctx.runQuery(internal.watcher.claimableNotifications, {
+      now: nowIso,
       limit: args.limit,
     });
 
     let sent = 0;
     let failed = 0;
-    for (const row of pending) {
+    for (const row of batch) {
       // Claim first (pending → sending). If a concurrent wave already claimed it,
       // skip — never hand the same row to a sender twice.
       const claim = await ctx.runMutation(internal.watcher.claimNotification, {
@@ -1096,7 +1129,7 @@ export const dispatchNotifications = internalAction({
         failed += 1;
       }
     }
-    return { dispatched: pending.length, sent, failed };
+    return { dispatched: batch.length, sent, failed };
   },
 });
 

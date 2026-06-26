@@ -617,12 +617,20 @@ describe("dispatchNotifications — claim race guard + bounded retry (zwapit-46i
     const row = await armAndOpenOne(tt);
 
     // First claim wins (pending → sending); a second claim loses (already sending).
-    const first = await tt.mutation(internal.watcher.claimNotification, { notificationId: row._id });
+    // Claim at POLL_NOW so claimedAt shares the dispatch's clock — otherwise the
+    // wall-clock claim would look lease-stale to the far-future POLL_NOW dispatch.
+    const first = await tt.mutation(internal.watcher.claimNotification, {
+      notificationId: row._id,
+      now: POLL_NOW,
+    });
     expect(first.claimed).toBe(true);
-    const second = await tt.mutation(internal.watcher.claimNotification, { notificationId: row._id });
+    const second = await tt.mutation(internal.watcher.claimNotification, {
+      notificationId: row._id,
+      now: POLL_NOW,
+    });
     expect(second.claimed).toBe(false);
 
-    // Dispatch now finds nothing pending (the row is 'sending'), so it never sends.
+    // Dispatch (same clock) finds nothing claimable (fresh 'sending'), so never sends.
     const sent: NotificationMessage[] = [];
     __setSenders({
       email: async (m): Promise<SenderResult> => { sent.push(m); return { sent: true }; },
@@ -682,6 +690,30 @@ describe("dispatchNotifications — claim race guard + bounded retry (zwapit-46i
     // A 4th wave finds nothing pending → no further work, no loop.
     const d4 = await tt.action(internal.watcher.dispatchNotifications, { now: POLL_NOW });
     expect(d4.dispatched).toBe(0);
+  });
+
+  test("reclaims a stale 'sending' claim (crashed worker) and delivers it on a later wave", async () => {
+    const tt = t();
+    const row = await armAndOpenOne(tt);
+    // Simulate a worker that claimed then died: stuck "sending" with an OLD claimedAt.
+    await tt.run(async (ctx) => {
+      await ctx.db.patch(row._id, { status: "sending", claimedAt: "2030-01-01T00:00:00.000Z" });
+    });
+
+    const sent: NotificationMessage[] = [];
+    __setSenders({
+      email: async (m): Promise<SenderResult> => { sent.push(m); return { sent: true }; },
+      webpush: async (): Promise<SenderResult> => ({ sent: true }),
+    });
+
+    // A wave well past the 10-min lease reclaims the orphaned row and delivers it.
+    const d = await tt.action(internal.watcher.dispatchNotifications, {
+      now: "2030-01-01T00:20:00.000Z",
+    });
+    expect(d.sent).toBe(1);
+    expect(sent).toHaveLength(1);
+    const after = await tt.run((ctx) => ctx.db.get(row._id));
+    expect(after?.status).toBe("sent");
   });
 });
 
@@ -854,6 +886,45 @@ describe("expireWants — close a target once every subscriber's date has passed
     const poll = await tt.action(internal.watcher.pollDueTargets, { now: PAST_EXPIRY_NOW });
     expect(poll.polled).toBe(0);
     expect(poll.detected).toBe(0);
+  });
+
+  test("does not starve a later-created expired alert behind an older non-expiring want", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    // Oldest open want: a non-alert demand want (no monitorTargetId) with a FAR-FUTURE
+    // expiry. With a createdAt-ordered take(limit) prefix this fills the only slot and
+    // hides the alert behind it — the bug CodeRabbit flagged.
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("wants", {
+        wantKey: "want_demand_future",
+        buyerId: APP_A,
+        catalogItemId: "catalog_movie_1",
+        category: "movie_ticket",
+        quantity: 1,
+        maxPricePerUnit: 0,
+        state: "open",
+        expiresAt: "2999-01-01",
+        createdAt: "2000-01-01T00:00:00.000Z",
+      });
+    });
+    // Later-created alert want with a PAST watch date (createAlert stamps createdAt ~now).
+    const { wantKey } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    // limit=1 makes the starvation observable: a take(1)+filter prefix returns the
+    // future demand want → filters to empty → expired alert never reached.
+    const res = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW, limit: 1 });
+    expect(res.expired).toBe(1);
+
+    const want = await tt.run(async (ctx) =>
+      (await ctx.db.query("wants").collect()).find((w) => w.wantKey === wantKey),
+    );
+    expect(want?.state).toBe("expired");
   });
 });
 
