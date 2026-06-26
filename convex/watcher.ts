@@ -78,6 +78,12 @@ const NOTIFICATION_CLAIM_LEASE_MS = 10 * 60_000;
 // crowd real targets out of a wave). `sources.length > 0` in dueTargets stays as
 // defense-in-depth.
 const NEVER_POLL_AT = "9999-12-31T23:59:59.999Z";
+// Want category mirrors the catalog kind. A lookup map (not a nested ternary, S3358).
+const KIND_TO_CATEGORY = {
+  movie: "movie_ticket",
+  live_event: "event_ticket",
+  bus_route: "bus_travel",
+} as const;
 // Delivered alert types in this slice (design §Out of scope): Discount / Price-drop
 // are captured on the want but NOT delivered yet.
 const DELIVERED_ALERT_TYPES = ["availability", "last_minute"] as const;
@@ -302,12 +308,7 @@ export const createAlert = mutation({
     const channels = args.channels ?? (["email"] as const);
     // Want category mirrors the catalog kind (movie → movie_ticket, live_event →
     // event_ticket, bus_route → bus_travel) instead of a hardcoded movie value.
-    const category =
-      catalogItem.kind === "live_event"
-        ? ("event_ticket" as const)
-        : catalogItem.kind === "bus_route"
-          ? ("bus_travel" as const)
-          : ("movie_ticket" as const);
+    const category = KIND_TO_CATEGORY[catalogItem.kind];
 
     // ---- find-or-create THIS buyer's want for the target (dedupe per buyer) ----
     const existingForBuyer = (await subscribersForTarget(ctx, targetId)).find(
