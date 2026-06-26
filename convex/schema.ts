@@ -133,7 +133,13 @@ const wantMatchState = v.union(
 // Internal table/value names ("monitor_target", source "bms"/"district") never
 // surface to users; user-facing copy uses approved terms ("Tickets are live").
 
-const watcherSource = v.union(v.literal("bms"), v.literal("district"));
+// "curated" = admin/manually-marked availability (events with no pollable source);
+// such targets carry sources: [] and are never touched by pollDueTargets.
+const watcherSource = v.union(
+  v.literal("bms"),
+  v.literal("district"),
+  v.literal("curated"),
+);
 
 const monitorTargetStatus = v.union(
   v.literal("watching"),

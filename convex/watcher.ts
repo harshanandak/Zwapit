@@ -60,7 +60,7 @@ import {
   defaultSenders,
   type Senders,
 } from "./watcher/senders";
-import type { NormalizedShow } from "./watcher/types";
+import type { NormalizedShow, ShowSource } from "./watcher/types";
 
 // Degrade threshold: K consecutive empty/blocked polls → "degraded" (design §Edge).
 const DEGRADE_AFTER = 3;
@@ -71,6 +71,19 @@ const MAX_NOTIFICATION_ATTEMPTS = 3;
 // next wave reclaims the row rather than dropping it. Comfortably under the poll
 // cadence so reclaim is timely.
 const NOTIFICATION_CLAIM_LEASE_MS = 10 * 60_000;
+// Curated (admin-driven) targets are never polled. nextCheckAt is set on every
+// target insert, so curated targets get a far-future sentinel that the dueTargets
+// index range (nextCheckAt <= now) can NEVER select — keeping them out of the poll
+// budget entirely, not merely filtered out after `.take()` (which would let them
+// crowd real targets out of a wave). `sources.length > 0` in dueTargets stays as
+// defense-in-depth.
+const NEVER_POLL_AT = "9999-12-31T23:59:59.999Z";
+// Want category mirrors the catalog kind. A lookup map (not a nested ternary, S3358).
+const KIND_TO_CATEGORY = {
+  movie: "movie_ticket",
+  live_event: "event_ticket",
+  bus_route: "bus_travel",
+} as const;
 // Delivered alert types in this slice (design §Out of scope): Discount / Price-drop
 // are captured on the want but NOT delivered yet.
 const DELIVERED_ALERT_TYPES = ["availability", "last_minute"] as const;
@@ -105,7 +118,7 @@ const alertTypeV = v.union(
   v.literal("last_minute"),
 );
 const channelV = v.union(v.literal("email"), v.literal("web_push"));
-const sourceV = v.union(v.literal("bms"), v.literal("district"));
+const sourceV = v.union(v.literal("bms"), v.literal("district"), v.literal("curated"));
 
 const normalizedShowV = v.object({
   source: sourceV,
@@ -248,13 +261,16 @@ export const createAlert = mutation({
     });
 
     // Platform routing: a target only watches sources whose codes the catalog row
-    // actually has (design §Edge: one source has the show).
+    // actually has (design §Edge: one source has the show). Curated kinds
+    // (live_event) have no pollable source — availability is admin-driven, so they
+    // carry sources: [] and are never polled (dueTargets skips empty-source targets).
+    const isCurated = catalogItem.kind === "live_event";
     const sources: Array<"bms" | "district"> = [];
     if (buildBmsUrl(catalogItem, date) !== null) sources.push("bms");
     if (buildDistrictUrl(catalogItem, date) !== null) sources.push("district");
-    // Reject alerts that no official source can watch — otherwise pollDueTargets
-    // fetches nothing and reschedules forever, leaving the user an inert alert.
-    if (sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
+    // A pollable kind with no source is inert (pollDueTargets fetches nothing and
+    // reschedules forever); reject it. Curated kinds are allowed with no source.
+    if (!isCurated && sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
 
     // ---- find-or-create the shared monitor target ----
     let target = await monitorTargetByCollapseKey(ctx, collapseKey);
@@ -270,7 +286,9 @@ export const createAlert = mutation({
         status: "watching",
         subscriberCount: 0,
         failCount: 0,
-        nextCheckAt: nowIso,
+        // Curated targets are never polled → far-future sentinel keeps them out of
+        // the dueTargets index range (not just the post-take filter).
+        nextCheckAt: isCurated ? NEVER_POLL_AT : nowIso,
       });
       target = (await ctx.db.get(insertedId))!;
       targetId = insertedId;
@@ -288,6 +306,9 @@ export const createAlert = mutation({
 
     const alertTypes = args.alertTypes ?? (["availability"] as const);
     const channels = args.channels ?? (["email"] as const);
+    // Want category mirrors the catalog kind (movie → movie_ticket, live_event →
+    // event_ticket, bus_route → bus_travel) instead of a hardcoded movie value.
+    const category = KIND_TO_CATEGORY[catalogItem.kind];
 
     // ---- find-or-create THIS buyer's want for the target (dedupe per buyer) ----
     const existingForBuyer = (await subscribersForTarget(ctx, targetId)).find(
@@ -313,7 +334,7 @@ export const createAlert = mutation({
         wantKey,
         buyerId,
         catalogItemId: args.catalogItemId,
-        category: "movie_ticket",
+        category,
         quantity: 1,
         maxPricePerUnit: 0,
         state: "open",
@@ -351,6 +372,83 @@ export const createAlert = mutation({
  * writes an availability_events row, upserts the snapshot cache, and advances the
  * target watching → live on the first open. Returns the new event id (or null).
  */
+/**
+ * Core of recordAvailability, shared with the curated markEventAvailable path:
+ * snapshot-hash dedup → write the availability_event (allowlisted deep-link OUT)
+ * → audit → advance the target to live (stop-on-detect). Does NOT touch the
+ * per-(target, source) snapshot cache — that is a polling-only concern, so
+ * recordAvailability adds it and the curated path skips it.
+ */
+async function recordAvailabilityCore(
+  ctx: MutationCtx,
+  args: {
+    monitorTargetId: Id<"monitor_targets">;
+    source: NormalizedShow["source"];
+    normalized: NormalizedShow[];
+    bookingUrl: string;
+    detectedAt: string;
+    snapshotHash: string;
+  },
+): Promise<{ availabilityEventId: Id<"availability_events"> | null; deduped: boolean }> {
+  const target = await ctx.db.get(args.monitorTargetId);
+  if (!target) throw new Error("MONITOR_TARGET_NOT_FOUND");
+
+  // Dedup against the TARGET UNION hash (target.lastSnapshotHash), NOT the
+  // per-(target, source) cache. pollDueTargets hashes the whole cross-source
+  // union and records under whichever source won the booking URL, so the primary
+  // source can flip (bms→district) on an UNCHANGED union. Gating on the per-source
+  // cache would miss that flip and re-fire; gating on the union hash is
+  // independent of which source won, so an unchanged union is a true no-op.
+  if (target.lastSnapshotHash === args.snapshotHash) {
+    return { availabilityEventId: null, deduped: true };
+  }
+
+  const eventId = await ctx.db.insert("availability_events", {
+    monitorTargetId: args.monitorTargetId,
+    source: args.source,
+    detectedAt: args.detectedAt,
+    theatresJson: JSON.stringify(args.normalized),
+    // Allowlist the deep-link before persisting — only official https BMS/District
+    // URLs survive; anything unsafe collapses to "" (defense-in-depth, A03/A10).
+    bookingUrl: officialBookingUrl(args.bookingUrl),
+    snapshotHash: args.snapshotHash,
+  });
+
+  await appendWatcherAuditLog(ctx, {
+    actorId: "system",
+    action: "availability_detected",
+    entityType: "availability_event",
+    entityId: eventId,
+    createdAt: args.detectedAt,
+  });
+
+  // Advance to live on the first open (stop-on-detect).
+  if (target.status !== "live") {
+    await ctx.db.patch(args.monitorTargetId, {
+      status: "live",
+      lastSnapshotHash: args.snapshotHash,
+      failCount: 0,
+      lastCheckedAt: args.detectedAt,
+    });
+    await appendWatcherAuditLog(ctx, {
+      actorId: "system",
+      action: "monitor_target_live",
+      entityType: "monitor_target",
+      entityId: target.collapseKey,
+      fromState: target.status,
+      toState: "live",
+      createdAt: args.detectedAt,
+    });
+  } else {
+    await ctx.db.patch(args.monitorTargetId, {
+      lastSnapshotHash: args.snapshotHash,
+      lastCheckedAt: args.detectedAt,
+    });
+  }
+
+  return { availabilityEventId: eventId, deduped: false };
+}
+
 export const recordAvailability = internalMutation({
   args: {
     monitorTargetId: v.id("monitor_targets"),
@@ -361,70 +459,82 @@ export const recordAvailability = internalMutation({
     snapshotHash: v.string(),
   },
   handler: async (ctx, args) => {
+    const result = await recordAvailabilityCore(ctx, args);
+    if (!result.deduped && args.source !== "curated") {
+      // Polling-only: cache the per-(target, source) snapshot so an unchanged
+      // poll is a no-op. The curated path has no source cache to maintain.
+      await upsertSourceSnapshot(ctx, {
+        monitorTargetId: args.monitorTargetId,
+        source: args.source,
+        snapshotHash: args.snapshotHash,
+        fetchedAt: args.detectedAt,
+      });
+    }
+    return result;
+  },
+});
+
+// Admin/curated availability input: an event has a venue + time (+ optional
+// section/tier as `format`); no per-show source (it is all "curated").
+const eventShowV = v.object({
+  theatreName: v.string(),
+  showTime: v.string(),
+  format: v.optional(v.string()),
+});
+
+/**
+ * Curated/admin availability for a live event — the manual analog of
+ * pollDueTargets→recordAvailability for catalog kinds with no pollable source.
+ * Records the official deep-link OUT + advances the target to live (reusing
+ * recordAvailabilityCore: snapshot dedup, audit, stop-on-detect), then fans out
+ * notifications via enqueueForEvent. Internal-only; never client-callable. Zero
+ * external egress.
+ */
+export const markEventAvailable = internalMutation({
+  args: {
+    monitorTargetId: v.id("monitor_targets"),
+    shows: v.array(eventShowV),
+    bookingUrl: v.string(),
+    detectedAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     const target = await ctx.db.get(args.monitorTargetId);
     if (!target) throw new Error("MONITOR_TARGET_NOT_FOUND");
-
-    // Dedup against the TARGET UNION hash (target.lastSnapshotHash), NOT the
-    // per-(target, source) cache. pollDueTargets hashes the whole cross-source
-    // union and records under whichever source won the booking URL, so the
-    // primary source can flip (bms→district) on an UNCHANGED union. Gating on the
-    // per-source cache would miss that flip and re-fire; gating on the union hash
-    // is independent of which source won, so an unchanged union is a true no-op.
-    if (target.lastSnapshotHash === args.snapshotHash) {
-      return { availabilityEventId: null, deduped: true };
+    // Only curated (non-pollable) targets may be marked available by this admin
+    // path — never flip a pollable bms/district target to a "curated" event.
+    if (target.sources.length !== 0) throw new Error("CURATED_TARGET_REQUIRED");
+    // Require real show data — no empty list, no blank venue/time.
+    if (
+      args.shows.length === 0 ||
+      args.shows.some((s) => s.theatreName.trim() === "" || s.showTime.trim() === "")
+    ) {
+      throw new Error("INVALID_CURATED_SHOWS");
     }
+    // Deep-link OUT only: the booking URL MUST be an official link. Reject rather
+    // than advance to live with a sanitised-empty link (the whole payoff is the
+    // deep-link OUT). A target with a not-yet-official URL stays watching.
+    const bookingUrl = officialBookingUrl(args.bookingUrl);
+    if (!bookingUrl) throw new Error("INVALID_BOOKING_URL");
 
-    const eventId = await ctx.db.insert("availability_events", {
+    const nowIso = args.detectedAt ?? new Date().toISOString();
+    const normalized: NormalizedShow[] = args.shows.map((s) => ({
+      source: "curated" as const,
+      theatreName: s.theatreName,
+      showTime: s.showTime,
+      format: s.format ?? "",
+    }));
+    const result = await recordAvailabilityCore(ctx, {
       monitorTargetId: args.monitorTargetId,
-      source: args.source,
-      detectedAt: args.detectedAt,
-      theatresJson: JSON.stringify(args.normalized),
-      // Allowlist the deep-link before persisting — only official https BMS/District
-      // URLs survive; anything unsafe collapses to "" (defense-in-depth, A03/A10).
-      bookingUrl: officialBookingUrl(args.bookingUrl),
-      snapshotHash: args.snapshotHash,
+      source: "curated",
+      normalized,
+      bookingUrl,
+      detectedAt: nowIso,
+      snapshotHash: snapshotHash(normalized),
     });
-
-    await upsertSourceSnapshot(ctx, {
-      monitorTargetId: args.monitorTargetId,
-      source: args.source,
-      snapshotHash: args.snapshotHash,
-      fetchedAt: args.detectedAt,
-    });
-
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      action: "availability_detected",
-      entityType: "availability_event",
-      entityId: eventId,
-      createdAt: args.detectedAt,
-    });
-
-    // Advance to live on the first open (stop-on-detect).
-    if (target.status !== "live") {
-      await ctx.db.patch(args.monitorTargetId, {
-        status: "live",
-        lastSnapshotHash: args.snapshotHash,
-        failCount: 0,
-        lastCheckedAt: args.detectedAt,
-      });
-      await appendWatcherAuditLog(ctx, {
-        actorId: "system",
-        action: "monitor_target_live",
-        entityType: "monitor_target",
-        entityId: target.collapseKey,
-        fromState: target.status,
-        toState: "live",
-        createdAt: args.detectedAt,
-      });
-    } else {
-      await ctx.db.patch(args.monitorTargetId, {
-        lastSnapshotHash: args.snapshotHash,
-        lastCheckedAt: args.detectedAt,
-      });
+    if (result.availabilityEventId) {
+      await enqueueForEvent(ctx, result.availabilityEventId, nowIso);
     }
-
-    return { availabilityEventId: eventId, deduped: false };
+    return result;
   },
 });
 
@@ -662,8 +772,11 @@ export const dueTargets = internalQuery({
       )
       .take(limit);
     // In-window on BOTH sides: not past windowEnd, and not before windowStart.
+    // Curated/admin-driven targets (sources []) have nothing to fetch, so they are
+    // never polled — their availability is set by markEventAvailable, not the cron.
     return candidates.filter(
       (t) =>
+        t.sources.length > 0 &&
         (!t.windowEnd || t.windowEnd >= nowIso) &&
         (!t.windowStart || t.windowStart <= nowIso),
     );
@@ -765,7 +878,8 @@ export const expireWants = internalAction({
 // ===========================================================================
 
 /** Parse one Parallel result row per its source into NormalizedShow[]. */
-function parseResultForSource(source: "bms" | "district", content: string): NormalizedShow[] {
+function parseResultForSource(source: ShowSource, content: string): NormalizedShow[] {
+  if (source === "curated") return []; // curated availability is admin-set, never polled
   if (source === "district") return parseDistrictMovieCity(content);
   // BMS: content is raw JSON. Tolerate parse failure (untrusted bytes, A03).
   let json: unknown = {};

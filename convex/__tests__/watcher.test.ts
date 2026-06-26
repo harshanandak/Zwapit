@@ -122,6 +122,26 @@ async function seedMovie(
   });
 }
 
+// A curated event catalog row (kind live_event, no BMS/District codes) — events-phase2.
+async function seedEvent(
+  tt: ReturnType<typeof t>,
+  catalogKey = "catalog_event_1",
+): Promise<void> {
+  await tt.run(async (ctx) => {
+    await ctx.db.insert("catalog_items", {
+      catalogKey,
+      kind: "live_event",
+      externalSource: "manual",
+      title: "Demo Concert",
+      city: "mumbai",
+      venueOrDestination: "Manpho Convention Centre",
+      startAt: "2027-02-14T19:00:00.000Z",
+      isActive: true,
+      lastSyncedAt: NOW,
+    });
+  });
+}
+
 afterEach(() => {
   __setFetcher(null);
   __setSenders(null);
@@ -215,6 +235,226 @@ describe("createAlert — shared monitor target collapse", () => {
         date: "25-06-2026",
       }),
     ).rejects.toThrow("ALERT_DATE_INVALID");
+  });
+});
+
+describe("createAlert — curated live events (events-phase2 T2)", () => {
+  test("a live_event alert creates a curated watching target (sources [], event_ticket) — no throw", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+
+    const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_1",
+      city: "mumbai",
+      date: "2027-02-14",
+    });
+
+    const { target, want } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      want: (await ctx.db.query("wants").collect())[0],
+    }));
+    expect(target.status).toBe("watching");
+    expect(target.sources).toEqual([]); // curated: no pollable source
+    expect(want.category).toBe("event_ticket"); // derived from catalog kind
+
+    // Curated target is NEVER polled: excluded from dueTargets despite watching + due.
+    const due = await tt.query(internal.watcher.dueTargets, { now: POLL_NOW });
+    expect(due.find((d) => d._id === monitorTargetId)).toBeUndefined();
+  });
+
+  test("two buyers on the same event occurrence collapse to ONE curated target", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedEvent(tt);
+    const args = { catalogItemId: "catalog_event_1", city: "mumbai", date: "2027-02-14" };
+
+    const r1 = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const r2 = await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+    expect(r1.monitorTargetId).toBe(r2.monitorTargetId);
+
+    const { targets, wants } = await tt.run(async (ctx) => ({
+      targets: await ctx.db.query("monitor_targets").collect(),
+      wants: await ctx.db.query("wants").collect(),
+    }));
+    expect(targets).toHaveLength(1);
+    expect(targets[0].subscriberCount).toBe(2);
+    expect(wants.every((w) => w.category === "event_ticket")).toBe(true);
+  });
+
+  test("curated targets never consume the poll budget — a pollable target is still due behind many curated ones", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    // Curated event targets created FIRST (would sort first by nextCheckAt and, with
+    // a .take(limit)-then-filter, crowd the pollable target out of the budget).
+    await seedEvent(tt, "catalog_event_a");
+    await seedEvent(tt, "catalog_event_b");
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_a",
+      city: "mumbai",
+      date: "2027-02-14",
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_b",
+      city: "mumbai",
+      date: "2027-02-14",
+    });
+    // A pollable movie target created LAST.
+    await seedMovie(tt, "catalog_movie_x");
+    const { monitorTargetId: movieTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_x",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+
+    // With limit 1, curated targets must NOT be selected ahead of the pollable one.
+    const due = await tt.query(internal.watcher.dueTargets, { now: POLL_NOW, limit: 1 });
+    expect(due).toHaveLength(1);
+    expect(due[0]._id as string).toBe(movieTargetId);
+  });
+});
+
+describe("markEventAvailable — curated availability → notify + deep-link OUT (events-phase2 T3)", () => {
+  const EVENT_ARGS = { catalogItemId: "catalog_event_1", city: "mumbai", date: "2027-02-14" };
+  const EVENT_SHOWS = [{ theatreName: "Manpho Convention Centre", showTime: "19:00", format: "GA" }];
+  const OFFICIAL_URL = "https://in.bookmyshow.com/events/demo-concert";
+
+  test("admin marks a curated event live → each subscriber notified (deep-link OUT); payoff live, owner only", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedEvent(tt);
+    const { wantKey, monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    const rec = await tt.mutation(internal.watcher.markEventAvailable, {
+      monitorTargetId: monitorTargetId as never,
+      shows: EVENT_SHOWS,
+      bookingUrl: OFFICIAL_URL,
+      detectedAt: NOW,
+    });
+    expect(rec.availabilityEventId).toBeTruthy();
+
+    const { target, events, notifs } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      events: await ctx.db.query("availability_events").collect(),
+      notifs: await ctx.db.query("notification_queue").collect(),
+    }));
+    expect(target.status).toBe("live");
+    expect(events).toHaveLength(1);
+    expect(events[0].source).toBe("curated");
+    expect(events[0].bookingUrl).toContain("bookmyshow");
+    expect(notifs).toHaveLength(2); // A + B on the default email channel
+    expect(new Set(notifs.map((n) => n.userId))).toEqual(new Set([APP_A, APP_B]));
+
+    const payoff = await tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey });
+    expect(payoff?.isLive).toBe(true);
+    expect(payoff?.status).toBe("live");
+    expect(payoff?.bookingUrl).toContain("bookmyshow");
+    expect(payoff?.theatres).toContain("Manpho Convention Centre");
+    // A01: another user cannot read this alert.
+    const leaked = await tt.withIdentity(BUYER_B).query(api.watcher.getAlertPayoff, { wantKey });
+    expect(leaked).toBeNull();
+  });
+
+  test("rejects a non-official bookingUrl — no empty live link; target stays watching", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: monitorTargetId as never,
+        shows: EVENT_SHOWS,
+        bookingUrl: "javascript:alert(1)",
+        detectedAt: NOW,
+      }),
+    ).rejects.toThrow("INVALID_BOOKING_URL");
+
+    const { target, events } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      events: await ctx.db.query("availability_events").collect(),
+    }));
+    expect(target.status).toBe("watching"); // never advanced to live with a "" link
+    expect(events).toHaveLength(0);
+  });
+
+  test("rejects empty/blank shows and a non-curated (pollable) target", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: monitorTargetId as never,
+        shows: [],
+        bookingUrl: OFFICIAL_URL,
+      }),
+    ).rejects.toThrow("INVALID_CURATED_SHOWS");
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: monitorTargetId as never,
+        shows: [{ theatreName: "  ", showTime: "19:00", format: "" }],
+        bookingUrl: OFFICIAL_URL,
+      }),
+    ).rejects.toThrow("INVALID_CURATED_SHOWS");
+
+    // A pollable movie target must NOT be markable via the curated path.
+    await seedMovie(tt, "catalog_movie_y");
+    const { monitorTargetId: movieTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_y",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: movieTargetId as never,
+        shows: EVENT_SHOWS,
+        bookingUrl: OFFICIAL_URL,
+      }),
+    ).rejects.toThrow("CURATED_TARGET_REQUIRED");
+  });
+
+  test("idempotent — re-marking with the same official URL + shows adds no new event", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    await tt.mutation(internal.watcher.markEventAvailable, {
+      monitorTargetId: monitorTargetId as never,
+      shows: EVENT_SHOWS,
+      bookingUrl: OFFICIAL_URL,
+      detectedAt: NOW,
+    });
+    const second = await tt.mutation(internal.watcher.markEventAvailable, {
+      monitorTargetId: monitorTargetId as never,
+      shows: EVENT_SHOWS,
+      bookingUrl: OFFICIAL_URL,
+      detectedAt: NOW,
+    });
+    expect(second.deduped).toBe(true); // same snapshot hash → no-op
+
+    const events = await tt.run((ctx) => ctx.db.query("availability_events").collect());
+    expect(events).toHaveLength(1);
+    expect(events[0].bookingUrl).toContain("bookmyshow");
   });
 });
 
