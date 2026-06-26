@@ -12,10 +12,10 @@ Scope: curated-availability-first events watcher. Reuse the movie engine; do NOT
 ## T1 — Schema: allow curated (non-polled) availability  [schema → codegen]
 **File(s):** `convex/schema.ts`, `convex/__tests__/schema.watcher.test.ts`
 **OWNS:** `convex/schema.ts`, `convex/__tests__/schema.watcher.test.ts`
-**What to implement:** Extend the `watcherSource` union with `"curated"` so `availability_events.source`
-and `monitor_targets.sources` can represent an admin/curated (non-polled) event. No new tables. A
-curated event target carries `sources: []` (or `["curated"]`) and is never polled by `pollDueTargets`
-(which only routes bms/district URLs).
+**What to implement:** Extend the `watcherSource` union with `"curated"`. The value is reserved for
+`availability_events.source` (the admin/curated availability write); `monitor_targets.sources` stays
+unambiguously **`sources: []`** for curated targets (never `["curated"]`), so `pollDueTargets` — which
+routes only bms/district URLs — never polls them. No new tables.
 **TDD steps:**
 1. Write test (`schema.watcher.test.ts`): insert a `monitor_targets` row with `sources: []` and an
    `availability_events` row with `source: "curated"` → both validate.
@@ -66,18 +66,18 @@ theatres/showtimes fields already carry venue/section).
 5. Commit: `feat(watcher): internal markEventAvailable (curated availability → notify, deep-link OUT)`.
 **Expected output:** an admin can mark a curated event live → subscribers notified, payoff live, audited.
 
-## T4 — Seed curated live_event occurrences  [seed.ts]
-**File(s):** `convex/seed.ts`, `convex/__tests__/seed.test.ts`
-**OWNS:** `convex/seed.ts`, `convex/__tests__/seed.test.ts`
-**What to implement:** Add 1–2 curated per-occurrence `live_event` rows (catalogKey, kind `live_event`,
-title, `city`, `startAt` = event datetime, `venueOrDestination`), idempotent by catalogKey, so the event
-alert path has real demo data. No source codes (curated). Reuse the existing `live_event` seed shape.
+## T4 — Lock curated live_event rows as alert-ready (contract test only)  [seed.test.ts]
+**File(s):** `convex/__tests__/seed.test.ts`
+**OWNS:** `convex/__tests__/seed.test.ts`
+**What to implement:** DRY — `seed.ts` ALREADY seeds curated `live_event` rows
+(`catalog_event_alan_walker`, `catalog_event_coldplay`; see decisions.md Decision 2). Do NOT add or
+duplicate rows. Add a **contract test only** asserting the existing curated rows stay alert-ready
+(kind `live_event`, city + `startAt` set, NO BMS/District source codes → `createAlert` yields a curated
+`sources: []` target). `convex/seed.ts` stays unchanged.
 **TDD steps:**
-1. Write test: after seed, the curated `live_event` rows exist with the expected keys/city/startAt.
-2. Run → fails (rows absent).
-3. Implement seed additions (idempotent).
-4. Run → passes; full suite green.
-5. Commit: `feat(seed): curated live_event occurrences for the events watcher`.
+1. Add a contract/characterization test in `seed.test.ts` over the existing seeded `live_event` rows.
+2. Run → passes (rows already present); it locks the contract against a later edit adding source codes.
+3. Commit: `test(seed): lock curated live_event rows as alert-ready (DRY)`.
 **Expected output:** demo curated events present; idempotent across re-seeds.
 
 ## T5 — (LAST, research-only — does NOT gate the slice) Event-source spike → decisions.md

@@ -186,9 +186,10 @@ describe("watcher schema migration", () => {
       });
       expect(targetId).toBeTruthy();
 
-      // Availability recorded by the curated/admin path uses source "curated".
+      // Availability recorded by the curated/admin path uses source "curated",
+      // linked to the curated target created above.
       const eventId = await ctx.db.insert("availability_events", {
-        monitorTargetId: "monitor_target_event_1",
+        monitorTargetId: targetId,
         source: "curated",
         detectedAt: "2026-06-26T10:05:00.000Z",
         theatresJson: JSON.stringify([

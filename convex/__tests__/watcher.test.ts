@@ -363,7 +363,74 @@ describe("markEventAvailable — curated availability → notify + deep-link OUT
     expect(leaked).toBeNull();
   });
 
-  test('an unsafe bookingUrl is sanitised to ""; idempotent re-call (same shows) adds no new event', async () => {
+  test("rejects a non-official bookingUrl — no empty live link; target stays watching", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: monitorTargetId as never,
+        shows: EVENT_SHOWS,
+        bookingUrl: "javascript:alert(1)",
+        detectedAt: NOW,
+      }),
+    ).rejects.toThrow("INVALID_BOOKING_URL");
+
+    const { target, events } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      events: await ctx.db.query("availability_events").collect(),
+    }));
+    expect(target.status).toBe("watching"); // never advanced to live with a "" link
+    expect(events).toHaveLength(0);
+  });
+
+  test("rejects empty/blank shows and a non-curated (pollable) target", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedEvent(tt);
+    const { monitorTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, EVENT_ARGS);
+
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: monitorTargetId as never,
+        shows: [],
+        bookingUrl: OFFICIAL_URL,
+      }),
+    ).rejects.toThrow("INVALID_CURATED_SHOWS");
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: monitorTargetId as never,
+        shows: [{ theatreName: "  ", showTime: "19:00", format: "" }],
+        bookingUrl: OFFICIAL_URL,
+      }),
+    ).rejects.toThrow("INVALID_CURATED_SHOWS");
+
+    // A pollable movie target must NOT be markable via the curated path.
+    await seedMovie(tt, "catalog_movie_y");
+    const { monitorTargetId: movieTargetId } = await tt
+      .withIdentity(BUYER_A)
+      .mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_y",
+        city: "mumbai",
+        date: "2026-06-25",
+        format: "2D",
+      });
+    await expect(
+      tt.mutation(internal.watcher.markEventAvailable, {
+        monitorTargetId: movieTargetId as never,
+        shows: EVENT_SHOWS,
+        bookingUrl: OFFICIAL_URL,
+      }),
+    ).rejects.toThrow("CURATED_TARGET_REQUIRED");
+  });
+
+  test("idempotent — re-marking with the same official URL + shows adds no new event", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedEvent(tt);
@@ -374,20 +441,20 @@ describe("markEventAvailable — curated availability → notify + deep-link OUT
     await tt.mutation(internal.watcher.markEventAvailable, {
       monitorTargetId: monitorTargetId as never,
       shows: EVENT_SHOWS,
-      bookingUrl: "javascript:alert(1)",
+      bookingUrl: OFFICIAL_URL,
       detectedAt: NOW,
     });
     const second = await tt.mutation(internal.watcher.markEventAvailable, {
       monitorTargetId: monitorTargetId as never,
       shows: EVENT_SHOWS,
-      bookingUrl: "javascript:alert(1)",
+      bookingUrl: OFFICIAL_URL,
       detectedAt: NOW,
     });
     expect(second.deduped).toBe(true); // same snapshot hash → no-op
 
     const events = await tt.run((ctx) => ctx.db.query("availability_events").collect());
     expect(events).toHaveLength(1);
-    expect(events[0].bookingUrl).toBe(""); // unsafe URL collapsed (A03/A10)
+    expect(events[0].bookingUrl).toContain("bookmyshow");
   });
 });
 

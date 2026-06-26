@@ -498,6 +498,24 @@ export const markEventAvailable = internalMutation({
     detectedAt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const target = await ctx.db.get(args.monitorTargetId);
+    if (!target) throw new Error("MONITOR_TARGET_NOT_FOUND");
+    // Only curated (non-pollable) targets may be marked available by this admin
+    // path — never flip a pollable bms/district target to a "curated" event.
+    if (target.sources.length !== 0) throw new Error("CURATED_TARGET_REQUIRED");
+    // Require real show data — no empty list, no blank venue/time.
+    if (
+      args.shows.length === 0 ||
+      args.shows.some((s) => s.theatreName.trim() === "" || s.showTime.trim() === "")
+    ) {
+      throw new Error("INVALID_CURATED_SHOWS");
+    }
+    // Deep-link OUT only: the booking URL MUST be an official link. Reject rather
+    // than advance to live with a sanitised-empty link (the whole payoff is the
+    // deep-link OUT). A target with a not-yet-official URL stays watching.
+    const bookingUrl = officialBookingUrl(args.bookingUrl);
+    if (!bookingUrl) throw new Error("INVALID_BOOKING_URL");
+
     const nowIso = args.detectedAt ?? new Date().toISOString();
     const normalized: NormalizedShow[] = args.shows.map((s) => ({
       source: "curated" as const,
@@ -509,7 +527,7 @@ export const markEventAvailable = internalMutation({
       monitorTargetId: args.monitorTargetId,
       source: "curated",
       normalized,
-      bookingUrl: args.bookingUrl,
+      bookingUrl,
       detectedAt: nowIso,
       snapshotHash: snapshotHash(normalized),
     });
