@@ -55,7 +55,7 @@ Each entry is earned from something that actually went wrong here. The tag is th
 
 1. **Running `bun run lint`, `bun run typecheck`, or `bun run test`.** None of the three exists. `package.json` defines only `dev`, `build`, `check`, `check:routes`, and the `cap:` / `android:` / `ios:` / `cf:` families. Use `bunx tsc --noEmit` and bare `bun test`. `[config: 9 dead invocations across .claude/rules/workflow.md and .claude/commands/validate.md]`
 
-2. **Assuming a green PR means the tests ran.** `ci.yml` runs type check, build, and route coverage — **not `bun test`**. Tests execute only in the production gate (`cloudflare-worker-production.yml`), i.e. after merge. Run `bun test` locally before you claim tests pass. `[CI: bun test absent from ci.yml, present only in cloudflare-worker-production.yml:99]`
+2. **Claiming tests pass without running them.** PR CI does run `bun test` (`ci.yml` `tests` job, gating the CodeRabbit check), so a green PR is real — but it is 58s of feedback you get *after* pushing. Run `bun test` locally first; use the targeted lane while iterating. `[verified 2026-08-14: ci.yml:87-108 on pull_request; 315 pass / 0 fail locally]`
 
 3. **Believing "it works locally" about anything route- or deploy-shaped.** The single largest fix cluster in this repo is deploy: production credential handling, Cloudflare route rewriting, and a checkout flow that resolved locally and 404'd in production. `[git: 3 of 5 fix commits are deploy/Cloudflare — 8f72355, e1e5f76, e728fd7]` Verify with `bun run cf:dry-run` before believing a routing change.
 
@@ -93,7 +93,7 @@ Rows marked `[git]` exist because a past commit missed exactly that surface; the
 | **Screens** | Home, Search, Requests, Sell, Profile — which of the five tabs render this? |
 | **Copy** | Forbidden vocabulary checked; price shown in full *before* payment; transfer mode and payout rule shown upfront. |
 | **Rule engine** | Does this listing/order path route through `src/lib/rules/sourceRules.ts`? Blocked and DEMAND_ONLY sources still behave? |
-| **Tests** | 34 test files, 315 tests. Which did you add or change? Did you run the full `bun test`, knowing PR CI will not? |
+| **Tests** | 34 test files, 315 tests. Which did you add or change? Did you run the full `bun test` locally, before PR CI runs it for you? |
 | **Native** | Capacitor build affected (new plugin, new permission, purchase surface)? Usually "no" — say so. |
 | **Cloudflare / routing** `[git: 3 of 5 fix commits]` | Worker route or env var affected? `wrangler.jsonc` touched? Ran `bun run cf:dry-run`? A route that resolves locally has 404'd in production here before. |
 | **Dependencies** `[git: package.json + bun.lock in 6 of 9 fix commits]` | If you changed `package.json`, is `bun.lock` regenerated? CI installs `--frozen-lockfile`. |
@@ -132,7 +132,7 @@ bun run dev                                        #      astro dev
 
 **There is no `lint`, `test`, or `typecheck` script.** `bun run lint`, `bun run test`, and `bun run typecheck` all fail.
 
-Cheapest useful gate while iterating: `bunx tsc --noEmit` + the one targeted test file (~5s). Run the full `bun test` once before you say tests pass — it is 71s and PR CI will not run it for you.
+Cheapest useful gate while iterating: `bunx tsc --noEmit` + the one targeted test file (~5s). Run the full `bun test` once before you say tests pass — PR CI runs it too, but 58s locally beats a red check after the push.
 
 Deploy checks:
 
@@ -197,6 +197,15 @@ CI runs `ci.yml`, `cloudflare-worker-preview.yml`, `cloudflare-worker-production
 7. Shared files (`package.json`, routing config, shared types, schema-related frontend types, global constants) need explicit approval before parallel edits.
 
 **Evidence not available:** the session-history mine found nothing usable — `.claude/projects/C--Users-harsha-befach-Downloads-Zwapit/` contains zero transcripts, and a scan of 2,650 user messages in the parent project directory produced 20 topic+correction hits, all false positives (compaction summaries, teammate messages, pasted skill text). No user-correction cluster could be derived. CI is likewise silent: 40 runs, 39 success and 1 cancelled Dependabot run, so no failing-check pattern exists to mine.
+
+## Shipping regime (pre-user)
+
+Zwapit has no users yet, so a feature PR is reviewed as a feature, not as a diff.
+
+- The merge artifact is a **demo** (recording or screenshots from the dev runbook) plus the plan's acceptance checklist walked out loud, plus a description that leads with the problem. Line-level correctness is the agent loop's job — implementer, spec review, quality review — inside the PR.
+- **Completeness gates the merge, size does not.** Every state and transition, every entry point, every reverse path the plan named gets walked before ship. Half-built is the failure, big is not.
+- **Bot review is advisory** except secrets, injection, and a broken build. Feedback never expands the PR — file the follow-up.
+- **Main is recoverable:** squash-only, branch deleted on merge, revert or fix forward within the hour, never debug on a red main.
 
 ## Escape hatch
 
