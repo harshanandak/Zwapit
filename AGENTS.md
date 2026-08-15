@@ -49,26 +49,42 @@ Domain objects (these are the words to use back in reports, too):
 - **Source rule** (`source_rules`) — the per-source/per-category policy the rule engine evaluates.
 - **Success fee** — INR 10 + GST (1.8), charged on a completed community resale. The only v1 revenue.
 
-## Ten ways to hurt yourself in this repo
+## Ways to hurt yourself in this repo
 
-1. **Exposing an internal mutation.** Adding a matching, payout, or availability function as a public `mutation` because a component needed it. The component is wrong; add a read-model query instead.
-2. **Writing a client-visible query that leaks the other side.** Sellers see a "people looking" count — never buyer identity, budgets, or priority numbers. Grep the projection, not just the table.
-3. **Using a user-facing forbidden word in copy.** escrow, settlement, dispute, merchant, fulfilment, entitlement, KYC, linked account, AMBER, settlement hold, demand, allotment, reverse listing, queue, "#N in line", monitor target. These are internal vocabulary; see [User-facing language](#user-facing-language) for what to say instead.
-4. **Running `bun run lint` or `bun run test`.** Neither script exists in `package.json`. See the [runbook](#dev-runbook).
-5. **Breaking the watcher collapse key.** Loosening it (dropping `format`, rounding showtime) silently merges distinct shows and notifies the wrong subscribers. Tightening it fans out one poll into hundreds.
-6. **Editing `convex/schema.ts` and a screen in the same change without a migration thought.** Convex validates on write; a widened field that old rows lack fails reads elsewhere. Widen → migrate → narrow.
-7. **Committing `convex/_generated/` churn as if it were work.** It is committed on purpose (typecheck needs it) but regenerates constantly; do not bury a real diff in it.
-8. **Adding a table.** Eighteen exist. Most "new feature needs a table" instincts here are actually a read-model over `listings` + `wants` + `want_matches` — that is how the whole UI was wired (commits #27–#31).
-9. **Selling anything inside the native app.** Tiers, hold tokens, and alert-speed subscriptions inside the Capacitor build break Apple/Google in-app-purchase rules. Web/PWA only, later.
-10. **Turning on WhatsApp or SMS notifications.** Blocked on TRAI/DLT registration and WhatsApp opt-in compliance. Email + Web Push are the shipped channels; Telegram is next.
+Each entry is earned from something that actually went wrong here. The tag is the evidence. Mined 2026-08-15 over 44 commits, 40 CI runs, and the live toolchain.
+
+1. **Running `bun run lint`, `bun run typecheck`, or `bun run test`.** None of the three exists. `package.json` defines only `dev`, `build`, `check`, `check:routes`, and the `cap:` / `android:` / `ios:` / `cf:` families. Use `bunx tsc --noEmit` and bare `bun test`. `[config: 9 dead invocations across .claude/rules/workflow.md and .claude/commands/validate.md]`
+
+2. **Assuming a green PR means the tests ran.** `ci.yml` runs type check, build, and route coverage — **not `bun test`**. Tests execute only in the production gate (`cloudflare-worker-production.yml`), i.e. after merge. Run `bun test` locally before you claim tests pass. `[CI: bun test absent from ci.yml, present only in cloudflare-worker-production.yml:99]`
+
+3. **Believing "it works locally" about anything route- or deploy-shaped.** The single largest fix cluster in this repo is deploy: production credential handling, Cloudflare route rewriting, and a checkout flow that resolved locally and 404'd in production. `[git: 3 of 5 fix commits are deploy/Cloudflare — 8f72355, e1e5f76, e728fd7]` Verify with `bun run cf:dry-run` before believing a routing change.
+
+4. **Changing `convex/schema.ts` casually.** It appears in 5 of the 9 fix-type commits and has 8 commits of its own — the most-corrected backend file. Convex validates on write, so a widened field old rows lack breaks reads elsewhere. Widen → backfill → narrow, and run `bunx tsc --project convex/tsconfig.json --noEmit` (CI does; lefthook does not). `[git: convex/schema.ts in 5 of 9 fix commits]`
+
+5. **Touching the read-model seam without re-checking both sides.** `src/lib/convex/dataAdapter.ts` (11 commits) and `src/lib/convex/functionRefs.ts` (7) are the most-churned source files in the repo — that is where the UI meets Convex, and where drift lands. `[git: 11 and 7 commits, top of source churn]`
+
+6. **Loosening the watcher collapse key.** `convex/watcher.ts` and `convex/__tests__/watcher.test.ts` each appear in 3 fix commits. Dropping `format` or rounding showtime silently merges distinct shows and notifies the wrong subscribers. `[git: convex/watcher.ts in 3 fix commits]`
+
+7. **Hiding a real diff inside `convex/_generated/` churn.** It is committed on purpose (typecheck needs it) and regenerates constantly — `api.d.ts` has 8 commits and is dirty right now. Stage it deliberately or not at all. `[git: 8 commits; currently uncommitted]`
+
+8. **Running `bd`/`forge` and leaving a Dolt server behind.** Invoking `bd ready` here moved the Dolt endpoint (port 52703 → 56174) and warned that other tools would see stale data. This is why `.beads/dolt-server.{port,pid,lock,log}` keep reappearing untracked. Pin `dolt.port` in `.beads/config.yaml` before running two Beads-backed tools at once. `[observed 2026-08-15: live port reassignment + stale-data warning]`
+
+9. **Reaching for `scripts/verify-first-visible-slice.mjs` and friends as if they were wired up.** `scripts/` holds 19 files with no `package.json` entry, including the most-churned file in the entire repo (21 commits), plus `ui-smoke-buyer.mjs` (9), `e2e-buyer.mjs`, `e2e-seller.mjs`, and `validate.sh`. They run only as `bun scripts/<name>.mjs`. `[git: 21 commits on an unwired script; 19 orphans total]`
+
+10. **Overwriting the agent instructions.** It has already happened once — a commit exists purely to put them back. If a tool offers to regenerate `AGENTS.md` or `CLAUDE.md`, diff it first. `[git: 82e991f "fix: restore zwapit agent instructions"]`
+
+11. **Bumping dependencies as a side effect.** `package.json` (11 commits) and `bun.lock` (10) are the joint-most-churned files and appear in 6 of 9 fix commits — including a security bump that needed its own fix. CI installs with `--frozen-lockfile`, so a stale lockfile fails everything. `[git: package.json/bun.lock in 6 of 9 fix commits]`
 
 ## Hit every surface
 
 Before you call a change done, **walk this list out loud** — name each row and say whether it applies and what you did about it. Saying "N/A" for a row is fine; skipping a row is not.
 
+Rows marked `[git]` exist because a past commit missed exactly that surface; the rest are `[imported]` and should be reviewed with the borrowed defaults below.
+
 | Surface | What to check |
 |---|---|
-| **Convex schema** (`convex/schema.ts`) | New/changed field validated? Existing rows still valid? Index needed for the new query? |
+| **Convex schema** (`convex/schema.ts`) `[git: 5 of 9 fix commits]` | New/changed field validated? Existing rows still valid? Index needed for the new query? Ran `bunx tsc --project convex/tsconfig.json --noEmit`? |
+| **Read-model seam** `[git: dataAdapter.ts 11, functionRefs.ts 7]` | Both sides of `src/lib/convex/` still agree with the Convex function signatures? |
 | **Public vs internal** | Every new function classified. Money, matching, monitoring, notification → `internalMutation`/`internalAction`. |
 | **Audit log** | Every payment, transfer, refund, issue, payout, and matching action writes `audit_logs`. |
 | **Forward states** | Which of the listing/order/want states can this produce? |
@@ -77,9 +93,10 @@ Before you call a change done, **walk this list out loud** — name each row and
 | **Screens** | Home, Search, Requests, Sell, Profile — which of the five tabs render this? |
 | **Copy** | Forbidden vocabulary checked; price shown in full *before* payment; transfer mode and payout rule shown upfront. |
 | **Rule engine** | Does this listing/order path route through `src/lib/rules/sourceRules.ts`? Blocked and DEMAND_ONLY sources still behave? |
-| **Tests** | 34 test files exist. Which did you add or change? |
+| **Tests** | 34 test files, 315 tests. Which did you add or change? Did you run the full `bun test`, knowing PR CI will not? |
 | **Native** | Capacitor build affected (new plugin, new permission, purchase surface)? Usually "no" — say so. |
-| **Cloudflare** | Worker route or env var affected? `wrangler.jsonc` touched? |
+| **Cloudflare / routing** `[git: 3 of 5 fix commits]` | Worker route or env var affected? `wrangler.jsonc` touched? Ran `bun run cf:dry-run`? A route that resolves locally has 404'd in production here before. |
+| **Dependencies** `[git: package.json + bun.lock in 6 of 9 fix commits]` | If you changed `package.json`, is `bun.lock` regenerated? CI installs `--frozen-lockfile`. |
 
 Per-adapter decisions — including explicit *not supported*:
 
@@ -98,20 +115,33 @@ Per-adapter decisions — including explicit *not supported*:
 
 ## Dev runbook
 
-Exact spellings. `package.json` defines `dev`, `build`, `check`, `check:routes`, and the `cap:` / `android:` / `ios:` / `cf:` families — and **nothing else**.
+Exact spellings and **real measured timings** (2026-08-15, this machine, warm). `package.json` defines `dev`, `build`, `check`, `check:routes`, and the `cap:` / `android:` / `ios:` / `cf:` families — and **nothing else**.
 
 ```bash
 bun install
 
-bun run dev            # astro dev
-bun run check          # astro check
-bunx tsc --noEmit      # typecheck — this is what lefthook runs pre-commit and pre-push
-bun test               # bun's built-in runner; there is NO "test" script
-bun run build          # astro check && astro build
-bun run check:routes   # route coverage
+bunx tsc --noEmit                                  #  4s  ← what lefthook runs pre-commit AND pre-push
+bun run check                                      # 12s  astro check
+bunx tsc --project convex/tsconfig.json --noEmit   #  4s  Convex types — CI runs this, lefthook does NOT
+bun run check:routes                               # <1s  route coverage
+bun run build                                      # 23s  astro check && astro build
+bun test                                           # 71s  315 tests — the slow one
+bun test convex/__tests__/watcher.test.ts          #  1s  ← targeted lane, use this while iterating
+bun run dev                                        #      astro dev
 ```
 
-There is no `lint` script and no `typecheck` script. `bun run lint` and `bun run typecheck` both fail — use `bunx tsc --noEmit`.
+**There is no `lint`, `test`, or `typecheck` script.** `bun run lint`, `bun run test`, and `bun run typecheck` all fail.
+
+Cheapest useful gate while iterating: `bunx tsc --noEmit` + the one targeted test file (~5s). Run the full `bun test` once before you say tests pass — it is 71s and PR CI will not run it for you.
+
+Deploy checks:
+
+```bash
+bun run cf:dry-run     # verify a Worker deploy without deploying — use before claiming a route works
+bun run cf:preview     # wrangler versions upload
+```
+
+Unwired helpers (no `package.json` entry — invoke directly): `bun scripts/verify-first-visible-slice.mjs`, `bun scripts/ui-smoke-buyer.mjs`, `bun scripts/e2e-buyer.mjs`, `bun scripts/e2e-seller.mjs`, `bash scripts/validate.sh`.
 
 Never `cd <dir> && <command>`. Use `git -C <dir>` for git and native path flags elsewhere.
 
@@ -153,6 +183,20 @@ CI runs `ci.yml`, `cloudflare-worker-preview.yml`, `cloudflare-worker-production
 - *"It says my request is #4 in line."* → We never show queue positions. Status is Standard / Priority / High Priority.
 - *"The app asked me to pay for a subscription."* → Nothing is sold inside the native app.
 - *"I never agreed to WhatsApp messages."* → That channel is off until compliance is built.
+
+## Borrowed defaults
+
+`[imported — no local incident]` for all of these. They come from the product docs and the old CLAUDE.md, not from anything that has gone wrong here yet. Capped at seven — to add one, retire one or produce evidence. Review and promote or cut.
+
+1. Sellers see a "people looking" count only — never buyer identity, budgets, or priority numbers.
+2. Prefer a read-model over `listings` + `wants` + `want_matches` to a new table. Eighteen tables exist; the whole UI was wired without adding one.
+3. Nothing is sold inside the native app (Apple/Google in-app-purchase rules). Web/PWA only, later.
+4. WhatsApp and SMS stay off until TRAI/DLT registration and opt-in compliance exist.
+5. Manual review is exception-only; the rule engine should decide as much as it can.
+6. Two agents never work the same file-ownership area at once; concurrent git work goes in separate worktrees.
+7. Shared files (`package.json`, routing config, shared types, schema-related frontend types, global constants) need explicit approval before parallel edits.
+
+**Evidence not available:** the session-history mine found nothing usable — `.claude/projects/C--Users-harsha-befach-Downloads-Zwapit/` contains zero transcripts, and a scan of 2,650 user messages in the parent project directory produced 20 topic+correction hits, all false positives (compaction summaries, teammate messages, pasted skill text). No user-correction cluster could be derived. CI is likewise silent: 40 runs, 39 success and 1 cancelled Dependabot run, so no failing-check pattern exists to mine.
 
 ## Escape hatch
 
@@ -244,7 +288,10 @@ The 7-stage TDD workflow (`/plan` → `/dev` → `/validate` → `/ship` → `/r
 
 Where Forge guidance conflicts with this file, this file wins — specifically scope discipline, the never-compromise list, build order, and do-not-build-yet.
 
-Planning artifacts go in one folder per work item: `docs/work/YYYY-MM-DD-<slug>/` (`research.md`, `design.md`, `tasks.md`, `decisions.md`, `evaluator-report.md`, `evidence.md`). `docs/plans/` and `docs/research/` are read-only legacy.
+Planning artifacts go in one folder per work item: `docs/work/YYYY-MM-DD-<slug>/` (`research.md`, `design.md`, `tasks.md`, `decisions.md`, `evaluator-report.md`, `evidence.md`). The old file called `docs/plans/` and `docs/research/` "read-only legacy" — neither directory exists; ignore both.
+
+**Known-broken references in the generated Forge files** (fix or ignore; do not follow):
+`.claude/rules/workflow.md` and `.claude/commands/validate.md` tell you to run `bun run lint`, `bun run typecheck`, `npm run lint`, `npm run test`, and `npm run typecheck` — none exist. `.claude/rules/workflow.md`, `.claude/commands/plan.md`, and `.claude/commands/research.md` invoke `Skill("parallel-deep-research")`; the real skill is `parallel-research`. `.claude/commands/review.md` points at `.claude/rules/greptile-review-process.md`, and `.claude/commands/sonarcloud.md` at `src/lib/integrations/sonarcloud.ts` — neither file exists. `.claude/settings.json`, `docs/pull_request_template.md`, and `.claude/commands/custom/` are also referenced and absent. The `forge` and `bd` binaries themselves are installed and every subcommand these files use is real (verified 2026-08-15).
 
 Issue tracking is Beads via `forge` (`forge ready` / `forge show <id>` / `forge claim <id>` / `forge close <id>`); use `bd` directly only for what Forge does not wrap (`bd init`, `bd comments`, `bd dep`, `bd dolt *`). Markdown TODO lists are never the source of truth.
 
