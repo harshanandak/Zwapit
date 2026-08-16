@@ -271,9 +271,14 @@ Vertical-slice happy path: live listing → mock purchase → `transfer_pending`
 
 ## UX baseline
 
-Bottom tabs: Home, Sell, My Tickets, Me. Buying: listing detail → protection → phone OTP → pay. Buyer purchases show as My Tickets; seller-side purchases as Orders inside Sell. Both sides are timeline-based.
+Bottom tabs: Home, Search, Requests, Listings, Profile — five, defined in
+`src/lib/ui/navMap.ts`. Selling is a FAB to `/app/sell`, not a tab
+(`src/components/BottomNav.astro`). Buying: listing detail → protection → phone OTP →
+pay. Buyer purchases and seller-side orders both live under Listings, and both sides
+are timeline-based.
 
-Older Buy/Sell split-tab drafts are inactive unless Harsha revives them.
+Superseded and inactive unless Harsha revives them: the four-tab `Home, Sell, My
+Tickets, Me` shell, and the older Buy/Sell split-tab drafts.
 
 ## User-facing language
 
