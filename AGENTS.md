@@ -90,7 +90,7 @@ Rows marked `[git]` exist because a past commit missed exactly that surface; the
 | **Forward states** | Which of the listing/order/want states can this produce? |
 | **Reverse states** | And how does each one come back — cancel, expire, refund, timeout, buyer_rejected, payout_blocked? A forward path with no reverse is an incident waiting. State the reverse path explicitly. |
 | **Wire / contracts** | Convex arg + return validators changed? `convex/_generated/api.d.ts` regenerated? Any component reading the old shape? |
-| **Screens** | Home, Search, Requests, Sell, Profile — which of the five tabs render this? |
+| **Screens** | Home, Search, Requests, Listings, Profile — which of the five tabs (`src/lib/ui/navMap.ts`) render this? Selling is a FAB, not a tab — check `/app/sell` separately if it applies. |
 | **Copy** | Forbidden vocabulary checked; price shown in full *before* payment; transfer mode and payout rule shown upfront. |
 | **Rule engine** | Does this listing/order path route through `src/lib/rules/sourceRules.ts`? Blocked and DEMAND_ONLY sources still behave? |
 | **Tests** | 34 test files, 315 tests. Which did you add or change? Did you run the full `bun test` locally, before PR CI runs it for you? |
