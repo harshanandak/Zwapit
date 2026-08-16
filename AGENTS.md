@@ -103,7 +103,7 @@ Per-adapter decisions — including explicit *not supported*:
 | Adapter | Status |
 |---|---|
 | Convex | The v1 backend. All state. |
-| Clerk | Chosen for v1 auth, behind `src/lib/auth/authAdapter.ts` so it can be replaced. Not yet the live path — mock user `user_demo_1` still exists. |
+| Clerk | v1 auth, behind `src/lib/auth/authAdapter.ts` so it can be replaced. **Live wherever `PUBLIC_CLERK_PUBLISHABLE_KEY` is set** — including production (`.github/workflows/cloudflare-worker-production.yml`). Mock user `user_demo_1` is only the no-key local fallback: `createCurrentAuthState()` returns signed-out, not mock, as soon as the key is configured. |
 | Razorpay Route (or another RBI-authorized aggregator) | Planned, **not built**. Do not add provider logic unasked. |
 | BookMyShow, District | Read-only watching and catalog ingestion. **Booking is not supported and never will be** — deep-link out. |
 | TMDB | Movie catalog source. IMDB has no usable public API — do not try. |
