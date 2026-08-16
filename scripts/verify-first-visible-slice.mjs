@@ -58,6 +58,7 @@ const allowedFirstSlicePaths = [
   ".gitattributes",
   ".gitignore",
   "AGENTS.md",
+  "astro.config.mjs",
   "CHANGELOG.md",
   "CLAUDE.md",
   "README.md",
