@@ -44,7 +44,7 @@ Domain objects (these are the words to use back in reports, too):
 - **Alert** — how a request pays off. Types: Availability, Discount, Price-drop, Last-minute.
 - **Listing** (`listings`) — a community resale offer.
 - **Match** (`want_matches`) — a request paired to a listing.
-- **Watcher** / **monitor target** (`monitor_targets`) — one shared poll of one official show. Many requests for the same show collapse to one watcher; the collapse key is exact: catalog id + venue + date + showtime + format.
+- **Watcher** / **monitor target** (`monitor_targets`) — one shared poll of one official show. Many requests for the same show collapse to one watcher; the collapse key is exact and byte-identical across callers: `catalogItemId|city|date|format` (`computeCollapseKey` in `convex/watcher/parse.ts` — a missing format leaves an empty trailing segment). It is movie-and-city level, not show level: do not add venue or showtime, which would split the existing contract and need inputs the alert mutation does not accept.
 - **Catalog item** (`catalog_items`) — the canonical thing being requested. Requests reference these, never free text, so matching is exact.
 - **Source rule** (`source_rules`) — the per-source/per-category policy the rule engine evaluates.
 - **Success fee** — INR 10 + GST (1.8), charged on a completed community resale. The only v1 revenue.
@@ -107,7 +107,7 @@ Per-adapter decisions — including explicit *not supported*:
 | Razorpay Route (or another RBI-authorized aggregator) | Planned, **not built**. Do not add provider logic unasked. |
 | BookMyShow, District | Read-only watching and catalog ingestion. **Booking is not supported and never will be** — deep-link out. |
 | TMDB | Movie catalog source. IMDB has no usable public API — do not try. |
-| Email, Web Push | Supported notification channels. |
+| Email, Web Push | **Stubbed, not delivering.** The senders exist and are dependency-injected, but `convex/watcher/senders.ts` no-ops both: email has no recipient plumbing (`NotificationMessage` carries no `to`), and web push has no subscription wiring or package. Nothing reaches a user on either channel today. |
 | Telegram | Planned next. |
 | WhatsApp, SMS | **Not supported.** Blocked on TRAI/DLT + opt-in compliance. |
 | React Native | **Not supported in v1.** Capacitor is the wrapper. |
