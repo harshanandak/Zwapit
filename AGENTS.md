@@ -65,7 +65,7 @@ Each entry is earned from something that actually went wrong here. The tag is th
 
 6. **Loosening the watcher collapse key.** `convex/watcher.ts` and `convex/__tests__/watcher.test.ts` each appear in 3 fix commits. Dropping `format` or rounding showtime silently merges distinct shows and notifies the wrong subscribers. `[git: convex/watcher.ts in 3 fix commits]`
 
-7. **Hiding a real diff inside `convex/_generated/` churn.** It is committed on purpose (typecheck needs it) and regenerates constantly — `api.d.ts` has 8 commits and is dirty right now. Stage it deliberately or not at all. `[git: 8 commits; currently uncommitted]`
+7. **Hiding a real diff inside `convex/_generated/` churn.** It is committed on purpose (typecheck needs it) and regenerates constantly — `api.d.ts` has 8 commits. Assume nothing about whether it is currently dirty: run `git status` and stage it deliberately or not at all. Treat a generated diff as a real change to review, never as background noise you can skip. `[git: 8 commits]`
 
 8. **Running `bd`/`forge` and leaving a Dolt server behind.** Invoking `bd ready` here moved the Dolt endpoint (port 52703 → 56174) and warned that other tools would see stale data. This is why `.beads/dolt-server.{port,pid,lock,log}` keep reappearing untracked. Pin `dolt.port` in `.beads/config.yaml` before running two Beads-backed tools at once. `[observed 2026-08-15: live port reassignment + stale-data warning]`
 
