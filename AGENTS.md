@@ -300,7 +300,7 @@ Where Forge guidance conflicts with this file, this file wins — specifically s
 Planning artifacts go in one folder per work item: `docs/work/YYYY-MM-DD-<slug>/` (`research.md`, `design.md`, `tasks.md`, `decisions.md`, `evaluator-report.md`, `evidence.md`). The old file called `docs/plans/` and `docs/research/` "read-only legacy" — neither directory exists; ignore both.
 
 **Known-broken references in the generated Forge files** (fix or ignore; do not follow):
-`.claude/rules/workflow.md` and `.claude/commands/validate.md` tell you to run `bun run lint`, `bun run typecheck`, `npm run lint`, `npm run test`, and `npm run typecheck` — none exist. `.claude/rules/workflow.md`, `.claude/commands/plan.md`, and `.claude/commands/research.md` invoke `Skill("parallel-deep-research")`; the real skill is `parallel-research`. `.claude/commands/review.md` points at `.claude/rules/greptile-review-process.md`, and `.claude/commands/sonarcloud.md` at `src/lib/integrations/sonarcloud.ts` — neither file exists. `.claude/settings.json`, `docs/pull_request_template.md`, and `.claude/commands/custom/` are also referenced and absent. The `forge` and `bd` binaries themselves are installed and every subcommand these files use is real (verified 2026-08-15).
+`.claude/rules/workflow.md` and `.claude/commands/validate.md` tell you to run `bun run lint`, `bun run typecheck`, `npm run lint`, `npm run test`, and `npm run typecheck` — none exist. `.claude/rules/workflow.md`, `.claude/commands/plan.md`, and `.claude/commands/research.md` invoke `Skill("parallel-deep-research")`; the real skill is `parallel-research`, and it comes from the harness (a Claude Code plugin), not from this repo — if your harness does not provide it, do the research directly and say so. `.claude/commands/review.md` points at `.claude/rules/greptile-review-process.md`, and `.claude/commands/sonarcloud.md` at `src/lib/integrations/sonarcloud.ts` — neither file exists. `.claude/settings.json`, `docs/pull_request_template.md`, and `.claude/commands/custom/` are also referenced and absent. The `forge` and `bd` binaries themselves are installed and every subcommand these files use is real (verified 2026-08-15).
 
 Issue tracking is Beads via `forge` (`forge ready` / `forge show <id>` / `forge claim <id>` / `forge close <id>`); use `bd` directly only for what Forge does not wrap (`bd init`, `bd comments`, `bd dep`, `bd dolt *`). Markdown TODO lists are never the source of truth.
 
@@ -312,12 +312,14 @@ Issue tracking is Beads via `forge` (`forge ready` / `forge show <id>` / `forge 
 
 This project uses [Convex](https://convex.dev) as its backend.
 
-When working on Convex code, **always read
-`convex/_generated/ai/guidelines.md` first** for important guidelines on
-how to correctly use Convex APIs and patterns. The file contains rules that
-override what you may have learned about Convex from training data.
+When working on Convex code, **read `convex/_generated/ai/guidelines.md`
+first if it is present** for important guidelines on how to correctly use
+Convex APIs and patterns. The file contains rules that override what you may
+have learned about Convex from training data.
 
-Convex agent skills for common tasks can be installed by running
-`npx convex ai-files install`.
+That file is generated, not committed — it does not exist in a fresh checkout.
+Run `npx convex ai-files install` to produce it (and the Convex agent skills)
+before relying on it. Its absence is not a reason to stop; say you proceeded
+without it.
 
 <!-- convex-ai-end -->
