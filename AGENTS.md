@@ -181,7 +181,7 @@ CI runs `ci.yml`, `cloudflare-worker-preview.yml`, `cloudflare-worker-production
 - *"I got an alert for the wrong show."* → The watcher collapse key was loosened. It is exact by design.
 - *"Someone bought it before me even though I asked first."* → Allotment is FIFO by request creation time, and the matched buyer gets a time-boxed reservation before the listing opens to everyone. Waves, not a visible queue.
 - *"It says my request is #4 in line."* → We never show queue positions. Status is Standard / Priority / High Priority.
-- *"The app asked me to pay for a subscription."* → Nothing is sold inside the native app.
+- *"The app asked me to pay for a subscription."* → Subscriptions are not sold inside the native app. Resale checkout is, and that is a different thing.
 - *"I never agreed to WhatsApp messages."* → That channel is off until compliance is built.
 
 ## Borrowed defaults
@@ -190,7 +190,7 @@ CI runs `ci.yml`, `cloudflare-worker-preview.yml`, `cloudflare-worker-production
 
 1. Sellers see a "people looking" count only — never buyer identity, budgets, or priority numbers.
 2. Prefer a read-model over `listings` + `wants` + `want_matches` to a new table. Eighteen tables exist; the whole UI was wired without adding one.
-3. Nothing is sold inside the native app (Apple/Google in-app-purchase rules). Web/PWA only, later.
+3. Tiers, hold tokens and alert-speed subscriptions are not sold inside the native app — those are digital goods and Apple/Google want their in-app-purchase cut. Web/PWA only, later. Community-resale checkout is a different thing and stays in the app; it is the product.
 4. WhatsApp and SMS stay off until TRAI/DLT registration and opt-in compliance exist.
 5. Manual review is exception-only; the rule engine should decide as much as it can.
 6. Two agents never work the same file-ownership area at once; concurrent git work goes in separate worktrees.
