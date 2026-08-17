@@ -7,8 +7,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: native-builds-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-debug:
+    timeout-minutes: 30
     name: Android debug APK
     runs-on: ubuntu-latest
     steps:
@@ -45,6 +50,7 @@ jobs:
           if-no-files-found: error
 
   ios-simulator:
+    timeout-minutes: 40
     name: iOS simulator app
     runs-on: macos-latest
     steps:

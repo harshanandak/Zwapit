@@ -1,5 +1,14 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# Pre-user shipping regime (decided 2026-08-16): review feedback is advisory
+# except secrets, injection, a broken build, or docs asserting behaviour the
+# code does not have — and it never expands the PR.
+tone_instructions: >-
+  No users yet; we ship fast. Block only on leaked secrets, injection or auth
+  holes, a broken build, or docs asserting behaviour the code lacks. Style,
+  naming and nits are optional — say so. Never widen a PR; say it is follow-up.
 reviews:
+  profile: chill
   auto_review:
     enabled: false
     drafts: false
