@@ -15,7 +15,7 @@ The one exception is [What we can never compromise on](#what-we-can-never-compro
 1. **Zwapit never touches official-platform money.** Official availability alerts notify and deep-link OUT to BookMyShow/District. Any code that takes payment for official inventory, or resells it, is wrong at the design level — not a bug to patch.
 2. **No internal wallet, ever.** The payment provider is the money source of truth. Do not hold gross buyer money in a platform-owned account, and do not create a balance ledger that looks like one.
 3. **The platform does not take custody of the item.** Seller-to-buyer transfer, official issuer transfer, official reissue, or customer-managed handoff. A category needing platform custody is out of v1 until Harsha approves it by name.
-4. **Payment, refund, payout, matching, monitor, availability, notification, and admin mutations are internal-only.** Never `mutation` — `internalMutation`/`internalAction` only, never reachable from a client. Every one of them writes to `audit_logs`.
+4. **Payment, refund, payout, matching, monitor, availability, notification, and admin *effects* are internal-only.** The effect itself is `internalMutation`/`internalAction` and writes to `audit_logs`; a client never reaches it directly. A client may reach a thin authenticated wrapper that authorizes, validates input, and delegates — today that is `createAlert` and `getAlertPayoff` in `convex/watcher.ts`, the only two client-facing entry points on this surface. Turning one of those into an `internalMutation` breaks alert creation. A new wrapper needs the same shape and gets listed here.
 5. **The frontend never calls BookMyShow or District directly.** Those calls live in `convex/watcher/` and `convex/catalogCrawl.ts`, behind Convex.
 6. **Provider identity is never a primary id.** App data keys on the internal `users` id; Clerk (or any provider) identity lives in `auth_identities` only. A Clerk id on an order, listing, or payment is a defect.
 7. **Every state transition is explicit.** No inferred state, no state derived from a timestamp comparison at read time. Listing and order states are the enumerations in [State model](#state-model).
@@ -326,5 +326,9 @@ That file is generated, not committed — it does not exist in a fresh checkout.
 Run `npx convex ai-files install` to produce it (and the Convex agent skills)
 before relying on it. Its absence is not a reason to stop; say you proceeded
 without it.
+
+Everything between the `convex-ai` markers above is owned by that command and
+is rewritten each time it runs, here and in any `CLAUDE.md` it finds. Put
+durable guidance outside the markers, or the next install silently drops it.
 
 <!-- convex-ai-end -->
