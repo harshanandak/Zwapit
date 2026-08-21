@@ -261,7 +261,7 @@ jobs:
                 per_page: 100,
               });
               for (const c of comments.data) bump(c.created_at);
-              const inline = await github.rest.pulls.listComments({
+              const inline = await github.rest.pulls.listReviewComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: number,
