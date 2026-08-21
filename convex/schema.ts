@@ -502,6 +502,10 @@ export default defineSchema({
     windowEnd: v.optional(v.string()),
     lastCheckedAt: v.optional(v.string()),
     nextCheckAt: v.optional(v.string()),
+    // Earliest ticket-sale-open instant parsed from a District sales timeline
+    // (kernel 9b317bb9). Read only in the watching clean-reschedule branch —
+    // live/closed/degraded targets never consult it, so no invalidation paths.
+    saleOpensAt: v.optional(v.string()),
   })
     .index("by_collapse_key", ["collapseKey"])
     .index("by_status_next_check", ["status", "nextCheckAt"]),

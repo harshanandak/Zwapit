@@ -406,6 +406,119 @@ export function eventShowMatchesTargetDate(showTime: string, targetDate: string)
 }
 
 // ---------------------------------------------------------------------------
+// SALE-WINDOW extraction (kernel 9b317bb9)
+//
+// District event pages carry a structured sales timeline:
+//   Sales timeline
+//   Mastercard Pre-Sale Mon 13 Apr, 1 PM - Sat 18 Apr, 1 PM
+//   General Sale Sat 18 Apr, 2026, 2 PM - Sat 23 Jan, 2027, 7 PM
+//   Live
+// Times are IST with NO minute component ("2 PM"). Years are sometimes absent
+// (the pre-sale line above); they borrow the nearest explicit year on the page.
+// ---------------------------------------------------------------------------
+
+const IST_OFFSET = "+05:30";
+
+/** Parse a sale-window start label ("Sat 18 Apr, 2026, 2 PM" / "Mon 13 Apr, 1 PM")
+ *  into ISO-with-offset. `fallbackYear` covers yearless labels. */
+function parseSaleStartIso(raw: string, fallbackYear: number | undefined): string | null {
+  const m =
+    /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*,?\s*)?(\d{1,2})\s+([A-Za-z]{3,9})(?:\s*,?\s*(\d{4}))?\s*,?\s*(\d{1,2})(?::(\d{2}))?\s*([AP]M)/i.exec(
+      raw,
+    );
+  if (!m) return null;
+  const mon = MONTH_NUM[m[2].slice(0, 3).toLowerCase()] ?? 0;
+  const day = Number(m[1]);
+  const year = m[3] ? Number(m[3]) : fallbackYear;
+  if (!mon || !year || !isCalendarDate(year, mon, day)) return null;
+  let hh = Number(m[4]);
+  const mm = m[5] ? Number(m[5]) : 0;
+  const ap = m[6].toUpperCase();
+  if (hh < 1 || hh > 12 || mm > 59) return null;
+  if (ap === "PM" && hh !== 12) hh += 12;
+  if (ap === "AM" && hh === 12) hh = 0;
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${year}-${pad(mon)}-${pad(day)}T${pad(hh)}:${pad(mm)}:00.000${IST_OFFSET}`;
+}
+
+/**
+ * Earliest future ticket-sale-open instant from a District event page's sales
+ * timeline — general-sale starts preferred, else pre-sale starts. Returns an
+ * ISO string with explicit IST offset, or null when nothing ahead (already
+ * live, all past, or unparseable) so callers fall back to distance tiers —
+ * never worse than today's behavior.
+ */
+export function extractSaleOpensAt(text: string, nowIso?: string): string | null {
+  if (!text) return null;
+  // Already open: availability markers fire the alert; no scheduling value.
+  if (/general sale is live now/i.test(text)) return null;
+
+  const nowMs = Date.parse(nowIso ?? new Date().toISOString());
+  if (!Number.isFinite(nowMs)) return null;
+
+  const windowRe =
+    /(Pre-Sale|General Sale)\s+((?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*,?\s*)?\d{1,2}\s+[A-Za-z]{3,9}(?:\s*,?\s*\d{4})?\s*,?\s*\d{1,2}(?::\d{2})?\s*[AP]M)/gi;
+
+  type Window = { phase: "presale" | "general"; raw: string };
+  const windows: Window[] = [];
+  for (const m of text.matchAll(windowRe)) {
+    windows.push({
+      phase: /^pre/i.test(m[1]) ? "presale" : "general",
+      raw: m[2],
+    });
+  }
+  if (windows.length === 0) return null;
+
+  // Yearless windows borrow the first explicit year on the page (timeline
+  // lines belong to the same calendar year in practice).
+  const explicitYear = windows.map((w) => /\b(20\d{2})\b/.exec(w.raw)?.[1]).find(Boolean);
+  const fallbackYear = explicitYear ? Number(explicitYear) : new Date(nowMs).getUTCFullYear();
+
+  const future: Array<{ phase: "presale" | "general"; iso: string }> = [];
+  // Yearless labels roll forward ONLY across a year boundary: a December poll
+  // seeing "2 Jan" means next January. Mid-January staleness ("2 Jan" polled
+  // Jan 3) must NOT become a phantom next-year window (Codex P2).
+  const rollForwardAllowed = new Date(nowMs).getUTCMonth() === 11;
+  // Windows that opened within the last day still drive the post-open chase
+  // (propagation lag / delayed on-sale) — don't discard them as "past"
+  // (Codex P1: first sighting after the open must engage tight polling).
+  const CHASE_LOOKBACK_MS = 24 * 3600_000;
+  const usable: Array<{ phase: "presale" | "general"; iso: string }> = [];
+  for (const w of windows) {
+    const hasExplicitYear = /\b(?:19|20)\d{2}\b/.test(w.raw);
+    const labelMon = MONTH_NUM[((/\d{1,2}\s+([A-Za-z]{3,9})/.exec(w.raw))?.[1] ?? "").slice(0, 3).toLowerCase()] ?? 0;
+    let iso = parseSaleStartIso(w.raw, fallbackYear);
+    if (iso && !hasExplicitYear && Date.parse(iso) <= nowMs && rollForwardAllowed && labelMon === 1) {
+      iso = parseSaleStartIso(w.raw, fallbackYear + 1);
+    }
+    if (!iso) continue;
+    const ms = Date.parse(iso);
+    if (ms > nowMs || ms >= nowMs - CHASE_LOOKBACK_MS) {
+      usable.push({ phase: w.phase, iso });
+    }
+  }
+
+  const byPriority = (phase: "presale" | "general"): string | undefined =>
+    usable
+      .filter((f) => f.phase === phase)
+      .map((f) => f.iso)
+      .sort((a, b) => a.localeCompare(b))[0];
+  // Earliest still-future general sale wins outright; else the earliest future
+  // pre-sale; else the most recently opened window (chase cadence).
+  const earliestFutureGeneral = usable
+    .filter((f) => f.phase === "general" && Date.parse(f.iso) > nowMs)
+    .map((f) => f.iso)
+    .sort((a, b) => a.localeCompare(b))[0];
+  if (earliestFutureGeneral) return earliestFutureGeneral;
+  const earliestFuturePresale = usable
+    .filter((f) => f.phase === "presale" && Date.parse(f.iso) > nowMs)
+    .map((f) => f.iso)
+    .sort((a, b) => a.localeCompare(b))[0];
+  if (earliestFuturePresale) return earliestFuturePresale;
+  return byPriority("general") ?? byPriority("presale") ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Collapse key + snapshot hash (narrow, stable projections)
 // ---------------------------------------------------------------------------
 

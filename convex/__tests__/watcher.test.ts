@@ -1219,3 +1219,194 @@ describe("crons — poll job registered (Task 10)", () => {
     expect(expire?.name).toBe("watcher:expireWants");
   });
 });
+
+describe("sale-window scheduling (kernel 9b317bb9)", () => {
+  // Suite clock: POLL_NOW is 2030-01-01, so fixture instants must sit AFTER it
+  // to be "future" windows (the suite's fixed watch dates are long expired).
+  const TIMELINE_ONLY =
+    "Sales timeline\n\nMastercard Pre-Sale Mon 15 Dec, 1 PM - Sun 21 Dec, 1 PM" +
+    "\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 7 Mar, 2031, 1 PM";
+
+  test("a clean district event poll persists saleOpensAt and audits the scheduling effect", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_1",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Gorillaz The Mountain Tour Bengaluru",
+        city: "bengaluru",
+        venueOrDestination: "District Arena @ Terraform",
+        startAt: "2031-03-07T12:30:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "gorillaz-the-mountain-tour-bengaluru-2027-buy-tickets",
+      });
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_sched_1",
+      city: "bengaluru",
+      date: "2031-03-07",
+    });
+
+    // Timeline WITHOUT availability markers -> clean not-open-yet poll.
+    __setFetcher(async (urls: string[]) => ({
+      results: urls.map((url) => ({ url, content: TIMELINE_ONLY })),
+    }));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const { target, audits } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      audits: await ctx.db.query("audit_logs").collect(),
+    }));
+    expect(target.saleOpensAt).toBe("2031-01-10T10:00:00.000+05:30"); // 10 AM IST
+    // Under the suite clock (POLL_NOW=2030) the window sits beyond the
+    // 14d-distance tier, so the CAP wins: schedule on the tier, not past it.
+    // Wake-at-open arithmetic itself is pinned in schedule.test.ts.
+    const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
+    expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString());
+    expect(target.status).toBe("watching");
+
+    const saleAudit = audits.find((a) => a.action === "monitor_target_sale_window_set");
+    expect(saleAudit?.entityType).toBe("monitor_target");
+    expect(saleAudit?.entityId).toBe(target.collapseKey);
+  });
+
+  test("a later timeline-less poll reuses the persisted instant instead of the 24h tier", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_2",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Persisted Window Event",
+        city: "pune",
+        startAt: "2031-03-20T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        bmsEventCode: "ET00999001",
+        bmsRegionCode: "PUNE",
+        districtEventSlug: "persisted-window-event-buy-tickets",
+      });
+      await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_sched_2|pune|2031-03-20|",
+        catalogItemId: "catalog_event_sched_2",
+        city: "pune",
+        date: "2031-03-20",
+        sources: ["bms", "district"],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2020-01-01T00:00:00.000Z",
+        saleOpensAt: "2031-02-01T07:30:00.000+05:30",
+      });
+    });
+
+    // District omits its result entirely; only BMS returns a clean empty page.
+    __setFetcher(async (urls: string[]) => ({
+      results: urls
+        .filter((u) => u.includes("bookmyshow"))
+        .map((url) => ({ url, content: JSON.stringify({ ShowDetails: [] }) })),
+    }));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const target = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(target.status).toBe("watching");
+    // Reuse proof: the persisted Feb-2031 window is also beyond the tier cap
+    // under the suite clock, but the point is the poll did NOT lose it — the
+    // stored value still drove scheduling (tier-capped), and stayed intact.
+    expect(target.saleOpensAt).toBe("2031-02-01T07:30:00.000+05:30");
+    const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
+    expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString());
+  });
+});
+
+  test("window-driven reschedules audit once per 6h (no flood from the 5-min chase)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_3",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Chase Event",
+        city: "goa",
+        startAt: "2031-04-10T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "chase-event-buy-tickets",
+      });
+      await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_sched_3|goa|2031-04-10|",
+        catalogItemId: "catalog_event_sched_3",
+        city: "goa",
+        date: "2031-04-10",
+        sources: ["district"],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2020-01-01T00:00:00.000Z",
+        saleOpensAt: "2020-06-01T00:00:00.000Z", // already opened: floor-chase regime
+      });
+    });
+
+    __setFetcher(emptyFetcher());
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    // Re-open the window; the floor-based nextCheckAt always differs.
+    const reopen = async () =>
+      tt.run(async (ctx) => {
+        const tgt = (await ctx.db.query("monitor_targets").collect())[0];
+        if (tgt.status === "watching") await ctx.db.patch(tgt._id, { nextCheckAt: "2020-01-01T00:00:00.000Z" });
+      });
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    expect(scheduled.length).toBe(1); // deduped within the 6h window
+    const chasePolls = audits.filter((a) => a.action === "monitor_target_rescheduled");
+    expect(chasePolls.length).toBe(0);
+  });
+
+  test("a window beyond the event date is neither persisted nor marked window-driven", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_4",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Phantom Window Event",
+        city: "delhi",
+        startAt: "2031-01-20T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "phantom-window-event-buy-tickets",
+      });
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_sched_4",
+      city: "delhi",
+      date: "2031-01-20",
+    });
+
+    // Timeline window (Mar 2031) lands AFTER the watched day (Jan 20 2031).
+    const phantom =
+      "Sales timeline\n\nGeneral Sale Sat 7 Mar, 2031, 10 AM - Sat 14 Mar, 2031, 1 PM";
+    __setFetcher(async (urls: string[]) => ({
+      results: urls.map((url) => ({ url, content: phantom })),
+    }));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const { target, audits } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      audits: await ctx.db.query("audit_logs").collect(),
+    }));
+    expect(target.saleOpensAt).toBeUndefined(); // rejected value not persisted
+    expect(audits.some((a) => a.action === "monitor_target_sale_window_set")).toBe(false);
+    expect(audits.some((a) => a.action === "monitor_target_sale_window_scheduled")).toBe(false);
+    const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
+    expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString()); // pure tiers
+  });

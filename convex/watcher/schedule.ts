@@ -22,6 +22,58 @@ export const POLL_BACKOFF_TIERS: ReadonlyArray<{ minDaysOut: number; minutes: nu
   { minDaysOut: Number.NEGATIVE_INFINITY, minutes: 5 },
 ];
 
+/** Wake this long AFTER a parsed sale-open instant (clock-skew margin). */
+export const SALE_BUFFER_MS = 2 * 60_000;
+
+function endOfDayMs(targetDate: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(targetDate ?? "");
+  if (!m) return Number.NaN;
+  return Date.parse(`${m[1]}-${m[2]}-${m[3]}T23:59:59.999Z`);
+}
+
+/**
+ * Would this instant actually drive scheduling? True when parseable and not
+ * beyond the watched date's end-of-day (yearless-label oversleep). Callers
+ * use it to decide persistence + window-driven audit marking, so rejected
+ * values are neither stored nor audited (Codex P2 on #46).
+ */
+export function saleWindowApplies(saleOpensAtIso: string | undefined | null, targetDate: string): boolean {
+  if (!saleOpensAtIso) return false;
+  const open = Date.parse(saleOpensAtIso);
+  if (!Number.isFinite(open)) return false;
+  const eod = endOfDayMs(targetDate);
+  return !(Number.isFinite(eod) && open > eod);
+}
+
+/**
+ * Next `nextCheckAt` when we hold a parsed District sale-open instant:
+ * - Window ahead: wake just after it opens (buffered) — never later than the
+ *   distance tier would poll anyway, never sooner than the floor.
+ * - Window already past (propagation lag / delayed opening): KEEP POLLING
+ *   TIGHTLY at the floor cadence until detection or expiry — falling back to
+ *   a distant tier here is exactly the day-late miss this slice removes.
+ * - Unparseable instant, or one beyond the watched date's end-of-day
+ *   (yearless-label garbage): pure distance tiers (= today's behavior).
+ */
+export function nextCheckWithSaleWindow(
+  nowMs: number,
+  saleOpensAtIso: string | undefined | null,
+  targetDate: string,
+): string {
+  const tiered = Date.parse(nextCheckWithBackoff(nowMs, targetDate));
+  const floor = nowMs + 5 * 60_000;
+
+  const open = saleOpensAtIso ? Date.parse(saleOpensAtIso) : Number.NaN;
+  const eod = endOfDayMs(targetDate);
+  // Unknown window, or garbage beyond the event itself -> tiers.
+  if (!Number.isFinite(open) || (Number.isFinite(eod) && open > eod)) {
+    return new Date(Math.max(tiered, floor)).toISOString();
+  }
+  // Held window (future OR recently opened): tight polling till detection.
+  const wakeAt = open <= nowMs ? floor : Math.min(open + SALE_BUFFER_MS, tiered);
+  return new Date(Math.max(wakeAt, floor)).toISOString();
+}
+
 /**
  * Next `nextCheckAt` for a still-watching target, backed off by how far the
  * watched date is. Unparseable dates fall back to the base 5-minute cadence

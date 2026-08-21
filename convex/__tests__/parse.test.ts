@@ -5,6 +5,7 @@ import {
   AVAIL_STATUS_MAP,
   computeCollapseKey,
   eventShowMatchesTargetDate,
+  extractSaleOpensAt,
   looksLikeEventPage,
   officialBookingUrl,
   parseBmsByEvent,
@@ -349,7 +350,7 @@ describe("eventShowMatchesTargetDate", () => {
   });
 });
 
-describe("eventShowMatchesTargetDate — calendar + weekday guards", () => {
+describe("eventShowMatchesTargetDate ï¿½ calendar + weekday guards", () => {
   test("should reject yearless labels whose weekday contradicts the target year", () => {
     // Jan 23 2027 is a Saturday; Jan 23 2028 is a Sunday.
     expect(eventShowMatchesTargetDate("Sat, 23 Jan, 6:00 PM", "2027-01-23")).toBe(true);
@@ -366,3 +367,84 @@ describe("eventShowMatchesTargetDate — calendar + weekday guards", () => {
     expect(eventShowMatchesTargetDate("2027-01-16T19:30:00Z", "2027-01-16")).toBe(true);
   });
 });
+
+describe("extractSaleOpensAt", () => {
+  const districtFixture = readFileSync(
+    new URL("./fixtures/district-event-page.txt", import.meta.url),
+    "utf8",
+  );
+  // Mid-January 2026: both timeline windows are in the future.
+  const NOW_JAN = "2026-01-15T00:00:00.000Z";
+
+  test("should return the general-sale start from the Gorillaz fixture timeline", () => {
+    // Fixture timeline minus its "is live now" state line â€” a page whose sale
+    // is ALREADY open returns null (the availability markers handle firing).
+    const timelineOnly = [
+      "Sales timeline",
+      "Mastercard Pre-Sale Mon 13 Apr, 1 PM - Sat 18 Apr, 1 PM",
+      "General Sale Sat 18 Apr, 2026, 2 PM - Sat 23 Jan, 2027, 7 PM",
+    ].join("\n\n");
+    expect(extractSaleOpensAt(timelineOnly, NOW_JAN)).toBe("2026-04-18T14:00:00.000+05:30");
+  });
+
+  test("should return null when the fixture marks the sale as already live", () => {
+    expect(extractSaleOpensAt(districtFixture, NOW_JAN)).toBeNull();
+  });
+
+  test("should borrow the timeline year for a yearless pre-sale start when no general sale is ahead", () => {
+    const text = [
+      "Sales timeline",
+      "Mastercard Pre-Sale Mon 13 Apr, 1 PM - Sat 18 Apr, 1 PM",
+    ].join("\n\n");
+    expect(extractSaleOpensAt(text, NOW_JAN)).toBe("2026-04-13T13:00:00.000+05:30");
+  });
+
+  test("should return null when every window is already past", () => {
+    const text = ["Sales timeline", "General Sale Sat 18 Apr, 2025, 2 PM - Sat 23 Jan, 2026, 7 PM"].join("\n\n");
+    expect(extractSaleOpensAt(text, NOW_JAN)).toBeNull();
+  });
+
+  test("should return null when the general sale is already live", () => {
+    const text = "General Sale is live now\n\nBook tickets";
+    expect(extractSaleOpensAt(text, NOW_JAN)).toBeNull();
+  });
+
+  test("should return null for garbage input", () => {
+    expect(extractSaleOpensAt("", NOW_JAN)).toBeNull();
+    expect(extractSaleOpensAt("no timeline here at all", NOW_JAN)).toBeNull();
+  });
+});
+
+describe("extractSaleOpensAt ï¿½ New-Year roll-forward", () => {
+  test("should roll a yearless January window into next year when polled in December", () => {
+    const text = "Sales timeline\n\nGeneral Sale 2 Jan, 1 PM - 9 Jan, 1 PM";
+    const nowDec = "2026-12-20T00:00:00.000Z";
+    expect(extractSaleOpensAt(text, nowDec)).toBe("2027-01-02T13:00:00.000+05:30");
+  });
+});
+
+  test("should NOT roll forward a yearless window when the poll is past New Year", () => {
+    // Polled Jan 3 for a Jan 2 window: stale same-year, no next-year phantom.
+    // Within the 24h chase lookback it still returns (post-open chase); far
+    // past it, null.
+    const text = "Sales timeline\n\nGeneral Sale 2 Jan, 1 PM - 9 Jan, 1 PM";
+    expect(extractSaleOpensAt(text, "2027-01-03T00:00:00.000Z")).toBe(
+      "2027-01-02T13:00:00.000+05:30",
+    );
+    expect(extractSaleOpensAt(text, "2027-01-15T00:00:00.000Z")).toBeNull();
+  });
+
+  test("should return a just-opened window so the post-open chase can engage", () => {
+    // Window opened 30 minutes ago, page not yet marked live (propagation lag).
+    const text = "Sales timeline\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 7 Mar, 2031, 1 PM";
+    const now = Date.parse("2031-01-10T10:30:00.000Z"); // 30 min after open
+    expect(extractSaleOpensAt(text, new Date(now).toISOString())).toBe(
+      "2031-01-10T10:00:00.000+05:30",
+    );
+  });
+
+  test("should not chase windows older than a day", () => {
+    const text = "Sales timeline\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 7 Mar, 2031, 1 PM";
+    const now = Date.parse("2031-01-11T11:00:00.000Z"); // >24h after open
+    expect(extractSaleOpensAt(text, new Date(now).toISOString())).toBeNull();
+  });

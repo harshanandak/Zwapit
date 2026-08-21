@@ -35,6 +35,25 @@ describe("watcher schema migration", () => {
     expect(doc?.subscriberCount).toBe(1);
   });
 
+  test("monitor_targets accepts saleOpensAt (sale-window scheduling)", async () => {
+    const t = testDb();
+    const id = await t.run(async (ctx) => {
+      return await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_9|mumbai|2027-01-18|",
+        catalogItemId: "catalog_event_9",
+        city: "mumbai",
+        date: "2027-01-18",
+        sources: ["district"],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2026-08-21T10:00:00.000Z",
+        saleOpensAt: "2026-04-18T08:30:00.000+05:30",
+      });
+    });
+    const doc = await t.run(async (ctx) => ctx.db.get(id));
+    expect(doc?.saleOpensAt).toBe("2026-04-18T08:30:00.000+05:30");
+  });
+
   test("catalog_items accepts the new source-code + geo fields", async () => {
     const t = testDb();
     const id = await t.run(async (ctx) => {

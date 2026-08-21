@@ -48,6 +48,7 @@ import {
 import {
   computeCollapseKey,
   eventShowMatchesTargetDate,
+  extractSaleOpensAt,
   looksLikeEventPage,
   parseBmsByVenue,
   parseBmsEventPage,
@@ -59,7 +60,11 @@ import {
   type UnionResult,
   type VenueMap,
 } from "./watcher/parse";
-import { nextCheckWithBackoff } from "./watcher/schedule";
+import {
+  nextCheckWithBackoff,
+  nextCheckWithSaleWindow,
+  saleWindowApplies,
+} from "./watcher/schedule";
 import {
   buildLiveMessage,
   defaultSenders,
@@ -690,6 +695,12 @@ export const rescheduleTarget = internalMutation({
     monitorTargetId: v.id("monitor_targets"),
     now: v.optional(v.string()),
     nextCheckAt: v.optional(v.string()),
+    // Parsed District sale-open instant to persist for future reschedules
+    // (kernel 9b317bb9). Absent → leave any stored value untouched.
+    saleOpensAt: v.optional(v.string()),
+    // True when nextCheckAt was computed FROM a sale window (fresh or stored) —
+    // drives the deduped audit trail for window-driven scheduling effects.
+    saleWindowDriven: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const target = await ctx.db.get(args.monitorTargetId);
@@ -702,7 +713,43 @@ export const rescheduleTarget = internalMutation({
       failCount: 0,
       lastCheckedAt: nowIso,
       nextCheckAt: args.nextCheckAt ?? nextCheckAfter(Date.now()),
+      ...(args.saleOpensAt ? { saleOpensAt: args.saleOpensAt } : {}),
     });
+    // Sale-window knowledge acquisition is audited once per distinct instant
+    // (the _set row); the recurring scheduling effect gets its own row, deduped
+    // to once per 6h per target so the post-open 5-min chase can't flood
+    // audit_logs while still leaving a trail (Codex P1 on #46).
+    if (args.saleOpensAt && args.saleOpensAt !== target.saleOpensAt) {
+      await appendWatcherAuditLog(ctx, {
+        actorId: "system",
+        action: "monitor_target_sale_window_set",
+        entityType: "monitor_target",
+        entityId: target.collapseKey,
+        createdAt: nowIso,
+      });
+    } else if (args.saleWindowDriven === true && args.nextCheckAt !== target.nextCheckAt) {
+      const recentSame = await ctx.db
+        .query("audit_logs")
+        .withIndex("by_entity", (q) =>
+          q.eq("entityType", "monitor_target").eq("entityId", target.collapseKey),
+        )
+        .order("desc")
+        .first();
+      const isDuplicate =
+        recentSame?.action === "monitor_target_sale_window_scheduled" &&
+        // Compare against the ACTION clock (args.now), not the host —
+        // deterministic replays stamp rows with a past `now` (Codex P2).
+        Date.parse(recentSame.createdAt) >= Date.parse(nowIso) - 6 * 3600_000;
+      if (!isDuplicate) {
+        await appendWatcherAuditLog(ctx, {
+          actorId: "system",
+          action: "monitor_target_sale_window_scheduled",
+          entityType: "monitor_target",
+          entityId: target.collapseKey,
+          createdAt: nowIso,
+        });
+      }
+    }
     return { status: "watching" as const };
   },
 });
@@ -1020,6 +1067,21 @@ export const pollDueTargets = internalAction({
 
       const union = buildUnionFromResults(sourceUrls, results, {}, target.date);
 
+      // Sale-window scheduling (kernel 9b317bb9): a District EVENT page's
+      // timeline carries the exact sale-open instant — capture it so the
+      // clean-reschedule below can wake at the open instead of sleeping
+      // through it. Movie pages and BMS pages have no such signal.
+      let saleOpensAt: string | undefined;
+      if (catalogItem.kind === "live_event") {
+        const districtUrl = sourceUrls.find((s) => s.source === "district")?.url;
+        const districtRow = districtUrl
+          ? results.find((r) => r.url === districtUrl)
+          : undefined;
+        if (typeof districtRow?.content === "string" && looksLikeEventPage(districtRow.content)) {
+          saleOpensAt = extractSaleOpensAt(districtRow.content, nowIso) ?? undefined;
+        }
+      }
+
       if (union.isOpen) {
         // Record on the first source that has the booking URL (union picks it).
         const primarySource = sourceUrls.find((s) => s.url === union.bookingUrl)?.source
@@ -1051,12 +1113,21 @@ export const pollDueTargets = internalAction({
         failed += 1;
       } else {
         // Clean fetch, booking not open yet — reschedule with distance-based
-        // backoff (far-future targets poll slowly; egress constraint), reset
-        // fail counter.
+        // backoff (far-future targets poll slowly; egress constraint), refined
+        // to wake at a known sale-open instant when District published one.
+        // A fresh parse wins; otherwise reuse the persisted instant so one
+        // timeline-less poll doesn't drop back to the 24h tier (Codex P2).
+        // Only windows the scheduler will actually honor are persisted or
+        // marked window-driven (Codex P2: rejected values stay out of both).
+        // Reset fail counter.
+        const effectiveSaleOpens = saleOpensAt ?? target.saleOpensAt;
+        const applies = saleWindowApplies(effectiveSaleOpens, target.date);
         await ctx.runMutation(internal.watcher.rescheduleTarget, {
           monitorTargetId: target._id,
           now: nowIso,
-          nextCheckAt: nextCheckWithBackoff(nowMs, target.date),
+          nextCheckAt: nextCheckWithSaleWindow(nowMs, applies ? effectiveSaleOpens : undefined, target.date),
+          ...(saleOpensAt && applies ? { saleOpensAt } : {}),
+          saleWindowDriven: applies,
         });
       }
     }
