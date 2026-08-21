@@ -415,7 +415,7 @@ describe("extractSaleOpensAt", () => {
   });
 });
 
-describe("extractSaleOpensAt — New-Year roll-forward", () => {
+describe("extractSaleOpensAt ï¿½ New-Year roll-forward", () => {
   test("should roll a yearless January window into next year when polled in December", () => {
     const text = "Sales timeline\n\nGeneral Sale 2 Jan, 1 PM - 9 Jan, 1 PM";
     const nowDec = "2026-12-20T00:00:00.000Z";
@@ -424,7 +424,27 @@ describe("extractSaleOpensAt — New-Year roll-forward", () => {
 });
 
   test("should NOT roll forward a yearless window when the poll is past New Year", () => {
-    // Polled Jan 3 for a Jan 2 window: it's stale, not next-year's occurrence.
+    // Polled Jan 3 for a Jan 2 window: stale same-year, no next-year phantom.
+    // Within the 24h chase lookback it still returns (post-open chase); far
+    // past it, null.
     const text = "Sales timeline\n\nGeneral Sale 2 Jan, 1 PM - 9 Jan, 1 PM";
-    expect(extractSaleOpensAt(text, "2027-01-03T00:00:00.000Z")).toBeNull();
+    expect(extractSaleOpensAt(text, "2027-01-03T00:00:00.000Z")).toBe(
+      "2027-01-02T13:00:00.000+05:30",
+    );
+    expect(extractSaleOpensAt(text, "2027-01-15T00:00:00.000Z")).toBeNull();
+  });
+
+  test("should return a just-opened window so the post-open chase can engage", () => {
+    // Window opened 30 minutes ago, page not yet marked live (propagation lag).
+    const text = "Sales timeline\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 7 Mar, 2031, 1 PM";
+    const now = Date.parse("2031-01-10T10:30:00.000Z"); // 30 min after open
+    expect(extractSaleOpensAt(text, new Date(now).toISOString())).toBe(
+      "2031-01-10T10:00:00.000+05:30",
+    );
+  });
+
+  test("should not chase windows older than a day", () => {
+    const text = "Sales timeline\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 7 Mar, 2031, 1 PM";
+    const now = Date.parse("2031-01-11T11:00:00.000Z"); // >24h after open
+    expect(extractSaleOpensAt(text, new Date(now).toISOString())).toBeNull();
   });

@@ -479,6 +479,11 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
   // seeing "2 Jan" means next January. Mid-January staleness ("2 Jan" polled
   // Jan 3) must NOT become a phantom next-year window (Codex P2).
   const rollForwardAllowed = new Date(nowMs).getUTCMonth() === 11;
+  // Windows that opened within the last day still drive the post-open chase
+  // (propagation lag / delayed on-sale) — don't discard them as "past"
+  // (Codex P1: first sighting after the open must engage tight polling).
+  const CHASE_LOOKBACK_MS = 24 * 3600_000;
+  const usable: Array<{ phase: "presale" | "general"; iso: string }> = [];
   for (const w of windows) {
     const hasExplicitYear = /\b(?:19|20)\d{2}\b/.test(w.raw);
     const labelMon = MONTH_NUM[((/\d{1,2}\s+([A-Za-z]{3,9})/.exec(w.raw))?.[1] ?? "").slice(0, 3).toLowerCase()] ?? 0;
@@ -487,19 +492,30 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
       iso = parseSaleStartIso(w.raw, fallbackYear + 1);
     }
     if (!iso) continue;
-    if (Date.parse(iso) > nowMs) future.push({ phase: w.phase, iso });
+    const ms = Date.parse(iso);
+    if (ms > nowMs || ms >= nowMs - CHASE_LOOKBACK_MS) {
+      usable.push({ phase: w.phase, iso });
+    }
   }
 
-  const earliestGeneral = future
-    .filter((f) => f.phase === "general")
+  const byPriority = (phase: "presale" | "general"): string | undefined =>
+    usable
+      .filter((f) => f.phase === phase)
+      .map((f) => f.iso)
+      .sort((a, b) => a.localeCompare(b))[0];
+  // Earliest still-future general sale wins outright; else the earliest future
+  // pre-sale; else the most recently opened window (chase cadence).
+  const earliestFutureGeneral = usable
+    .filter((f) => f.phase === "general" && Date.parse(f.iso) > nowMs)
     .map((f) => f.iso)
     .sort((a, b) => a.localeCompare(b))[0];
-  if (earliestGeneral) return earliestGeneral;
-  const earliestPresale = future
-    .filter((f) => f.phase === "presale")
+  if (earliestFutureGeneral) return earliestFutureGeneral;
+  const earliestFuturePresale = usable
+    .filter((f) => f.phase === "presale" && Date.parse(f.iso) > nowMs)
     .map((f) => f.iso)
     .sort((a, b) => a.localeCompare(b))[0];
-  return earliestPresale ?? null;
+  if (earliestFuturePresale) return earliestFuturePresale;
+  return byPriority("general") ?? byPriority("presale") ?? null;
 }
 
 // ---------------------------------------------------------------------------
