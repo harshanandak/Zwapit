@@ -47,7 +47,10 @@ import {
 } from "./watcher/adapters";
 import {
   computeCollapseKey,
+  looksLikeEventPage,
   parseBmsByVenue,
+  parseBmsEventPage,
+  parseDistrictEventPage,
   parseDistrictMovieCity,
   officialBookingUrl,
   snapshotHash,
@@ -880,13 +883,29 @@ export const expireWants = internalAction({
 /** Parse one Parallel result row per its source into NormalizedShow[]. */
 function parseResultForSource(source: ShowSource, content: string): NormalizedShow[] {
   if (source === "curated") return []; // curated availability is admin-set, never polled
-  if (source === "district") return parseDistrictMovieCity(content);
-  // BMS: content is raw JSON. Tolerate parse failure (untrusted bytes, A03).
+  // EVENT detail pages (markdown + sales markers) vs MOVIE payloads (BMS JSON /
+  // District `* Theatre` text). District serves two markdown shapes → sniff by
+  // event-specific markers (movie pages carry a status legend that would
+  // misfire). BMS: JSON-with-ShowDetails is a movie payload; ANY non-JSON body
+  // goes to the event parser, whose own markers decide open vs not-open-yet
+  // (events-phase2 decisions.md, probe 2026-08-21).
+  if (source === "district") {
+    return looksLikeEventPage(content)
+      ? parseDistrictEventPage(content)
+      : parseDistrictMovieCity(content);
+  }
+  // BMS: movie APIs return raw JSON; event pages are markdown. Tolerate parse
+  // failure (untrusted bytes, A03) — non-JSON falls through to the event page.
   let json: unknown = {};
+  let parsedJson = false;
   try {
     json = JSON.parse(content);
+    parsedJson = true;
   } catch {
-    return [];
+    json = {};
+  }
+  if (!parsedJson || typeof json !== "object" || json === null || !("ShowDetails" in json)) {
+    return parseBmsEventPage(content);
   }
   // byvenue + byevent share the ShowDetails model, so a single walker reads both
   // shapes; the byVenue/byEvent ternary fallback was dead (both delegate to the

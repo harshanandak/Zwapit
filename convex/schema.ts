@@ -387,6 +387,10 @@ export default defineSchema({
     districtMvCode: v.optional(v.string()),
     districtCdCode: v.optional(v.string()),
     districtCitySlug: v.optional(v.string()),
+    // District EVENT detail-page slug (probed 2026-08-21 — events-phase2
+    // decisions.md). Event slugs embed date/id suffixes and are not derivable
+    // from the title, so the row stores the exact slug for the events URL.
+    districtEventSlug: v.optional(v.string()),
     lat: v.optional(v.number()),
     long: v.optional(v.number()),
     // Source sitemap <lastmod> for incremental crawl diffs (skip unchanged entities next run, from #34).

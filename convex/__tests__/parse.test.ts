@@ -4,9 +4,12 @@ import { readFileSync } from "node:fs";
 import {
   AVAIL_STATUS_MAP,
   computeCollapseKey,
+  looksLikeEventPage,
   officialBookingUrl,
   parseBmsByEvent,
   parseBmsByVenue,
+  parseBmsEventPage,
+  parseDistrictEventPage,
   parseDistrictMovieCity,
   snapshotHash,
 } from "../watcher/parse";
@@ -230,5 +233,91 @@ describe("officialBookingUrl — deep-link allowlist", () => {
     ]) {
       expect(officialBookingUrl(u as string)).toBe("");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EVENT detail pages (probe 2026-08-21 � events-phase2 decisions.md)
+// ---------------------------------------------------------------------------
+
+const bmsEventPage = readFileSync(
+  new URL("./fixtures/bms-event-page.txt", import.meta.url),
+  "utf8",
+);
+const districtEventPage = readFileSync(
+  new URL("./fixtures/district-event-page.txt", import.meta.url),
+  "utf8",
+);
+
+describe("parseBmsEventPage", () => {
+  test("parses the probed Kumar Sanu page: filling_fast wins over Book Now", () => {
+    const shows = parseBmsEventPage(bmsEventPage);
+    expect(shows.length).toBe(1);
+    expect(shows[0].source).toBe("bms");
+    expect(shows[0].status).toBe("filling_fast");
+    expect(shows[0].format).toBe("event");
+    expect(shows[0].theatreName).toContain("Yashobhoomi");
+    expect(shows[0].showTime).toContain("16 Jan 2027");
+    expect(shows[0].showTime).toContain("7:30 PM");
+  });
+
+  test("returns [] for a not-open-yet page (no bookable markers)", () => {
+    expect(parseBmsEventPage("Search for Movies\n\n# Some Event\n\nComing Soon")).toEqual([]);
+  });
+
+  test("returns [] for sold out (never fires tickets-live on an unbuyable event)", () => {
+    expect(parseBmsEventPage("# Event\n\nSold Out\n\nBook Now")).toEqual([]);
+  });
+
+  test("returns [] for empty content", () => {
+    expect(parseBmsEventPage("")).toEqual([]);
+  });
+});
+
+describe("parseDistrictEventPage", () => {
+  test("parses the probed Gorillaz page: live general sale + venue + datetime", () => {
+    const shows = parseDistrictEventPage(districtEventPage);
+    expect(shows.length).toBe(1);
+    expect(shows[0].source).toBe("district");
+    expect(shows[0].status).toBe("available");
+    expect(shows[0].format).toBe("event");
+    expect(shows[0].theatreName).toContain("District Arena @ Terraform");
+    expect(shows[0].showTime).toContain("23 Jan");
+    expect(shows[0].showTime).toContain("6:00 PM");
+  });
+
+  test("parses the minimal shape (Book tickets, venue TBA)", () => {
+    const shows = parseDistrictEventPage(
+      "### Akhil Sachdeva - Homecoming India Tour | Mumbai\n\nFri, 23 Oct, 9:00 PM\n\nVenue to be announced, Mumbai\n\n\u20B91999\n\nonwards\n\nBook tickets\n",
+    );
+    expect(shows.length).toBe(1);
+    expect(shows[0].status).toBe("available");
+    expect(shows[0].showTime).toContain("23 Oct");
+  });
+
+  test("returns [] when no sale is live", () => {
+    expect(parseDistrictEventPage("# Event\n\nVenue to be announced, Mumbai\n")).toEqual([]);
+  });
+
+  test("returns [] for empty content", () => {
+    expect(parseDistrictEventPage("")).toEqual([]);
+  });
+});
+
+describe("looksLikeEventPage", () => {
+  test("sniffs DISTRICT event pages by their sales markers", () => {
+    expect(looksLikeEventPage(districtEventPage)).toBe(true);
+  });
+
+  test("BMS event pages are routed by JSON-vs-markdown, not this sniffer", () => {
+    // The BMS event page's markers ("Book Now", "Filling Fast") overlap the
+    // District movie legend vocabulary — the sniffer must stay District-only.
+    expect(looksLikeEventPage(bmsEventPage)).toBe(false);
+  });
+
+  test("does not misclassify movie payloads", () => {
+    expect(looksLikeEventPage(JSON.stringify(bmsByVenue))).toBe(false);
+    expect(looksLikeEventPage(districtText)).toBe(false);
+    expect(looksLikeEventPage("")).toBe(false);
   });
 });

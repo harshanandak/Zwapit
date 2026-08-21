@@ -29,12 +29,16 @@ import type { ShowSource } from "./types";
 
 const BMS_BYVENUE_BASE = "https://in.bookmyshow.com/api/v2/mobile/showtimes/byvenue";
 const BMS_BYEVENT_BASE = "https://in.bookmyshow.com/api/movies-data/showtimes-by-event";
+const BMS_EVENTS_BASE = "https://in.bookmyshow.com/events";
 const DISTRICT_BASE = "https://www.district.in/movies";
+const DISTRICT_EVENTS_BASE = "https://www.district.in/events";
 
 /** Catalog-row fields the builders read. Mirrors the optional code fields added to
  * `catalog_items` (schema.ts). Kept structural so this stays Convex-runtime-free. */
 export interface CatalogItemCodes {
   title: string;
+  /** "movie" | "live_event" | ... — routes BMS events to the detail page, not the movie API. */
+  kind?: string;
   city?: string;
   bmsEventCode?: string;
   bmsRegionCode?: string;
@@ -42,6 +46,8 @@ export interface CatalogItemCodes {
   districtMvCode?: string;
   districtCdCode?: string;
   districtCitySlug?: string;
+  /** District EVENT detail-page slug (probed 2026-08-21; not derivable from title). */
+  districtEventSlug?: string;
 }
 
 export interface BuildOptions {
@@ -91,7 +97,10 @@ function cacheBustOf(opts?: BuildOptions): number {
  * Build the BMS availability URL for a catalog row, or `null` if it has no usable
  * BMS codes (platform routing — the row simply isn't on BMS).
  *
- * Routing: a venue-kind row (has `bmsVenueCode`) → **byvenue** (the proven
+ * Routing: a LIVE_EVENT row with an ET code → **event detail page** (probed
+ * 2026-08-21: the showtimes-by-event API is movie-only — events never populate
+ * `ShowDetails`; availability lives on the page as text markers — events-phase2
+ * decisions.md). A venue-kind row (has `bmsVenueCode`) → **byvenue** (the proven
  * workhorse, keyed by venue+dateCode). A movie row (eventCode+regionCode, no
  * venueCode — design §39) → **byevent**, keyed by eventCode. byevent returns a
  * multi-date `ShowDatesArray`, so there is NO per-date URL param; only byvenue
@@ -107,6 +116,11 @@ export function buildBmsUrl(
   opts?: BuildOptions,
 ): string | null {
   const cb = cacheBustOf(opts);
+
+  // Live events: the detail PAGE, not the movie showtimes API (probe finding).
+  if (item.kind === "live_event") {
+    return buildBmsEventPageUrl(item);
+  }
 
   // Prefer byvenue when a venue code exists (validated clean-JSON workhorse #3).
   if (item.bmsVenueCode) {
@@ -139,12 +153,38 @@ export function buildBmsUrl(
 }
 
 /**
+ * Build the BMS EVENT DETAIL PAGE URL for a live_event row, or `null` without an
+ * ET code. The slug is derived from the title (shape-only assertion in tests —
+ * whether BMS's canonical slug matches exactly is a live /verify item); BMS
+ * redirects ET-code URLs to the canonical slug, so a derived slug only needs to
+ * be plausible for Parallel to extract the right page.
+ */
+export function buildBmsEventPageUrl(item: CatalogItemCodes): string | null {
+  if (!item.bmsEventCode) return null;
+  const slug = slugifyTitle(item.title);
+  return `${BMS_EVENTS_BASE}/${slug}/${enc(item.bmsEventCode)}`;
+}
+
+/**
+ * Build the District EVENT detail-page URL for a row carrying an event slug, or
+ * `null` otherwise. Event slugs embed date/id suffixes (`...-oct23-2026-buy-tickets`)
+ * and are NOT derivable from the title — the row stores `districtEventSlug`.
+ */
+export function buildDistrictEventUrl(item: CatalogItemCodes): string | null {
+  if (!item.districtEventSlug) return null;
+  return `${DISTRICT_EVENTS_BASE}/${enc(item.districtEventSlug)}`;
+}
+
+/**
  * Build the District movie-in-city URL for a catalog row, or `null` if it has no
  * usable District codes. Needs an MV code AND a city slug (the city is embedded in
  * the slug, not a path segment — district doc §2). District SSR is `no-cache`, so
  * no cache-bust param is needed/used.
  */
 export function buildDistrictUrl(item: CatalogItemCodes, date: string): string | null {
+  // Event rows route to the events surface (probed 2026-08-21), not the movie path.
+  if (item.districtEventSlug) return buildDistrictEventUrl(item);
+
   if (!item.districtMvCode || !item.districtCitySlug) return null;
 
   const slug = slugifyTitle(item.title);
