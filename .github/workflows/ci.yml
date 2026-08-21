@@ -215,3 +215,47 @@ jobs:
               issue_number: context.issue.number,
               body: "@coderabbitai review\n\nCI passed for this commit, so CodeRabbit can review now."
             });
+
+  coderabbit-gate:
+    timeout-minutes: 35
+    name: CodeRabbit review gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    needs:
+      - coderabbit
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}
+    steps:
+      - name: Wait for the CodeRabbit review to be posted
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            // Merge block: fail until CodeRabbit has actually posted on this PR
+            // (review or comment). Once it posts, unresolved threads are caught by
+            // the branch-level conversation-resolution rule. Poll up to ~30 min.
+            const deadline = Date.now() + 30 * 60 * 1000;
+            const seenReview = async () => {
+              const reviews = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number ?? context.payload.pull_request.number,
+                per_page: 100,
+              });
+              if (reviews.data.some((r) => r.user?.login === "coderabbitai")) return true;
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number ?? context.payload.pull_request.number,
+                per_page: 100,
+              });
+              return comments.data.some((c) => c.user?.login === "coderabbitai");
+            };
+            while (Date.now() < deadline) {
+              if (await seenReview()) {
+                core.info("CodeRabbit review posted — gate open.");
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 20000));
+            }
+            core.setFailed("CodeRabbit did not post a review within 30 minutes — merge blocked.");
