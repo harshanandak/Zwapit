@@ -28,10 +28,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Type check
         run: bun run check
@@ -53,10 +53,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: bun run build
@@ -75,10 +75,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: bun run build
@@ -100,10 +100,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: bun run build
@@ -125,10 +125,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: bun run build
@@ -150,10 +150,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: bun run build
@@ -179,10 +179,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Audit dependencies
         run: bun audit
@@ -215,3 +215,102 @@ jobs:
               issue_number: context.issue.number,
               body: "@coderabbitai review\n\nCI passed for this commit, so CodeRabbit can review now."
             });
+
+  coderabbit-gate:
+    timeout-minutes: 35
+    name: AI review gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    needs:
+      - coderabbit
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}
+    steps:
+      - name: Wait for a 10-minute quiet period after the last PR comment
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            // Merge block: succeed only once 10 minutes have passed with NO new
+            // PR activity (reviews, issue comments, inline review comments).
+            // Automated reviewers (CodeRabbit, Codex) post within that window,
+            // so a quiet period means delivery has settled. Combined with the
+            // branch-level conversation-resolution rule, any findings must be
+            // addressed before merge. Hard cap ~30 min regardless of chatter.
+            const QUIET_MS = 10 * 60 * 1000;
+            const CAP_MS = 30 * 60 * 1000;
+            const started = Date.now();
+            const number = context.issue.number ?? context.payload.pull_request.number;
+            let latest = 0;
+            const bump = (t) => {
+              if (!t) return;
+              const ms = Date.parse(t);
+              if (Number.isFinite(ms) && ms > latest) latest = ms;
+            };
+            // Edits count as activity too: a reviewer revising a comment must
+            // restart the quiet window. NOTE: submitted REVIEW summaries carry
+            // only submitted_at (no updated_at field exists on that schema);
+            // edits to issue/inline comments ARE observed via updated_at.
+            const bumpBoth = (created, updated) => {
+              bump(created);
+              bump(updated);
+            };
+            // Full pagination (list-reviews exposes no sort/direction, so
+            // newest-first single pages would miss activity on long PRs).
+            // Early-exits once a short page ends the collection.
+            const collectAll = async (call) => {
+              const out = [];
+              for (let page = 1; page <= 10; page += 1) {
+                const res = await call(page);
+                const rows = Array.isArray(res.data) ? res.data : [];
+                out.push(...rows);
+                if (rows.length < 100) break;
+              }
+              return out;
+            };
+            const lastActivity = async () => {
+              latest = 0;
+              const reviews = await collectAll((page) =>
+                github.rest.pulls.listReviews({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: number,
+                  per_page: 100,
+                  page,
+                }),
+              );
+              for (const r of reviews) bump(r.submitted_at);
+              const comments = await collectAll((page) =>
+                github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  per_page: 100,
+                  page,
+                }),
+              );
+              for (const c of comments) bumpBoth(c.created_at, c.updated_at);
+              const inline = await collectAll((page) =>
+                github.rest.pulls.listReviewComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: number,
+                  per_page: 100,
+                  page,
+                }),
+              );
+              for (const c of inline) bumpBoth(c.created_at, c.updated_at);
+              // Never older than this run's start: a review of an earlier head
+              // must not satisfy the quiet window for a fresh push.
+              return Math.max(latest, started);
+            };
+            while (Date.now() - started < CAP_MS) {
+              const quietFor = Date.now() - (await lastActivity());
+              if (quietFor >= QUIET_MS) {
+                core.info(`Quiet for ${Math.round(quietFor / 60000)} min — delivery settled, gate open.`);
+                return;
+              }
+              core.info(`Last activity ${Math.round(quietFor / 60000)} min ago — waiting for ${10} min quiet.`);
+              await new Promise((r) => setTimeout(r, 30000));
+            }
+            core.setFailed("Review gate timed out after 30 min of continuous PR activity — merge blocked.");
