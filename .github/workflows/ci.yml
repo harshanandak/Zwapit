@@ -247,11 +247,15 @@ jobs:
                 const ms = Date.parse(t);
                 if (Number.isFinite(ms) && ms > latest) latest = ms;
               };
+              // Newest-first pages: the most recent items must be visible for
+              // the quiet-period math to be sound (CodeRabbit P2).
               const reviews = await github.rest.pulls.listReviews({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: number,
                 per_page: 100,
+                sort: "submitted",
+                direction: "desc",
               });
               for (const r of reviews.data) bump(r.submitted_at);
               const comments = await github.rest.issues.listComments({
@@ -259,6 +263,8 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: number,
                 per_page: 100,
+                sort: "created",
+                direction: "desc",
               });
               for (const c of comments.data) bump(c.created_at);
               const inline = await github.rest.pulls.listReviewComments({
@@ -266,9 +272,13 @@ jobs:
                 repo: context.repo.repo,
                 pull_number: number,
                 per_page: 100,
+                sort: "created",
+                direction: "desc",
               });
               for (const c of inline.data) bump(c.created_at);
-              return latest || started;
+              // Never older than this run's start: a review of an earlier head
+              // must not satisfy the quiet window for a fresh push (P1).
+              return Math.max(latest, started);
             };
             while (Date.now() - started < CAP_MS) {
               const quietFor = Date.now() - (await lastActivity());
