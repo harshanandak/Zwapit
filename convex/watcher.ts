@@ -47,6 +47,7 @@ import {
 } from "./watcher/adapters";
 import {
   computeCollapseKey,
+  eventShowMatchesTargetDate,
   looksLikeEventPage,
   parseBmsByVenue,
   parseBmsEventPage,
@@ -926,16 +927,28 @@ function buildUnionFromResults(
   sourceUrls: SourceUrl[],
   results: ParallelResult[],
   venueMap: VenueMap,
+  // Event detail pages can cover several occurrences of a tour; a page-level
+  // booking marker must belong to THIS target's date before it counts
+  // (kernel 0ebd2562). Movie shows arrive from date-keyed API URLs and are
+  // exempt — only format:"event" rows are filtered.
+  matchTargetDate?: string,
 ): UnionResult {
   const byUrl = new Map(results.map((r) => [r.url, r]));
   let bms: NormalizedShow[] = [];
   let district: NormalizedShow[] = [];
   let bookingUrl: string | undefined;
 
+  const keepForTarget = (shows: NormalizedShow[]): NormalizedShow[] =>
+    matchTargetDate
+      ? shows.filter(
+          (s) => s.format !== "event" || eventShowMatchesTargetDate(s.showTime, matchTargetDate),
+        )
+      : shows;
+
   for (const { source, url } of sourceUrls) {
     const result = byUrl.get(url);
     const content = result?.content ?? "";
-    const shows = parseResultForSource(source, content);
+    const shows = keepForTarget(parseResultForSource(source, content));
     // Tag each show with the official deep-link OUT for its source.
     const withUrl = shows.map((s) => ({ ...s, bookingUrl: s.bookingUrl ?? url }));
     if (source === "bms") bms = withUrl;
@@ -1005,7 +1018,7 @@ export const pollDueTargets = internalAction({
         if (everyUrlBlocked) fetchFailed = true;
       }
 
-      const union = buildUnionFromResults(sourceUrls, results, {});
+      const union = buildUnionFromResults(sourceUrls, results, {}, target.date);
 
       if (union.isOpen) {
         // Record on the first source that has the booking URL (union picks it).
