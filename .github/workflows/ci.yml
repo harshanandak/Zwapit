@@ -218,7 +218,7 @@ jobs:
 
   coderabbit-gate:
     timeout-minutes: 35
-    name: CodeRabbit review gate
+    name: AI review gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -227,35 +227,52 @@ jobs:
       - coderabbit
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}
     steps:
-      - name: Wait for the CodeRabbit review to be posted
+      - name: Wait for both bot reviews (CodeRabbit + Codex) to be posted
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
-            // Merge block: fail until CodeRabbit has actually posted on this PR
-            // (review or comment). Once it posts, unresolved threads are caught by
-            // the branch-level conversation-resolution rule. Poll up to ~30 min.
+            // Merge block: fail until BOTH automated reviewers have actually
+            // posted on this PR (review or comment). Once they post, unresolved
+            // threads are caught by the branch-level conversation-resolution
+            // rule. Poll up to ~30 min.
+            const REQUIRED = ["coderabbitai", "chatgpt-codex-connector"];
             const deadline = Date.now() + 30 * 60 * 1000;
-            const seenReview = async () => {
+            const number = context.issue.number ?? context.payload.pull_request.number;
+            const whoPosted = async () => {
+              const posted = new Set();
               const reviews = await github.rest.pulls.listReviews({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: context.issue.number ?? context.payload.pull_request.number,
+                pull_number: number,
                 per_page: 100,
               });
-              if (reviews.data.some((r) => r.user?.login === "coderabbitai")) return true;
+              for (const r of reviews.data) {
+                if (REQUIRED.includes(r.user?.login)) posted.add(r.user.login);
+              }
               const comments = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number ?? context.payload.pull_request.number,
+                issue_number: number,
                 per_page: 100,
               });
-              return comments.data.some((c) => c.user?.login === "coderabbitai");
+              for (const c of comments.data) {
+                if (REQUIRED.includes(c.user?.login)) posted.add(c.user.login);
+              }
+              return posted;
             };
             while (Date.now() < deadline) {
-              if (await seenReview()) {
-                core.info("CodeRabbit review posted — gate open.");
+              const posted = await whoPosted();
+              const missing = REQUIRED.filter((r) => !posted.has(r));
+              if (missing.length === 0) {
+                core.info("Both bot reviews posted — gate open.");
                 return;
               }
+              core.info(`Still waiting on: ${missing.join(", ")}`);
               await new Promise((r) => setTimeout(r, 20000));
             }
-            core.setFailed("CodeRabbit did not post a review within 30 minutes — merge blocked.");
+            const posted = await whoPosted();
+            core.setFailed(
+              `Bot review gate timed out after 30 min — no review from: ${REQUIRED
+                .filter((r) => !posted.has(r))
+                .join(", ")}. Merge blocked.`,
+            );
