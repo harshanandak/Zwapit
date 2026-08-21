@@ -244,8 +244,15 @@ jobs:
             const lastActivity = async () => {
               let latest = 0;
               const bump = (t) => {
+                if (!t) return;
                 const ms = Date.parse(t);
                 if (Number.isFinite(ms) && ms > latest) latest = ms;
+              };
+              // Edits count as activity too: a reviewer revising a summary or
+              // inline comment must restart the quiet window (Codex P2).
+              const bumpBoth = (created, updated) => {
+                bump(created);
+                bump(updated);
               };
               // Newest-first pages: the most recent items must be visible for
               // the quiet-period math to be sound (CodeRabbit P2).
@@ -257,7 +264,7 @@ jobs:
                 sort: "submitted",
                 direction: "desc",
               });
-              for (const r of reviews.data) bump(r.submitted_at);
+              for (const r of reviews.data) bumpBoth(r.submitted_at, r.updated_at);
               const comments = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -266,7 +273,7 @@ jobs:
                 sort: "created",
                 direction: "desc",
               });
-              for (const c of comments.data) bump(c.created_at);
+              for (const c of comments.data) bumpBoth(c.created_at, c.updated_at);
               const inline = await github.rest.pulls.listReviewComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -275,7 +282,7 @@ jobs:
                 sort: "created",
                 direction: "desc",
               });
-              for (const c of inline.data) bump(c.created_at);
+              for (const c of inline.data) bumpBoth(c.created_at, c.updated_at);
               // Never older than this run's start: a review of an earlier head
               // must not satisfy the quiet window for a fresh push (P1).
               return Math.max(latest, started);
