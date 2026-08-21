@@ -118,8 +118,10 @@ export function buildBmsUrl(
   const cb = cacheBustOf(opts);
 
   // Live events: the detail PAGE, not the movie showtimes API (probe finding).
+  // Cache-bust still applies — Parallel/BMS must not serve a stale cached page
+  // after tickets open (bms doc §3 freshness rule; CodeRabbit P1).
   if (item.kind === "live_event") {
-    return buildBmsEventPageUrl(item);
+    return buildBmsEventPageUrl(item, { cacheBust: cb });
   }
 
   // Prefer byvenue when a venue code exists (validated clean-JSON workhorse #3).
@@ -159,10 +161,13 @@ export function buildBmsUrl(
  * redirects ET-code URLs to the canonical slug, so a derived slug only needs to
  * be plausible for Parallel to extract the right page.
  */
-export function buildBmsEventPageUrl(item: CatalogItemCodes): string | null {
+export function buildBmsEventPageUrl(
+  item: CatalogItemCodes,
+  opts?: BuildOptions,
+): string | null {
   if (!item.bmsEventCode) return null;
   const slug = slugifyTitle(item.title);
-  return `${BMS_EVENTS_BASE}/${slug}/${enc(item.bmsEventCode)}`;
+  return `${BMS_EVENTS_BASE}/${slug}/${enc(item.bmsEventCode)}?_cb=${cacheBustOf(opts)}`;
 }
 
 /**

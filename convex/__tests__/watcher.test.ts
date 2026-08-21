@@ -263,6 +263,39 @@ describe("createAlert — curated live events (events-phase2 T2)", () => {
     expect(due.find((d) => d._id === monitorTargetId)).toBeUndefined();
   });
 
+  test("a live_event WITH source codes is POLLABLE, not curated (adapters can fire)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_coded_1",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Kumar Sanu Live In Concert",
+        city: "delhi",
+        venueOrDestination: "Yashobhoomi Convention Center",
+        startAt: "2027-01-16T14:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        bmsEventCode: "ET00500437",
+      });
+    });
+
+    const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_coded_1",
+      city: "delhi",
+      date: "2027-01-16",
+    });
+
+    const target = (await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]));
+    expect(target.sources).toEqual(["bms"]); // routed to the BMS event detail-page adapter
+    expect(target.nextCheckAt).not.toBe("9999-12-31T23:59:59.999Z");
+
+    // Pollable: it must actually enter the due queue (CodeRabbit P1 regression).
+    const due = await tt.query(internal.watcher.dueTargets, { now: POLL_NOW });
+    expect(due.find((d) => d._id === monitorTargetId)).toBeDefined();
+  });
+
   test("two buyers on the same event occurrence collapse to ONE curated target", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);

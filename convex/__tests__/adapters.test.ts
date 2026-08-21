@@ -209,7 +209,7 @@ describe("extractViaParallel â€” injected fetcher", () => {
 });
 
 // ---------------------------------------------------------------------------
-// EVENT routing (probe 2026-08-21 — events-phase2 decisions.md)
+// EVENT routing (probe 2026-08-21 ï¿½ events-phase2 decisions.md)
 // ---------------------------------------------------------------------------
 
 const liveEventBms: CatalogItemForTest = {
@@ -227,8 +227,10 @@ const liveEventDistrict: CatalogItemForTest = {
 describe("event URL builders", () => {
   test("live_event + bmsEventCode routes to the DETAIL PAGE, not the byevent API", () => {
     // Probe finding: showtimes-by-event never populates ShowDetails for events.
-    const url = buildBmsUrl(liveEventBms, DATE);
-    expect(url).toBe("https://in.bookmyshow.com/events/kumar-sanu-live-in-concert/ET00500437");
+    const url = buildBmsUrl(liveEventBms, DATE, { cacheBust: 1700000000000 });
+    expect(url).toBe(
+      "https://in.bookmyshow.com/events/kumar-sanu-live-in-concert/ET00500437?_cb=1700000000000",
+    );
   });
 
   test("live_event without an ET code builds no BMS URL (curated fallback)", () => {
@@ -243,7 +245,7 @@ describe("event URL builders", () => {
   });
 
   test("movie rows are UNCHANGED by event routing (regression)", () => {
-    // Same assertions as the movie tests above — the kind-aware branch must not
+    // Same assertions as the movie tests above ï¿½ the kind-aware branch must not
     // disturb the validated movie shapes.
     expect(buildBmsUrl(movieBothSources, DATE, { cacheBust: 1700000000000 })).toBe(
       "https://in.bookmyshow.com/api/movies-data/showtimes-by-event" +

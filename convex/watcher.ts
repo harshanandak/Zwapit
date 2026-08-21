@@ -265,15 +265,19 @@ export const createAlert = mutation({
     });
 
     // Platform routing: a target only watches sources whose codes the catalog row
-    // actually has (design §Edge: one source has the show). Curated kinds
-    // (live_event) have no pollable source — availability is admin-driven, so they
-    // carry sources: [] and are never polled (dueTargets skips empty-source targets).
-    const isCurated = catalogItem.kind === "live_event";
+    // actually has (design §Edge: one source has the show). A row is CURATED only
+    // when it is a curated-capable kind (live_event) with NO pollable source —
+    // availability is then admin-driven, so the target carries sources: [] and is
+    // never polled (dueTargets skips empty-source targets). A live_event WITH codes
+    // is a pollable target like a movie (its BMS/District detail pages are routed
+    // by the event adapters) and must NOT get the never-poll sentinel, or the
+    // adapters could never fire (CodeRabbit P1).
     const sources: Array<"bms" | "district"> = [];
     if (buildBmsUrl(catalogItem, date) !== null) sources.push("bms");
     if (buildDistrictUrl(catalogItem, date) !== null) sources.push("district");
+    const isCurated = catalogItem.kind === "live_event" && sources.length === 0;
     // A pollable kind with no source is inert (pollDueTargets fetches nothing and
-    // reschedules forever); reject it. Curated kinds are allowed with no source.
+    // reschedules forever); reject it. Curated rows are allowed with no source.
     if (!isCurated && sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
 
     // ---- find-or-create the shared monitor target ----
