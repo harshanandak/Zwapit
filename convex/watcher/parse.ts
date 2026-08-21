@@ -285,6 +285,64 @@ export function looksLikeEventPage(content: string): boolean {
   );
 }
 
+/** Month-name → 1-12 from the first three letters (locale-safe for the
+ * English source pages we watch). */
+const MONTH_NUM: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+/**
+ * Does a parsed event show belong to the target's occurrence? Event detail
+ * pages can cover multiple dates of a tour; the collapse key is exact
+ * (catalogItemId|city|date|format), so a page-level booking marker must be
+ * narrowed to THIS target's date before firing tickets-live (kernel 0ebd2562).
+ *
+ * Accepts source-native labels — "Sat 16 Jan 2027 7:30 PM" (BMS),
+ * "Fri, 23 Oct, 9:00 PM" (District, year omitted) — or ISO. A label with no
+ * usable date fails CLOSED: an unparsable date must not fire a possibly
+ * wrong-occurrence alert (AGENTS standards: wrong-show alerts are the sin).
+ */
+export function eventShowMatchesTargetDate(showTime: string, targetDate: string): boolean {
+  if (!showTime || !targetDate) return false;
+  const tm = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!tm) return false;
+  const ty = Number(tm[1]);
+  const tmo = Number(tm[2]);
+  const td = Number(tm[3]);
+
+  const iso = showTime.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    return Number(iso[1]) === ty && Number(iso[2]) === tmo && Number(iso[3]) === td;
+  }
+
+  const monthNum = (s: string): number => MONTH_NUM[s.slice(0, 3).toLowerCase()] ?? 0;
+  // "16 Jan 2027" | "16 Jan"
+  const dmy = showTime.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})(?:\s*,?\s*(\d{4}))?\b/);
+  // "Jan 16[, 2027]"
+  const mdy = showTime.match(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?\b/);
+  let day = 0;
+  let mon = 0;
+  let year: number | undefined;
+  for (const m of [dmy, mdy]) {
+    if (!m) continue;
+    if (m === dmy) {
+      day = Number(m[1]);
+      mon = monthNum(m[2]);
+      year = m[3] ? Number(m[3]) : undefined;
+    } else {
+      mon = monthNum(m[1]);
+      day = Number(m[2]);
+      year = m[3] ? Number(m[3]) : undefined;
+    }
+    if (mon && day) break;
+  }
+  if (!mon || !day) return false;
+  if (mon !== tmo || day !== td) return false;
+  if (year !== undefined && year !== ty) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Collapse key + snapshot hash (narrow, stable projections)
 // ---------------------------------------------------------------------------

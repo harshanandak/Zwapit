@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   AVAIL_STATUS_MAP,
   computeCollapseKey,
+  eventShowMatchesTargetDate,
   looksLikeEventPage,
   officialBookingUrl,
   parseBmsByEvent,
@@ -319,5 +320,31 @@ describe("looksLikeEventPage", () => {
     expect(looksLikeEventPage(JSON.stringify(bmsByVenue))).toBe(false);
     expect(looksLikeEventPage(districtText)).toBe(false);
     expect(looksLikeEventPage("")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Event occurrence matching (kernel 0ebd2562 � CodeRabbit P1 on PR #42)
+// ---------------------------------------------------------------------------
+
+describe("eventShowMatchesTargetDate", () => {
+  test("should match BMS-style dates when the day-month-year align", () => {
+    expect(eventShowMatchesTargetDate("Sat 16 Jan 2027 7:30 PM", "2027-01-16")).toBe(true);
+  });
+
+  test("should match District-style dates that omit the year", () => {
+    expect(eventShowMatchesTargetDate("Fri, 23 Oct, 9:00 PM", "2026-10-23")).toBe(true);
+  });
+
+  test("should reject a different occurrence of a multi-date event page", () => {
+    expect(eventShowMatchesTargetDate("Sat 16 Jan 2027 7:30 PM", "2027-02-14")).toBe(false);
+    expect(eventShowMatchesTargetDate("Sat, 23 Jan, 6:00 PM", "2027-01-27")).toBe(false);
+  });
+
+  test("should fail closed when the parsed showTime carries no usable date", () => {
+    // A wrong-date alert is worse than a missed one (AGENTS standards) � an
+    // unparsable date must NOT fire tickets-live for this target.
+    expect(eventShowMatchesTargetDate("", "2027-01-16")).toBe(false);
+    expect(eventShowMatchesTargetDate("Doors at 7 PM", "2027-01-16")).toBe(false);
   });
 });
