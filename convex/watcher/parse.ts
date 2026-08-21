@@ -476,7 +476,14 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
 
   const future: Array<{ phase: "presale" | "general"; iso: string }> = [];
   for (const w of windows) {
-    const iso = parseSaleStartIso(w.raw, fallbackYear);
+    const hasExplicitYear = /\b(?:19|20)\d{2}\b/.test(w.raw);
+    let iso = parseSaleStartIso(w.raw, fallbackYear);
+    // New-Year roll-forward (Codex P2): a yearless "2 Jan" parsed from a
+    // December poll lands in the past — retry the NEXT year's occurrence
+    // instead of discarding the only scheduling signal we have.
+    if (iso && !hasExplicitYear && Date.parse(iso) <= nowMs) {
+      iso = parseSaleStartIso(w.raw, fallbackYear + 1);
+    }
     if (!iso) continue;
     if (Date.parse(iso) > nowMs) future.push({ phase: w.phase, iso });
   }
