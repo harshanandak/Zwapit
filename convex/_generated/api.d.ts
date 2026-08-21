@@ -23,6 +23,7 @@ import type * as seed from "../seed.js";
 import type * as watcher from "../watcher.js";
 import type * as watcher_adapters from "../watcher/adapters.js";
 import type * as watcher_parse from "../watcher/parse.js";
+import type * as watcher_schedule from "../watcher/schedule.js";
 import type * as watcher_senders from "../watcher/senders.js";
 import type * as watcher_types from "../watcher/types.js";
 
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   watcher: typeof watcher;
   "watcher/adapters": typeof watcher_adapters;
   "watcher/parse": typeof watcher_parse;
+  "watcher/schedule": typeof watcher_schedule;
   "watcher/senders": typeof watcher_senders;
   "watcher/types": typeof watcher_types;
 }>;

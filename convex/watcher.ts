@@ -48,6 +48,7 @@ import {
 import {
   computeCollapseKey,
   eventShowMatchesTargetDate,
+  extractSaleOpensAt,
   looksLikeEventPage,
   parseBmsByVenue,
   parseBmsEventPage,
@@ -59,7 +60,7 @@ import {
   type UnionResult,
   type VenueMap,
 } from "./watcher/parse";
-import { nextCheckWithBackoff } from "./watcher/schedule";
+import { nextCheckWithBackoff, nextCheckWithSaleWindow } from "./watcher/schedule";
 import {
   buildLiveMessage,
   defaultSenders,
@@ -690,6 +691,9 @@ export const rescheduleTarget = internalMutation({
     monitorTargetId: v.id("monitor_targets"),
     now: v.optional(v.string()),
     nextCheckAt: v.optional(v.string()),
+    // Parsed District sale-open instant to persist for future reschedules
+    // (kernel 9b317bb9). Absent → leave any stored value untouched.
+    saleOpensAt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const target = await ctx.db.get(args.monitorTargetId);
@@ -702,6 +706,7 @@ export const rescheduleTarget = internalMutation({
       failCount: 0,
       lastCheckedAt: nowIso,
       nextCheckAt: args.nextCheckAt ?? nextCheckAfter(Date.now()),
+      ...(args.saleOpensAt ? { saleOpensAt: args.saleOpensAt } : {}),
     });
     return { status: "watching" as const };
   },
@@ -1020,6 +1025,21 @@ export const pollDueTargets = internalAction({
 
       const union = buildUnionFromResults(sourceUrls, results, {}, target.date);
 
+      // Sale-window scheduling (kernel 9b317bb9): a District EVENT page's
+      // timeline carries the exact sale-open instant — capture it so the
+      // clean-reschedule below can wake at the open instead of sleeping
+      // through it. Movie pages and BMS pages have no such signal.
+      let saleOpensAt: string | undefined;
+      if (catalogItem.kind === "live_event") {
+        const districtUrl = sourceUrls.find((s) => s.source === "district")?.url;
+        const districtRow = districtUrl
+          ? results.find((r) => r.url === districtUrl)
+          : undefined;
+        if (typeof districtRow?.content === "string" && looksLikeEventPage(districtRow.content)) {
+          saleOpensAt = extractSaleOpensAt(districtRow.content, nowIso) ?? undefined;
+        }
+      }
+
       if (union.isOpen) {
         // Record on the first source that has the booking URL (union picks it).
         const primarySource = sourceUrls.find((s) => s.url === union.bookingUrl)?.source
@@ -1051,12 +1071,14 @@ export const pollDueTargets = internalAction({
         failed += 1;
       } else {
         // Clean fetch, booking not open yet — reschedule with distance-based
-        // backoff (far-future targets poll slowly; egress constraint), reset
-        // fail counter.
+        // backoff (far-future targets poll slowly; egress constraint), refined
+        // to wake at a known sale-open instant when District published one.
+        // Reset fail counter.
         await ctx.runMutation(internal.watcher.rescheduleTarget, {
           monitorTargetId: target._id,
           now: nowIso,
-          nextCheckAt: nextCheckWithBackoff(nowMs, target.date),
+          nextCheckAt: nextCheckWithSaleWindow(nowMs, saleOpensAt, target.date),
+          ...(saleOpensAt ? { saleOpensAt } : {}),
         });
       }
     }

@@ -5,6 +5,7 @@ import {
   AVAIL_STATUS_MAP,
   computeCollapseKey,
   eventShowMatchesTargetDate,
+  extractSaleOpensAt,
   looksLikeEventPage,
   officialBookingUrl,
   parseBmsByEvent,
@@ -349,7 +350,7 @@ describe("eventShowMatchesTargetDate", () => {
   });
 });
 
-describe("eventShowMatchesTargetDate — calendar + weekday guards", () => {
+describe("eventShowMatchesTargetDate ï¿½ calendar + weekday guards", () => {
   test("should reject yearless labels whose weekday contradicts the target year", () => {
     // Jan 23 2027 is a Saturday; Jan 23 2028 is a Sunday.
     expect(eventShowMatchesTargetDate("Sat, 23 Jan, 6:00 PM", "2027-01-23")).toBe(true);
@@ -364,5 +365,52 @@ describe("eventShowMatchesTargetDate — calendar + weekday guards", () => {
 
   test("should still match full ISO labels for valid dates", () => {
     expect(eventShowMatchesTargetDate("2027-01-16T19:30:00Z", "2027-01-16")).toBe(true);
+  });
+});
+
+describe("extractSaleOpensAt", () => {
+  const districtFixture = readFileSync(
+    new URL("./fixtures/district-event-page.txt", import.meta.url),
+    "utf8",
+  );
+  // Mid-January 2026: both timeline windows are in the future.
+  const NOW_JAN = "2026-01-15T00:00:00.000Z";
+
+  test("should return the general-sale start from the Gorillaz fixture timeline", () => {
+    // Fixture timeline minus its "is live now" state line â€” a page whose sale
+    // is ALREADY open returns null (the availability markers handle firing).
+    const timelineOnly = [
+      "Sales timeline",
+      "Mastercard Pre-Sale Mon 13 Apr, 1 PM - Sat 18 Apr, 1 PM",
+      "General Sale Sat 18 Apr, 2026, 2 PM - Sat 23 Jan, 2027, 7 PM",
+    ].join("\n\n");
+    expect(extractSaleOpensAt(timelineOnly, NOW_JAN)).toBe("2026-04-18T14:00:00.000+05:30");
+  });
+
+  test("should return null when the fixture marks the sale as already live", () => {
+    expect(extractSaleOpensAt(districtFixture, NOW_JAN)).toBeNull();
+  });
+
+  test("should borrow the timeline year for a yearless pre-sale start when no general sale is ahead", () => {
+    const text = [
+      "Sales timeline",
+      "Mastercard Pre-Sale Mon 13 Apr, 1 PM - Sat 18 Apr, 1 PM",
+    ].join("\n\n");
+    expect(extractSaleOpensAt(text, NOW_JAN)).toBe("2026-04-13T13:00:00.000+05:30");
+  });
+
+  test("should return null when every window is already past", () => {
+    const text = ["Sales timeline", "General Sale Sat 18 Apr, 2025, 2 PM - Sat 23 Jan, 2026, 7 PM"].join("\n\n");
+    expect(extractSaleOpensAt(text, NOW_JAN)).toBeNull();
+  });
+
+  test("should return null when the general sale is already live", () => {
+    const text = "General Sale is live now\n\nBook tickets";
+    expect(extractSaleOpensAt(text, NOW_JAN)).toBeNull();
+  });
+
+  test("should return null for garbage input", () => {
+    expect(extractSaleOpensAt("", NOW_JAN)).toBeNull();
+    expect(extractSaleOpensAt("no timeline here at all", NOW_JAN)).toBeNull();
   });
 });
