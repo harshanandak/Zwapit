@@ -200,11 +200,11 @@ jobs:
         if: steps.mode.outputs.can_validate == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install dependencies
         if: steps.mode.outputs.can_validate == 'true'
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Type check
         if: steps.mode.outputs.can_validate == 'true'
