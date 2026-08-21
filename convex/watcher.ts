@@ -733,7 +733,9 @@ export const rescheduleTarget = internalMutation({
         .first();
       const isDuplicate =
         recentSame?.action === "monitor_target_sale_window_scheduled" &&
-        Date.parse(recentSame.createdAt) > Date.now() - 6 * 3600_000;
+        // Compare against the ACTION clock (args.now), not the host —
+        // deterministic replays stamp rows with a past `now` (Codex P2).
+        Date.parse(recentSame.createdAt) >= Date.parse(nowIso) - 6 * 3600_000;
       if (!isDuplicate) {
         await appendWatcherAuditLog(ctx, {
           actorId: "system",

@@ -475,13 +475,15 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
   const fallbackYear = explicitYear ? Number(explicitYear) : new Date(nowMs).getUTCFullYear();
 
   const future: Array<{ phase: "presale" | "general"; iso: string }> = [];
+  // Yearless labels roll forward ONLY across a year boundary: a December poll
+  // seeing "2 Jan" means next January. Mid-January staleness ("2 Jan" polled
+  // Jan 3) must NOT become a phantom next-year window (Codex P2).
+  const rollForwardAllowed = new Date(nowMs).getUTCMonth() === 11;
   for (const w of windows) {
     const hasExplicitYear = /\b(?:19|20)\d{2}\b/.test(w.raw);
+    const labelMon = MONTH_NUM[((/\d{1,2}\s+([A-Za-z]{3,9})/.exec(w.raw))?.[1] ?? "").slice(0, 3).toLowerCase()] ?? 0;
     let iso = parseSaleStartIso(w.raw, fallbackYear);
-    // New-Year roll-forward (Codex P2): a yearless "2 Jan" parsed from a
-    // December poll lands in the past — retry the NEXT year's occurrence
-    // instead of discarding the only scheduling signal we have.
-    if (iso && !hasExplicitYear && Date.parse(iso) <= nowMs) {
+    if (iso && !hasExplicitYear && Date.parse(iso) <= nowMs && rollForwardAllowed && labelMon === 1) {
       iso = parseSaleStartIso(w.raw, fallbackYear + 1);
     }
     if (!iso) continue;
