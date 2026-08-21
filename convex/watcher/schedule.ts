@@ -32,6 +32,20 @@ function endOfDayMs(targetDate: string): number {
 }
 
 /**
+ * Would this instant actually drive scheduling? True when parseable and not
+ * beyond the watched date's end-of-day (yearless-label oversleep). Callers
+ * use it to decide persistence + window-driven audit marking, so rejected
+ * values are neither stored nor audited (Codex P2 on #46).
+ */
+export function saleWindowApplies(saleOpensAtIso: string | undefined | null, targetDate: string): boolean {
+  if (!saleOpensAtIso) return false;
+  const open = Date.parse(saleOpensAtIso);
+  if (!Number.isFinite(open)) return false;
+  const eod = endOfDayMs(targetDate);
+  return !(Number.isFinite(eod) && open > eod);
+}
+
+/**
  * Next `nextCheckAt` when we hold a parsed District sale-open instant:
  * - Window ahead: wake just after it opens (buffered) — never later than the
  *   distance tier would poll anyway, never sooner than the floor.

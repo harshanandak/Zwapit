@@ -1369,3 +1369,44 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     const chasePolls = audits.filter((a) => a.action === "monitor_target_rescheduled");
     expect(chasePolls.length).toBe(0);
   });
+
+  test("a window beyond the event date is neither persisted nor marked window-driven", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_4",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Phantom Window Event",
+        city: "delhi",
+        startAt: "2031-01-20T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "phantom-window-event-buy-tickets",
+      });
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_event_sched_4",
+      city: "delhi",
+      date: "2031-01-20",
+    });
+
+    // Timeline window (Mar 2031) lands AFTER the watched day (Jan 20 2031).
+    const phantom =
+      "Sales timeline\n\nGeneral Sale Sat 7 Mar, 2031, 10 AM - Sat 14 Mar, 2031, 1 PM";
+    __setFetcher(async (urls: string[]) => ({
+      results: urls.map((url) => ({ url, content: phantom })),
+    }));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const { target, audits } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      audits: await ctx.db.query("audit_logs").collect(),
+    }));
+    expect(target.saleOpensAt).toBeUndefined(); // rejected value not persisted
+    expect(audits.some((a) => a.action === "monitor_target_sale_window_set")).toBe(false);
+    expect(audits.some((a) => a.action === "monitor_target_sale_window_scheduled")).toBe(false);
+    const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
+    expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString()); // pure tiers
+  });

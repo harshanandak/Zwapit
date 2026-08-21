@@ -60,7 +60,11 @@ import {
   type UnionResult,
   type VenueMap,
 } from "./watcher/parse";
-import { nextCheckWithBackoff, nextCheckWithSaleWindow } from "./watcher/schedule";
+import {
+  nextCheckWithBackoff,
+  nextCheckWithSaleWindow,
+  saleWindowApplies,
+} from "./watcher/schedule";
 import {
   buildLiveMessage,
   defaultSenders,
@@ -1113,14 +1117,17 @@ export const pollDueTargets = internalAction({
         // to wake at a known sale-open instant when District published one.
         // A fresh parse wins; otherwise reuse the persisted instant so one
         // timeline-less poll doesn't drop back to the 24h tier (Codex P2).
+        // Only windows the scheduler will actually honor are persisted or
+        // marked window-driven (Codex P2: rejected values stay out of both).
         // Reset fail counter.
         const effectiveSaleOpens = saleOpensAt ?? target.saleOpensAt;
+        const applies = saleWindowApplies(effectiveSaleOpens, target.date);
         await ctx.runMutation(internal.watcher.rescheduleTarget, {
           monitorTargetId: target._id,
           now: nowIso,
-          nextCheckAt: nextCheckWithSaleWindow(nowMs, effectiveSaleOpens, target.date),
-          ...(saleOpensAt ? { saleOpensAt } : {}),
-          saleWindowDriven: Boolean(effectiveSaleOpens),
+          nextCheckAt: nextCheckWithSaleWindow(nowMs, applies ? effectiveSaleOpens : undefined, target.date),
+          ...(saleOpensAt && applies ? { saleOpensAt } : {}),
+          saleWindowDriven: applies,
         });
       }
     }
