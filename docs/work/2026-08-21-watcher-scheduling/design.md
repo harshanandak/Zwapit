@@ -35,9 +35,10 @@ per district result row and passes the winner to `rescheduleTarget`.
 - Cap (distance tier): never *less* often than today's behavior — if the parsed
   instant disagrees wildly with the watch date, tiers win.
 - Past/invalid `saleOpensAt` → ignored → pure tiers (fail open toward current
-  behavior; parse regressions degrade to exactly today).
-- Anchor rule: a resolved instant beyond the target's end-of-day is clamped to
-  it — yearless timeline text must never oversleep past the event itself.
+  behavior; parse regressions degrade to exactly today). An instant **after the
+  target's end-of-day is garbage** (yearless-label oversleep) and also falls
+  back to pure tiers — we do not clamp to EOD; a wake at event end has no
+  scheduling value.
 
 **D3 — Invalidation by state machine, not cleanup jobs.**
 `saleOpensAt` is only read in the `watching` clean-reschedule branch. `live`
