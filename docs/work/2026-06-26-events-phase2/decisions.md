@@ -91,3 +91,60 @@ slice (below), and this entry records what is known + a leaning + the precise te
 4. Output a data map (URL templates + parse fields) → build `parseBmsEvent` / `parseDistrictEvent` behind the existing `pollDueTargets` routing, reusing shared-collapse + snapshot caching + conditional requests (egress).
 
 **Decision:** curated-first v1 ships now; automated event polling is a **separate slice gated on the probe**. If the probe is negative, curated-only remains the product — the "we'll notify you" promise is still met. **Status**: RESOLVED (spike documented; empirical validation deferred).
+
+---
+
+## Event-source spike (T5) — EMPIRICAL PROBE EXECUTED (2026-08-21): GO for both sources
+
+The deferred empirical probe was run 2026-08-21 via Parallel Extract against live BMS and District
+surfaces. Raw evidence excerpts were pulled fresh; findings below are from those responses.
+
+### BMS — GO, via event DETAIL PAGE (not the showtimes API)
+
+- **Sitemap exists**: `in.bookmyshow.com/sitemap/events-synopsis.xml` → **5,575 event URLs**,
+  pattern `https://in.bookmyshow.com/events/<slug>/ET<code>` — same ET-code family as movies, so
+  `catalog_items.externalId` needs no new id scheme.
+- **`showtimes-by-event` does NOT carry events.** Probed ET00505033 (Kochi), ET00454493 (Mumbai),
+  ET00500437 (Delhi) across regionCode MUMBAI + DELHI: every response is the movie-shaped shell
+  (`ShowDetails: []`, `ShowDatesArray` with all days `isDisabled: true`, no `AvailStatus`/`VenueName`
+  /`ShowTime`). The endpoint is movie-only; do NOT build an event adapter on it.
+- **Availability lives on the detail page as rendered text** (verified on
+  `/events/kumar-sanu-live-in-concert/ET00500437`): `Filling Fast`, `Book Now`, `₹11999 onwards`,
+  date+time (`Sat 16 Jan 2027, 7:30 PM`), venue (`Yashobhoomi Convention Center: Delhi`),
+  demand signal (`291 are interested`). Parse target = markdown text markers, same cost/check as
+  movies (~$0.001 via Parallel).
+- **Adapter implication**: `buildBmsUrl` for events should emit the DETAIL PAGE URL
+  (`/events/<slug>/<ETcode>`), not the byevent API. Status vocabulary to enumerate in the adapter
+  slice: at minimum `Filling Fast` / `Book Now` (on sale); `Sold Out` / `Coming Soon` / `Notify Me`
+  states seen on site but not yet captured in a probe — first adapter task is to lock the full map.
+- Region gotcha: the page header shows the READER's city, not the event's — venue line carries the
+  real city (`...: Delhi`). Parse venue, not header.
+
+### District — GO, strongest signal of the two
+
+- **Dedicated events sitemap chain**: `robots.txt` → `/events/search-sitemap/sitemap-events.xml`
+  (index) → `event-detail-pages.xml` (**3,121 event URLs**, pattern
+  `district.in/events/<slug>`), plus artist/venue-guide sitemaps.
+- **Event pages carry an explicit sales timeline with live state** (verified on Gorillaz Bengaluru
+  2027 page): `General Sale is live now`, price `₹15,000 onwards`, `Book tickets` CTA, and a
+  structured **Sales timeline** block — `Mastercard Pre-Sale Mon 13 Apr, 1 PM - Sat 18 Apr, 1 PM` /
+  `General Sale Sat 18 Apr, 2026, 2 PM - Sat 23 Jan, 2027, 7 PM` + state marker `Live`. That
+  timeline is exactly Zwapit's alert surface: pre-sale start, general-sale start, sale end.
+- Second sample (Akhil Sachdeva Mumbai) confirms the minimal shape: `Book tickets` + `₹1999
+  onwards` + date + `Venue to be announced` (venue can be null — schema already allows).
+- Multi-city tours cross-link (`Touring In [Mumbai ...](...)`) — useful for per-city targets later.
+
+### Verdict
+
+**GO for both sources.** Automated event polling is buildable behind the existing
+`pollDueTargets` routing: BMS via detail-page scrape (new URL builder + text-marker parser),
+District via detail-page scrape (sales-timeline parser). Both reuse shared-collapse, snapshot-hash
+caching, and stop-on-detect; egress stays ~$0.001/check. The movie JSON-API path does not extend to
+events — that asymmetry is the one design change vs the original leaning ("BMS lean GO via
+showtimes-by-event" was wrong; it's GO via page instead).
+
+**Next slice (gated on this GO):** `parseBmsEventPage` / `parseDistrictEventPage` +
+`buildBmsEventPageUrl` / `buildDistrictEventUrl` in `convex/watcher/adapters.ts` + `parse.ts`,
+fixtures from these probes, full status-vocabulary enumeration, then wire into `targetSourceUrls`.
+Curated path stays as fallback for events with no source codes. **Status**: RESOLVED — probe
+executed, GO recorded.
