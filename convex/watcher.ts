@@ -58,6 +58,7 @@ import {
   type UnionResult,
   type VenueMap,
 } from "./watcher/parse";
+import { nextCheckWithBackoff } from "./watcher/schedule";
 import {
   buildLiveMessage,
   defaultSenders,
@@ -1032,11 +1033,13 @@ export const pollDueTargets = internalAction({
         });
         failed += 1;
       } else {
-        // Clean fetch, booking not open yet → reschedule, reset fail counter.
+        // Clean fetch, booking not open yet — reschedule with distance-based
+        // backoff (far-future targets poll slowly; egress constraint), reset
+        // fail counter.
         await ctx.runMutation(internal.watcher.rescheduleTarget, {
           monitorTargetId: target._id,
           now: nowIso,
-          nextCheckAt: nextCheckAfter(nowMs),
+          nextCheckAt: nextCheckWithBackoff(nowMs, target.date),
         });
       }
     }
