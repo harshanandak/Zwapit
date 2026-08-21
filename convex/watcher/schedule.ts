@@ -33,12 +33,13 @@ function endOfDayMs(targetDate: string): number {
 
 /**
  * Next `nextCheckAt` when we hold a parsed District sale-open instant:
- * wake just after the window opens (buffered), but never sooner than the
- * 5-minute floor and never later than the distance-based tier would poll
- * anyway. A saleOpensAt beyond the watched date's end-of-day is garbage
- * (yearless-label oversleep) and falls back to pure tiers; so does an
- * unparseable instant. Fail-open philosophy: parse regressions degrade to
- * exactly today's behavior.
+ * - Window ahead: wake just after it opens (buffered) — never later than the
+ *   distance tier would poll anyway, never sooner than the floor.
+ * - Window already past (propagation lag / delayed opening): KEEP POLLING
+ *   TIGHTLY at the floor cadence until detection or expiry — falling back to
+ *   a distant tier here is exactly the day-late miss this slice removes.
+ * - Unparseable instant, or one beyond the watched date's end-of-day
+ *   (yearless-label garbage): pure distance tiers (= today's behavior).
  */
 export function nextCheckWithSaleWindow(
   nowMs: number,
@@ -49,15 +50,14 @@ export function nextCheckWithSaleWindow(
   const floor = nowMs + 5 * 60_000;
 
   const open = saleOpensAtIso ? Date.parse(saleOpensAtIso) : Number.NaN;
-  // Past instants are stale data (the poll that saw them should have fired);
-  // beyond-end-of-day instants are yearless-label garbage. Both fall back.
   const eod = endOfDayMs(targetDate);
-  if (!Number.isFinite(open) || open <= nowMs || (Number.isFinite(eod) && open > eod)) {
+  // Unknown window, or garbage beyond the event itself -> tiers.
+  if (!Number.isFinite(open) || (Number.isFinite(eod) && open > eod)) {
     return new Date(Math.max(tiered, floor)).toISOString();
   }
-
-  const wakeAt = open + SALE_BUFFER_MS;
-  return new Date(Math.max(Math.min(wakeAt, tiered), floor)).toISOString();
+  // Held window (future OR recently opened): tight polling till detection.
+  const wakeAt = open <= nowMs ? floor : Math.min(open + SALE_BUFFER_MS, tiered);
+  return new Date(Math.max(wakeAt, floor)).toISOString();
 }
 
 /**

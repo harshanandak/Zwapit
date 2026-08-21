@@ -1321,3 +1321,51 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString());
   });
 });
+
+  test("window-driven reschedules audit once per 6h (no flood from the 5-min chase)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_3",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Chase Event",
+        city: "goa",
+        startAt: "2031-04-10T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "chase-event-buy-tickets",
+      });
+      await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_sched_3|goa|2031-04-10|",
+        catalogItemId: "catalog_event_sched_3",
+        city: "goa",
+        date: "2031-04-10",
+        sources: ["district"],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2020-01-01T00:00:00.000Z",
+        saleOpensAt: "2020-06-01T00:00:00.000Z", // already opened: floor-chase regime
+      });
+    });
+
+    __setFetcher(emptyFetcher());
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    // Re-open the window; the floor-based nextCheckAt always differs.
+    const reopen = async () =>
+      tt.run(async (ctx) => {
+        const tgt = (await ctx.db.query("monitor_targets").collect())[0];
+        if (tgt.status === "watching") await ctx.db.patch(tgt._id, { nextCheckAt: "2020-01-01T00:00:00.000Z" });
+      });
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    expect(scheduled.length).toBe(1); // deduped within the 6h window
+    const chasePolls = audits.filter((a) => a.action === "monitor_target_rescheduled");
+    expect(chasePolls.length).toBe(0);
+  });

@@ -694,6 +694,9 @@ export const rescheduleTarget = internalMutation({
     // Parsed District sale-open instant to persist for future reschedules
     // (kernel 9b317bb9). Absent → leave any stored value untouched.
     saleOpensAt: v.optional(v.string()),
+    // True when nextCheckAt was computed FROM a sale window (fresh or stored) —
+    // drives the deduped audit trail for window-driven scheduling effects.
+    saleWindowDriven: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const target = await ctx.db.get(args.monitorTargetId);
@@ -708,8 +711,10 @@ export const rescheduleTarget = internalMutation({
       nextCheckAt: args.nextCheckAt ?? nextCheckAfter(Date.now()),
       ...(args.saleOpensAt ? { saleOpensAt: args.saleOpensAt } : {}),
     });
-    // Monitor-effect rule (AGENTS #4): persisting a scheduling field is an
-    // audited mutation, not just the creation row.
+    // Sale-window knowledge acquisition is audited once per distinct instant
+    // (the _set row); the recurring scheduling effect gets its own row, deduped
+    // to once per 6h per target so the post-open 5-min chase can't flood
+    // audit_logs while still leaving a trail (Codex P1 on #46).
     if (args.saleOpensAt && args.saleOpensAt !== target.saleOpensAt) {
       await appendWatcherAuditLog(ctx, {
         actorId: "system",
@@ -718,6 +723,26 @@ export const rescheduleTarget = internalMutation({
         entityId: target.collapseKey,
         createdAt: nowIso,
       });
+    } else if (args.saleWindowDriven === true && args.nextCheckAt !== target.nextCheckAt) {
+      const recentSame = await ctx.db
+        .query("audit_logs")
+        .withIndex("by_entity", (q) =>
+          q.eq("entityType", "monitor_target").eq("entityId", target.collapseKey),
+        )
+        .order("desc")
+        .first();
+      const isDuplicate =
+        recentSame?.action === "monitor_target_sale_window_scheduled" &&
+        Date.parse(recentSame.createdAt) > Date.now() - 6 * 3600_000;
+      if (!isDuplicate) {
+        await appendWatcherAuditLog(ctx, {
+          actorId: "system",
+          action: "monitor_target_sale_window_scheduled",
+          entityType: "monitor_target",
+          entityId: target.collapseKey,
+          createdAt: nowIso,
+        });
+      }
     }
     return { status: "watching" as const };
   },
@@ -1093,6 +1118,7 @@ export const pollDueTargets = internalAction({
           now: nowIso,
           nextCheckAt: nextCheckWithSaleWindow(nowMs, effectiveSaleOpens, target.date),
           ...(saleOpensAt ? { saleOpensAt } : {}),
+          saleWindowDriven: Boolean(effectiveSaleOpens),
         });
       }
     }

@@ -73,10 +73,12 @@ describe("nextCheckWithSaleWindow", () => {
     );
   });
 
-  test("should fall back to pure tiers on past or invalid instants", () => {
-    expect(nextCheckWithSaleWindow(NOW, "2020-01-01T00:00:00.000Z", WATCH_DATE)).toBe(
-      iso(NOW + 24 * 3600_000),
-    );
+  test("should poll at floor cadence when the held window already opened (propagation lag)", () => {
+    const opened = NOW - 10 * 60_000; // opened 10 min ago, page still not live
+    expect(nextCheckWithSaleWindow(NOW, iso(opened), WATCH_DATE)).toBe(iso(NOW + 5 * 60_000));
+  });
+
+  test("should fall back to pure tiers on unparseable instants", () => {
     expect(nextCheckWithSaleWindow(NOW, undefined, WATCH_DATE)).toBe(iso(NOW + 24 * 3600_000));
     expect(nextCheckWithSaleWindow(NOW, "garbage", WATCH_DATE)).toBe(iso(NOW + 24 * 3600_000));
   });

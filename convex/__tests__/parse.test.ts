@@ -414,3 +414,11 @@ describe("extractSaleOpensAt", () => {
     expect(extractSaleOpensAt("no timeline here at all", NOW_JAN)).toBeNull();
   });
 });
+
+describe("extractSaleOpensAt — New-Year roll-forward", () => {
+  test("should roll a yearless January window into next year when polled in December", () => {
+    const text = "Sales timeline\n\nGeneral Sale 2 Jan, 1 PM - 9 Jan, 1 PM";
+    const nowDec = "2026-12-20T00:00:00.000Z";
+    expect(extractSaleOpensAt(text, nowDec)).toBe("2027-01-02T13:00:00.000+05:30");
+  });
+});
