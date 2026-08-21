@@ -708,6 +708,17 @@ export const rescheduleTarget = internalMutation({
       nextCheckAt: args.nextCheckAt ?? nextCheckAfter(Date.now()),
       ...(args.saleOpensAt ? { saleOpensAt: args.saleOpensAt } : {}),
     });
+    // Monitor-effect rule (AGENTS #4): persisting a scheduling field is an
+    // audited mutation, not just the creation row.
+    if (args.saleOpensAt && args.saleOpensAt !== target.saleOpensAt) {
+      await appendWatcherAuditLog(ctx, {
+        actorId: "system",
+        action: "monitor_target_sale_window_set",
+        entityType: "monitor_target",
+        entityId: target.collapseKey,
+        createdAt: nowIso,
+      });
+    }
     return { status: "watching" as const };
   },
 });
@@ -1073,11 +1084,14 @@ export const pollDueTargets = internalAction({
         // Clean fetch, booking not open yet — reschedule with distance-based
         // backoff (far-future targets poll slowly; egress constraint), refined
         // to wake at a known sale-open instant when District published one.
+        // A fresh parse wins; otherwise reuse the persisted instant so one
+        // timeline-less poll doesn't drop back to the 24h tier (Codex P2).
         // Reset fail counter.
+        const effectiveSaleOpens = saleOpensAt ?? target.saleOpensAt;
         await ctx.runMutation(internal.watcher.rescheduleTarget, {
           monitorTargetId: target._id,
           now: nowIso,
-          nextCheckAt: nextCheckWithSaleWindow(nowMs, saleOpensAt, target.date),
+          nextCheckAt: nextCheckWithSaleWindow(nowMs, effectiveSaleOpens, target.date),
           ...(saleOpensAt ? { saleOpensAt } : {}),
         });
       }
