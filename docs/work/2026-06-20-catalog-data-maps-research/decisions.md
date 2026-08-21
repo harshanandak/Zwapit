@@ -49,3 +49,19 @@ Corrects an earlier framing ("ship BMS first, District later"). BMS and District
 - A show is "tickets live" if available on **either** source. Both adapters feed the same `monitor_target`; the availability decode (`AVAIL_STATUS_MAP`) is shared; deep-link out to whichever platform has it.
 
 See `bms-oss-reuse-execution.md` + `district-reuse-execution.md`.
+
+## D6 - Parallel Extract is the ONLY fetch provider; Firecrawl rejected (2026-08-21)
+
+Re-affirmed after the events-phase2 probe + event adapters shipped. Firecrawl was
+re-checked against its current (2026-08) pricing/rate-limit docs and stays **avoid**:
+credits burn even when the target 403s (their billing doc), free tier is 1,000 credits
+with 10 scrapes/min, and our steady-state volume (~9k checks/mo at 100 targets post-
+backoff) needs their Standard plan (~$83-99/mo) vs ~$9/mo on Parallel (~$0.001/check,
+validated live against both BMS and District including JSON passthrough). The original
+crawler-research verdicts stand: weak decaying anti-bot durability vs Akamai, no
+District app-gated coverage, worst legal posture short of Bright Data.
+
+**Rule:** all watcher polling + catalog crawls go through Parallel Extract only
+(`PARALLEL_API_KEY`, Convex env). The fetcher stays injectable (`ParallelFetcher`)
+purely for test mocking — not as a multi-provider seam. Revisit only if Parallel
+shows outage patterns or a one-time bulk backfill needs it.
