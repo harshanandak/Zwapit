@@ -484,12 +484,12 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
   const earliestGeneral = future
     .filter((f) => f.phase === "general")
     .map((f) => f.iso)
-    .sort()[0];
+    .sort((a, b) => a.localeCompare(b))[0];
   if (earliestGeneral) return earliestGeneral;
   const earliestPresale = future
     .filter((f) => f.phase === "presale")
     .map((f) => f.iso)
-    .sort()[0];
+    .sort((a, b) => a.localeCompare(b))[0];
   return earliestPresale ?? null;
 }
 
