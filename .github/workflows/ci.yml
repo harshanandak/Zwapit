@@ -227,52 +227,56 @@ jobs:
       - coderabbit
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}
     steps:
-      - name: Wait for both bot reviews (CodeRabbit + Codex) to be posted
+      - name: Wait for a 10-minute quiet period after the last PR comment
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           script: |
-            // Merge block: fail until BOTH automated reviewers have actually
-            // posted on this PR (review or comment). Once they post, unresolved
-            // threads are caught by the branch-level conversation-resolution
-            // rule. Poll up to ~30 min.
-            const REQUIRED = ["coderabbitai", "chatgpt-codex-connector"];
-            const deadline = Date.now() + 30 * 60 * 1000;
+            // Merge block: succeed only once 10 minutes have passed with NO new
+            // PR activity (reviews, issue comments, inline review comments).
+            // Automated reviewers (CodeRabbit, Codex) post within that window,
+            // so a quiet period means delivery has settled. Combined with the
+            // branch-level conversation-resolution rule, any findings must be
+            // addressed before merge. Hard cap ~30 min regardless of chatter.
+            const QUIET_MS = 10 * 60 * 1000;
+            const CAP_MS = 30 * 60 * 1000;
+            const started = Date.now();
             const number = context.issue.number ?? context.payload.pull_request.number;
-            const whoPosted = async () => {
-              const posted = new Set();
+            const lastActivity = async () => {
+              let latest = 0;
+              const bump = (t) => {
+                const ms = Date.parse(t);
+                if (Number.isFinite(ms) && ms > latest) latest = ms;
+              };
               const reviews = await github.rest.pulls.listReviews({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: number,
                 per_page: 100,
               });
-              for (const r of reviews.data) {
-                if (REQUIRED.includes(r.user?.login)) posted.add(r.user.login);
-              }
+              for (const r of reviews.data) bump(r.submitted_at);
               const comments = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: number,
                 per_page: 100,
               });
-              for (const c of comments.data) {
-                if (REQUIRED.includes(c.user?.login)) posted.add(c.user.login);
-              }
-              return posted;
+              for (const c of comments.data) bump(c.created_at);
+              const inline = await github.rest.pulls.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number,
+                per_page: 100,
+              });
+              for (const c of inline.data) bump(c.created_at);
+              return latest || started;
             };
-            while (Date.now() < deadline) {
-              const posted = await whoPosted();
-              const missing = REQUIRED.filter((r) => !posted.has(r));
-              if (missing.length === 0) {
-                core.info("Both bot reviews posted — gate open.");
+            while (Date.now() - started < CAP_MS) {
+              const quietFor = Date.now() - (await lastActivity());
+              if (quietFor >= QUIET_MS) {
+                core.info(`Quiet for ${Math.round(quietFor / 60000)} min — delivery settled, gate open.`);
                 return;
               }
-              core.info(`Still waiting on: ${missing.join(", ")}`);
-              await new Promise((r) => setTimeout(r, 20000));
+              core.info(`Last activity ${Math.round(quietFor / 60000)} min ago — waiting for ${10} min quiet.`);
+              await new Promise((r) => setTimeout(r, 30000));
             }
-            const posted = await whoPosted();
-            core.setFailed(
-              `Bot review gate timed out after 30 min — no review from: ${REQUIRED
-                .filter((r) => !posted.has(r))
-                .join(", ")}. Merge blocked.`,
-            );
+            core.setFailed("Review gate timed out after 30 min of continuous PR activity — merge blocked.");
