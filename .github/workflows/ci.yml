@@ -241,50 +241,67 @@ jobs:
             const CAP_MS = 30 * 60 * 1000;
             const started = Date.now();
             const number = context.issue.number ?? context.payload.pull_request.number;
+            let latest = 0;
+            const bump = (t) => {
+              if (!t) return;
+              const ms = Date.parse(t);
+              if (Number.isFinite(ms) && ms > latest) latest = ms;
+            };
+            // Edits count as activity too: a reviewer revising a comment must
+            // restart the quiet window. NOTE: submitted REVIEW summaries carry
+            // only submitted_at (no updated_at field exists on that schema);
+            // edits to issue/inline comments ARE observed via updated_at.
+            const bumpBoth = (created, updated) => {
+              bump(created);
+              bump(updated);
+            };
+            // Full pagination (list-reviews exposes no sort/direction, so
+            // newest-first single pages would miss activity on long PRs).
+            // Early-exits once a short page ends the collection.
+            const collectAll = async (call) => {
+              const out = [];
+              for (let page = 1; page <= 10; page += 1) {
+                const res = await call(page);
+                const rows = Array.isArray(res.data) ? res.data : [];
+                out.push(...rows);
+                if (rows.length < 100) break;
+              }
+              return out;
+            };
             const lastActivity = async () => {
-              let latest = 0;
-              const bump = (t) => {
-                if (!t) return;
-                const ms = Date.parse(t);
-                if (Number.isFinite(ms) && ms > latest) latest = ms;
-              };
-              // Edits count as activity too: a reviewer revising a summary or
-              // inline comment must restart the quiet window (Codex P2).
-              const bumpBoth = (created, updated) => {
-                bump(created);
-                bump(updated);
-              };
-              // Newest-first pages: the most recent items must be visible for
-              // the quiet-period math to be sound (CodeRabbit P2).
-              const reviews = await github.rest.pulls.listReviews({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: number,
-                per_page: 100,
-                sort: "submitted",
-                direction: "desc",
-              });
-              for (const r of reviews.data) bumpBoth(r.submitted_at, r.updated_at);
-              const comments = await github.rest.issues.listComments({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: number,
-                per_page: 100,
-                sort: "created",
-                direction: "desc",
-              });
-              for (const c of comments.data) bumpBoth(c.created_at, c.updated_at);
-              const inline = await github.rest.pulls.listReviewComments({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: number,
-                per_page: 100,
-                sort: "created",
-                direction: "desc",
-              });
-              for (const c of inline.data) bumpBoth(c.created_at, c.updated_at);
+              latest = 0;
+              const reviews = await collectAll((page) =>
+                github.rest.pulls.listReviews({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: number,
+                  per_page: 100,
+                  page,
+                }),
+              );
+              for (const r of reviews) bump(r.submitted_at);
+              const comments = await collectAll((page) =>
+                github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  per_page: 100,
+                  page,
+                }),
+              );
+              for (const c of comments) bumpBoth(c.created_at, c.updated_at);
+              const inline = await collectAll((page) =>
+                github.rest.pulls.listReviewComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: number,
+                  per_page: 100,
+                  page,
+                }),
+              );
+              for (const c of inline) bumpBoth(c.created_at, c.updated_at);
               // Never older than this run's start: a review of an earlier head
-              // must not satisfy the quiet window for a fresh push (P1).
+              // must not satisfy the quiet window for a fresh push.
               return Math.max(latest, started);
             };
             while (Date.now() - started < CAP_MS) {
