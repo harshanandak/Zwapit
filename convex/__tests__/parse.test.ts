@@ -348,3 +348,21 @@ describe("eventShowMatchesTargetDate", () => {
     expect(eventShowMatchesTargetDate("Doors at 7 PM", "2027-01-16")).toBe(false);
   });
 });
+
+describe("eventShowMatchesTargetDate — calendar + weekday guards", () => {
+  test("should reject yearless labels whose weekday contradicts the target year", () => {
+    // Jan 23 2027 is a Saturday; Jan 23 2028 is a Sunday.
+    expect(eventShowMatchesTargetDate("Sat, 23 Jan, 6:00 PM", "2027-01-23")).toBe(true);
+    expect(eventShowMatchesTargetDate("Sat, 23 Jan, 6:00 PM", "2028-01-23")).toBe(false);
+  });
+
+  test("should fail closed on non-calendar dates in either side", () => {
+    expect(eventShowMatchesTargetDate("2027-02-30", "2027-02-30")).toBe(false);
+    expect(eventShowMatchesTargetDate("30 Feb 2027", "2027-02-30")).toBe(false);
+    expect(eventShowMatchesTargetDate("16 Jan 2027", "2027-13-01")).toBe(false);
+  });
+
+  test("should still match full ISO labels for valid dates", () => {
+    expect(eventShowMatchesTargetDate("2027-01-16T19:30:00Z", "2027-01-16")).toBe(true);
+  });
+});

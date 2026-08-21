@@ -292,6 +292,92 @@ const MONTH_NUM: Record<string, number> = {
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
 
+const WEEKDAY_NUM: Record<string, number> = {
+  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+};
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(y: number): boolean {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+function isCalendarDate(y: number, mo: number, d: number): boolean {
+  if (!y || mo < 1 || mo > 12 || d < 1) return false;
+  const max = mo === 2 && isLeapYear(y) ? 29 : DAYS_IN_MONTH[mo - 1];
+  return d <= max;
+}
+
+interface TargetOccurrence {
+  y: number;
+  mo: number;
+  d: number;
+  /** 0=Sunday..6=Saturday */
+  weekday: number;
+}
+
+/** Strict "YYYY-MM-DD" → validated calendar occurrence, else null. */
+function parseTargetDate(targetDate: string): TargetOccurrence | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(targetDate ?? "");
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!isCalendarDate(y, mo, d)) return null;
+  return { y, mo, d, weekday: new Date(Date.UTC(y, mo - 1, d)).getUTCDay() };
+}
+
+interface EventLabel {
+  day: number;
+  mon: number;
+  year?: number;
+  /** Leading weekday token when present ("Sat, …"), 0=Sun..6=Sat. */
+  weekday?: number;
+}
+
+/** Extract day/month(/year/weekday) from a source-native event label —
+ * "Sat 16 Jan 2027 7:30 PM" | "Fri, 23 Oct, 9:00 PM" | ISO. Null when no
+ * usable named/ISO date is present (times alone don't count). */
+function parseEventLabel(showTime: string): EventLabel | null {
+  const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(showTime);
+  if (iso) {
+    const y = Number(iso[1]);
+    const mo = Number(iso[2]);
+    const d = Number(iso[3]);
+    if (!isCalendarDate(y, mo, d)) return null;
+    return { day: d, mon: mo, year: y, weekday: new Date(Date.UTC(y, mo - 1, d)).getUTCDay() };
+  }
+
+  let day = 0;
+  let mon = 0;
+  let year: number | undefined;
+  const ym = /\b(?:19|20)\d{2}\b/.exec(showTime);
+  if (ym) year = Number(ym[0]);
+  // "16 Jan" | "Jan 16" — try digit-first, then name-first; a token that
+  // isn't a real month (e.g. "Sat") rejects that shape.
+  const monthNum = (s: string): number => MONTH_NUM[s.slice(0, 3).toLowerCase()] ?? 0;
+  const dmy = /\b(\d{1,2})\s+([A-Za-z]{3,9})(?:\s*,?\s*(\d{4}))?\b/.exec(showTime);
+  const mdy = /\b([A-Za-z]{3,9})\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?\b/.exec(showTime);
+  if (dmy && monthNum(dmy[2])) {
+    day = Number(dmy[1]);
+    mon = monthNum(dmy[2]);
+    if (dmy[3]) year = Number(dmy[3]);
+  } else if (mdy && monthNum(mdy[1])) {
+    mon = monthNum(mdy[1]);
+    day = Number(mdy[2]);
+    if (mdy[3]) year = Number(mdy[3]);
+  } else {
+    return null;
+  }
+  // Year unknown (District omits it): validate against a non-leap year so
+  // Feb 29 fails closed rather than matching some leap-year target.
+  if (!isCalendarDate(year ?? 2001, mon, day)) return null;
+
+  const wd = /^\s*(?:on\s+)?(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/i.exec(showTime);
+  const weekday = wd ? WEEKDAY_NUM[wd[1].slice(0, 3).toLowerCase()] : undefined;
+  return { day, mon, year, weekday };
+}
+
 /**
  * Does a parsed event show belong to the target's occurrence? Event detail
  * pages can cover multiple dates of a tour; the collapse key is exact
@@ -299,47 +385,23 @@ const MONTH_NUM: Record<string, number> = {
  * narrowed to THIS target's date before firing tickets-live (kernel 0ebd2562).
  *
  * Accepts source-native labels — "Sat 16 Jan 2027 7:30 PM" (BMS),
- * "Fri, 23 Oct, 9:00 PM" (District, year omitted) — or ISO. A label with no
- * usable date fails CLOSED: an unparsable date must not fire a possibly
- * wrong-occurrence alert (AGENTS standards: wrong-show alerts are the sin).
+ * "Fri, 23 Oct, 9:00 PM" (District, year omitted) — or ISO. Fails CLOSED on
+ * anything unparsable or non-calendar: a possibly wrong-occurrence alert is
+ * worse than a late one (AGENTS standards: wrong-show alerts are the sin).
+ * Yearless labels must also agree on weekday, else a different year's same
+ * month-day would pass (Codex P2).
  */
 export function eventShowMatchesTargetDate(showTime: string, targetDate: string): boolean {
   if (!showTime || !targetDate) return false;
-  const tm = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!tm) return false;
-  const ty = Number(tm[1]);
-  const tmo = Number(tm[2]);
-  const td = Number(tm[3]);
-
-  const iso = showTime.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) {
-    return Number(iso[1]) === ty && Number(iso[2]) === tmo && Number(iso[3]) === td;
+  const target = parseTargetDate(targetDate);
+  if (!target) return false;
+  const label = parseEventLabel(showTime);
+  if (!label) return false;
+  if (label.mon !== target.mo || label.day !== target.d) return false;
+  if (label.year !== undefined && label.year !== target.y) return false;
+  if (label.year === undefined && label.weekday !== undefined && label.weekday !== target.weekday) {
+    return false;
   }
-
-  const monthNum = (s: string): number => MONTH_NUM[s.slice(0, 3).toLowerCase()] ?? 0;
-  // "16 Jan 2027" | "16 Jan"
-  const dmy = showTime.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})(?:\s*,?\s*(\d{4}))?\b/);
-  // "Jan 16[, 2027]"
-  const mdy = showTime.match(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?\b/);
-  let day = 0;
-  let mon = 0;
-  let year: number | undefined;
-  for (const m of [dmy, mdy]) {
-    if (!m) continue;
-    if (m === dmy) {
-      day = Number(m[1]);
-      mon = monthNum(m[2]);
-      year = m[3] ? Number(m[3]) : undefined;
-    } else {
-      mon = monthNum(m[1]);
-      day = Number(m[2]);
-      year = m[3] ? Number(m[3]) : undefined;
-    }
-    if (mon && day) break;
-  }
-  if (!mon || !day) return false;
-  if (mon !== tmo || day !== td) return false;
-  if (year !== undefined && year !== ty) return false;
   return true;
 }
 
