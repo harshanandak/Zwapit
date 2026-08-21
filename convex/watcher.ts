@@ -47,7 +47,10 @@ import {
 } from "./watcher/adapters";
 import {
   computeCollapseKey,
+  looksLikeEventPage,
   parseBmsByVenue,
+  parseBmsEventPage,
+  parseDistrictEventPage,
   parseDistrictMovieCity,
   officialBookingUrl,
   snapshotHash,
@@ -55,6 +58,7 @@ import {
   type UnionResult,
   type VenueMap,
 } from "./watcher/parse";
+import { nextCheckWithBackoff } from "./watcher/schedule";
 import {
   buildLiveMessage,
   defaultSenders,
@@ -261,15 +265,19 @@ export const createAlert = mutation({
     });
 
     // Platform routing: a target only watches sources whose codes the catalog row
-    // actually has (design §Edge: one source has the show). Curated kinds
-    // (live_event) have no pollable source — availability is admin-driven, so they
-    // carry sources: [] and are never polled (dueTargets skips empty-source targets).
-    const isCurated = catalogItem.kind === "live_event";
+    // actually has (design §Edge: one source has the show). A row is CURATED only
+    // when it is a curated-capable kind (live_event) with NO pollable source —
+    // availability is then admin-driven, so the target carries sources: [] and is
+    // never polled (dueTargets skips empty-source targets). A live_event WITH codes
+    // is a pollable target like a movie (its BMS/District detail pages are routed
+    // by the event adapters) and must NOT get the never-poll sentinel, or the
+    // adapters could never fire (CodeRabbit P1).
     const sources: Array<"bms" | "district"> = [];
     if (buildBmsUrl(catalogItem, date) !== null) sources.push("bms");
     if (buildDistrictUrl(catalogItem, date) !== null) sources.push("district");
+    const isCurated = catalogItem.kind === "live_event" && sources.length === 0;
     // A pollable kind with no source is inert (pollDueTargets fetches nothing and
-    // reschedules forever); reject it. Curated kinds are allowed with no source.
+    // reschedules forever); reject it. Curated rows are allowed with no source.
     if (!isCurated && sources.length === 0) throw new Error("NO_WATCHABLE_SOURCE");
 
     // ---- find-or-create the shared monitor target ----
@@ -880,13 +888,29 @@ export const expireWants = internalAction({
 /** Parse one Parallel result row per its source into NormalizedShow[]. */
 function parseResultForSource(source: ShowSource, content: string): NormalizedShow[] {
   if (source === "curated") return []; // curated availability is admin-set, never polled
-  if (source === "district") return parseDistrictMovieCity(content);
-  // BMS: content is raw JSON. Tolerate parse failure (untrusted bytes, A03).
+  // EVENT detail pages (markdown + sales markers) vs MOVIE payloads (BMS JSON /
+  // District `* Theatre` text). District serves two markdown shapes → sniff by
+  // event-specific markers (movie pages carry a status legend that would
+  // misfire). BMS: JSON-with-ShowDetails is a movie payload; ANY non-JSON body
+  // goes to the event parser, whose own markers decide open vs not-open-yet
+  // (events-phase2 decisions.md, probe 2026-08-21).
+  if (source === "district") {
+    return looksLikeEventPage(content)
+      ? parseDistrictEventPage(content)
+      : parseDistrictMovieCity(content);
+  }
+  // BMS: movie APIs return raw JSON; event pages are markdown. Tolerate parse
+  // failure (untrusted bytes, A03) — non-JSON falls through to the event page.
   let json: unknown = {};
+  let parsedJson = false;
   try {
     json = JSON.parse(content);
+    parsedJson = true;
   } catch {
-    return [];
+    json = {};
+  }
+  if (!parsedJson || typeof json !== "object" || json === null || !("ShowDetails" in json)) {
+    return parseBmsEventPage(content);
   }
   // byvenue + byevent share the ShowDetails model, so a single walker reads both
   // shapes; the byVenue/byEvent ternary fallback was dead (both delegate to the
@@ -1013,11 +1037,13 @@ export const pollDueTargets = internalAction({
         });
         failed += 1;
       } else {
-        // Clean fetch, booking not open yet → reschedule, reset fail counter.
+        // Clean fetch, booking not open yet — reschedule with distance-based
+        // backoff (far-future targets poll slowly; egress constraint), reset
+        // fail counter.
         await ctx.runMutation(internal.watcher.rescheduleTarget, {
           monitorTargetId: target._id,
           now: nowIso,
-          nextCheckAt: nextCheckAfter(nowMs),
+          nextCheckAt: nextCheckWithBackoff(nowMs, target.date),
         });
       }
     }

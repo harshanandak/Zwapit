@@ -25,6 +25,8 @@ type CatalogItemForTest = {
   districtMvCode?: string;
   districtCdCode?: string;
   districtCitySlug?: string;
+  kind?: string;
+  districtEventSlug?: string;
 };
 
 // A movie alert target: BMS event/region codes + District MV/city-slug (design §39 —
@@ -203,5 +205,63 @@ describe("extractViaParallel — injected fetcher", () => {
     // No key, no network in tests — only assert it's a function so importing the
     // module needs no PARALLEL_API_KEY (read lazily inside the default fetcher).
     expect(typeof defaultParallelFetch).toBe("function");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EVENT routing (probe 2026-08-21 � events-phase2 decisions.md)
+// ---------------------------------------------------------------------------
+
+const liveEventBms: CatalogItemForTest = {
+  title: "Kumar Sanu Live In Concert",
+  kind: "live_event",
+  bmsEventCode: "ET00500437",
+};
+
+const liveEventDistrict: CatalogItemForTest = {
+  title: "Gorillaz The Mountain Tour 2027 | Bengaluru",
+  kind: "live_event",
+  districtEventSlug: "gorillaz-the-mountain-tour-bengaluru-2027-buy-tickets",
+};
+
+describe("event URL builders", () => {
+  test("live_event + bmsEventCode routes to the DETAIL PAGE, not the byevent API", () => {
+    // Probe finding: showtimes-by-event never populates ShowDetails for events.
+    const url = buildBmsUrl(liveEventBms, DATE, { cacheBust: 1700000000000 });
+    expect(url).toBe(
+      "https://in.bookmyshow.com/events/kumar-sanu-live-in-concert/ET00500437?_cb=1700000000000",
+    );
+  });
+
+  test("live_event without an ET code builds no BMS URL (curated fallback)", () => {
+    expect(buildBmsUrl({ title: "Local Gig", kind: "live_event" }, DATE)).toBeNull();
+  });
+
+  test("districtEventSlug routes to the events surface", () => {
+    const url = buildDistrictUrl(liveEventDistrict, DATE);
+    expect(url).toBe(
+      "https://www.district.in/events/gorillaz-the-mountain-tour-bengaluru-2027-buy-tickets",
+    );
+  });
+
+  test("movie rows are UNCHANGED by event routing (regression)", () => {
+    // Same assertions as the movie tests above � the kind-aware branch must not
+    // disturb the validated movie shapes.
+    expect(buildBmsUrl(movieBothSources, DATE, { cacheBust: 1700000000000 })).toBe(
+      "https://in.bookmyshow.com/api/movies-data/showtimes-by-event" +
+        "?appCode=MOBAND2&appVersion=14304&eventCode=ET00491386&regionCode=MUMBAI" +
+        "&subRegion=MUMBAI&bmsId=1&token=1&lat=&lon=&device=ANDROID&_cb=1700000000000",
+    );
+    expect(buildDistrictUrl(movieBothSources, DATE)).toContain("-movie-tickets-in-mumbai-MV194537");
+  });
+
+  test("targetSourceUrls unions both event sources for a dual-coded row", () => {
+    const urls = targetSourceUrls(
+      { ...liveEventBms, districtEventSlug: liveEventDistrict.districtEventSlug },
+      DATE,
+    );
+    expect(urls.map((u) => u.source)).toEqual(["bms", "district"]);
+    expect(urls[0].url).toContain("/events/kumar-sanu-live-in-concert/");
+    expect(urls[1].url).toContain("district.in/events/gorillaz");
   });
 });

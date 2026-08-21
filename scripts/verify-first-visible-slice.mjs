@@ -61,6 +61,12 @@ const allowedFirstSlicePaths = [
   "astro.config.mjs",
   "CHANGELOG.md",
   "CLAUDE.md",
+  // Agent-config mirrors of AGENTS.md (same category as CLAUDE.md; synced
+  // verbatim per Forge issue 7febe8a1).
+  ".clinerules",
+  ".cursorrules",
+  ".roorules",
+  ".github/copilot-instructions.md",
   "README.md",
   "bun.lock",
   "package.json",

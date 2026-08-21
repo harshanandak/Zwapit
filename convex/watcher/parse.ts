@@ -170,6 +170,122 @@ export function parseDistrictMovieCity(text: string): NormalizedShow[] {
 }
 
 // ---------------------------------------------------------------------------
+// EVENT detail pages (probed 2026-08-21 — events-phase2 decisions.md).
+//
+// BMS and District event availability lives on the rendered DETAIL PAGE as
+// text, not in the movie JSON APIs (showtimes-by-event never populates
+// ShowDetails for events). Both parsers read Parallel's markdown conversion.
+// ---------------------------------------------------------------------------
+
+/** Severity order: the most restrictive bookable state wins when several
+ * markers co-occur on one page (BMS pages show "Filling Fast" AND "Book Now"). */
+const EVENT_STATUS_PRIORITY: ReadonlyArray<ShowStatus> = [
+  "sold_out",
+  "almost_full",
+  "filling_fast",
+  "available",
+];
+
+/** Text markers → status, scanned case-insensitively. From live probes:
+ * BMS "Filling Fast"/"Book Now"; District "General Sale is live now"/"Live". */
+const BMS_EVENT_STATUS_MARKERS: ReadonlyArray<readonly [string, ShowStatus]> = [
+  ["sold out", "sold_out"],
+  ["filling fast", "filling_fast"],
+  ["almost full", "almost_full"],
+  ["book now", "available"],
+];
+
+const DISTRICT_EVENT_STATUS_MARKERS: ReadonlyArray<readonly [string, ShowStatus]> = [
+  ["sold out", "sold_out"],
+  ["general sale is live now", "available"],
+  ["book tickets", "available"],
+];
+
+/** Highest-severity status whose marker appears in `lower`-cased page text. */
+function eventStatusFromMarkers(
+  lower: string,
+  markers: ReadonlyArray<readonly [string, ShowStatus]>,
+): ShowStatus | undefined {
+  let best: ShowStatus | undefined;
+  for (const [, status] of markers) {
+    const found = markers.some(([m, s]) => s === status && lower.includes(m));
+    if (found && (!best || EVENT_STATUS_PRIORITY.indexOf(status) < EVENT_STATUS_PRIORITY.indexOf(best))) {
+      best = status;
+    }
+  }
+  return best;
+}
+
+/**
+ * Parse a BMS EVENT detail page (markdown via Parallel) into NormalizedShow[].
+ * Emits a single show ONLY in a bookable state — sold-out and not-open-yet
+ * pages return [] so the target keeps watching instead of firing "tickets are
+ * live" for an unbuyable event. `format` is "event" (events sell by section,
+ * not showtime — the collapse key's format segment stays empty via callers).
+ */
+export function parseBmsEventPage(text: string): NormalizedShow[] {
+  if (!text) return [];
+  const lower = text.toLowerCase();
+  const status = eventStatusFromMarkers(lower, BMS_EVENT_STATUS_MARKERS);
+  // Only BOOKABLE states open the alert; sold_out keeps watching (another
+  // source/city may still have tickets) and no markers means not-open-yet.
+  if (!status || status === "sold_out") return [];
+
+  // Venue line shape from probes: "Yashobhoomi Convention Center: Delhi".
+  // The page header city is the READER's location — parse the venue line only.
+  const venueMatch = text.match(/\n([^\n:]{3,80}):\s*([A-Za-z][A-Za-z .&'-]{1,40})\s*\n/);
+  const theatreName = venueMatch?.[1]?.trim() || "Venue";
+
+  // Date+time from probes: "Sat 16 Jan 2027" + "7:30 PM".
+  const date = text.match(/\b(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat),?\s+\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}\b/)?.[0];
+  const time = text.match(/\b\d{1,2}:\d{2}\s*(?:AM|PM)\b/i)?.[0];
+  const showTime = [date?.trim(), time?.trim()].filter(Boolean).join(" ");
+
+  return [{ source: "bms", theatreName, showTime, format: "event", status }];
+}
+
+/**
+ * Parse a District EVENT detail page (markdown via Parallel) into
+ * NormalizedShow[]. Same bookable-only contract as parseBmsEventPage. District
+ * pages carry the strongest signal: a sales timeline with pre-sale/general-sale
+ * windows and a Live state marker.
+ */
+export function parseDistrictEventPage(text: string): NormalizedShow[] {
+  if (!text) return [];
+  const lower = text.toLowerCase();
+  const status = eventStatusFromMarkers(lower, DISTRICT_EVENT_STATUS_MARKERS);
+  if (!status || status === "sold_out") return [];
+
+  // Venue line from probes: "District Arena @ Terraform, Bengaluru … km away"
+  // or "Venue to be announced, Mumbai".
+  const venueLine =
+    text.match(/\n([^\n]+?)\s*\d+(?:\.\d+)?\s*km away\s*\n/)?.[1] ??
+    text.match(/\n(Venue to be announced,[^\n]+)\n/i)?.[1];
+  const theatreName = venueLine?.trim() || "Venue";
+
+  // Datetime from probes: "Sat, 23 Jan, 6:00 PM".
+  const showTime = text.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*\d{1,2}\s*[A-Za-z]{3},?\s*\d{1,2}:\d{2}\s*(?:AM|PM)\b/i)?.[0] ?? "";
+
+  return [{ source: "district", theatreName, showTime, format: "event", status }];
+}
+
+/** True when `content` looks like an EVENT detail page rather than a movie
+ * payload. Used by pollDueTargets to pick the District parser (District serves
+ * two markdown shapes); BMS dispatch is by JSON-vs-markdown instead. Markers
+ * are event-page-specific ON PURPOSE — District MOVIE pages carry a status
+ * legend line ("Available Filling Fast Almost Full Sold Out") that would
+ * otherwise misfire. */
+export function looksLikeEventPage(content: string): boolean {
+  if (!content) return false;
+  const lower = content.toLowerCase();
+  return (
+    lower.includes("book tickets") ||
+    lower.includes("general sale") ||
+    lower.includes("sales timeline")
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Collapse key + snapshot hash (narrow, stable projections)
 // ---------------------------------------------------------------------------
 
