@@ -84,6 +84,12 @@ export const crawlBmsMovies = internalAction({
     ctx,
     args,
   ): Promise<{ scanned: number; delta: number; hydrated: number; created: number; updated: number }> => {
+    // No-op safely when the key is unset (same contract as the watcher crons:
+    // "read their secrets from Convex env and no-op safely when unset") so the
+    // scheduled cron cannot error-spam on a deployment without egress configured.
+    if (!process.env.PARALLEL_API_KEY) {
+      return { scanned: 0, delta: 0, hydrated: 0, created: 0, updated: 0 };
+    }
     const limit = args.limit ?? 10;
     const sitemap = await parallelExtract([MOVIES_SITEMAP]);
     const entities = parseParallelEntities(sitemap[MOVIES_SITEMAP]?.content ?? "", "movie");

@@ -40,4 +40,14 @@ crons.interval(
   {},
 );
 
+// BMS movie-catalog sync: sitemap lastmod-diff → hydrate the delta → upsert.
+// Daily cadence (movie metadata changes slowly; each run costs one sitemap
+// extract + delta hydration). No-ops safely when PARALLEL_API_KEY is unset.
+crons.interval(
+  "crawl-bms-movies",
+  { hours: 24 },
+  internal.catalogCrawl.crawlBmsMovies,
+  { limit: 25 },
+);
+
 export default crons;
