@@ -286,7 +286,7 @@ jobs:
     needs: [production-start, deploy]
     # In-job failure() steps cannot run when the deploy job's timeout fires --
     # this needs-based job can (kernel 1428a544).
-    if: ${{ !cancelled() && needs.deploy.result != 'success' && needs.production-start.outputs.deployment_id }}
+    if: ${{ !cancelled() && (needs.deploy.result == 'failure' || needs.deploy.result == 'cancelled') && needs.production-start.outputs.deployment_id }}
     permissions:
       contents: read
       deployments: write
