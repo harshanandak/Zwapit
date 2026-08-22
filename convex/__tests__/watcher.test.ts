@@ -33,7 +33,10 @@ const NOW = "2026-06-22T10:00:00.000Z";
 // createAlert sets nextCheckAt to the real wall clock (poll-immediately). Polling
 // with a clearly-later "now" makes the just-created target due regardless of the
 // machine clock — the watcher's cadence is real-time, only the watch DATE is fixed.
-const POLL_NOW = "2030-01-01T00:00:00.000Z";
+// Poll clock, relative to the real one so createAlert's wall-clock
+// nextCheckAt and these queries always agree (a fixed 2030 constant would
+// invert due-ness after that date). Keep fixture WATCH dates absolute.
+const POLL_NOW = new Date(Date.now() + 10 * 60_000).toISOString();
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -1410,3 +1413,69 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
     expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString()); // pure tiers
   });
+
+describe("createAlert � want-write audits (gh#41)", () => {
+  test("a NEW subscriber writes want_created + subscriber-count audit rows", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    const { want, target, audits } = await tt.run(async (ctx) => ({
+      want: (await ctx.db.query("wants").collect())[0],
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      audits: (await ctx.db.query("audit_logs").collect()).filter(
+        (a) => a.action.startsWith("want_") || a.action.includes("subscriber_count"),
+      ),
+    }));
+    const actions = audits.map((a) => a.action).sort();
+    expect(actions).toEqual(["monitor_target_subscriber_count_changed", "want_created"]);
+
+    const created = audits.find((a) => a.action === "want_created")!;
+    expect(created.entityType).toBe("want");
+    expect(created.entityId).toBe(want.wantKey);
+    expect(created.toState).toBe("open");
+
+    const count = audits.find((a) => a.action === "monitor_target_subscriber_count_changed")!;
+    expect(count.entityType).toBe("monitor_target");
+    expect(count.entityId).toBe(target.collapseKey);
+  });
+
+  test("a RE-ARMING buyer writes want_rearmed but no second count-change row", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+
+    // Buyer A subscribes; buyer B joins; buyer A re-arms.
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      ...args,
+      alertTypes: ["availability" as const, "last_minute" as const],
+    });
+
+    const audits = await tt.run(async (ctx) =>
+      (await ctx.db.query("audit_logs").collect()).filter((a) => a.action === "want_rearmed"),
+    );
+    expect(audits).toHaveLength(1); // only buyer A's re-arm
+    const countChanges = await tt.run(async (ctx) =>
+      (await ctx.db.query("audit_logs").collect()).filter(
+        (a) => a.action === "monitor_target_subscriber_count_changed",
+      ),
+    );
+    expect(countChanges).toHaveLength(2); // A then B � the re-arm adds none
+  });
+});

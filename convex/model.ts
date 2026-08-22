@@ -188,10 +188,12 @@ export async function appendAuditLog(ctx: MutationCtx, event: AuditEvent): Promi
 
 // Entity types the watcher audits. Mirrors the additive schema union; kept
 // narrow so a typo can't write a non-watcher entityType through this path.
+// "want" joined when createAlert's want writes gained audit coverage (gh#41).
 export type WatcherAuditEntityType =
   | "monitor_target"
   | "availability_event"
-  | "notification";
+  | "notification"
+  | "want";
 
 export interface WatcherAuditEvent {
   actorId: string;

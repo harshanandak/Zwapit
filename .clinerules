@@ -313,6 +313,7 @@ Issue tracking is Beads via `forge` (`forge ready` / `forge show <id>` / `forge 
 
 `docs/PRODUCT_SPEC.md`, `docs/UX_SPEC.md`, `docs/FLOWS.md`, `docs/DATA_MODEL.md`, `docs/RULE_ENGINE.md`, `docs/SOURCE_RULES.md`, `docs/PAYMENT_FLOW.md`, `docs/TRUST_SAFETY.md`, `docs/COPY_GUIDE.md`, `docs/decisions.md`, `docs/development-plan.md`.
 
+<!-- manual-sync: `npx convex ai-files install` does NOT rewrite this file. After running it, copy the current block from AGENTS.md into these markers by hand. Last synced: 2026-08-22. -->
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
