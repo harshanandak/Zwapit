@@ -141,6 +141,13 @@ bun run cf:dry-run     # verify a Worker deploy without deploying — use before
 bun run cf:preview     # wrangler versions upload
 ```
 
+Local CodeRabbit review before push (WSL CLI, catches bot findings without burning a CI cycle):
+
+```bash
+wsl -d Ubuntu -e bash -lc "cd /mnt/c/Users/harsha_befach/Downloads/Zwapit && coderabbit review --dir convex --base master --light"
+# scope --dir to what changed (convex|src|docs); authenticated already (org harshanandak).
+```
+
 Unwired helpers (no `package.json` entry — invoke directly): `bun scripts/verify-first-visible-slice.mjs`, `bun scripts/ui-smoke-buyer.mjs`, `bun scripts/e2e-buyer.mjs`, `bun scripts/e2e-seller.mjs`, `bash scripts/validate.sh`.
 
 Never `cd <dir> && <command>`. Use `git -C <dir>` for git and native path flags elsewhere.
