@@ -1441,6 +1441,7 @@ describe("createAlert � want-write audits (gh#41)", () => {
     expect(created.entityType).toBe("want");
     expect(created.entityId).toBe(want.wantKey);
     expect(created.toState).toBe("open");
+    expect(created.actorRole).toBe("buyer"); // buyer-triggered, not system
 
     const count = audits.find((a) => a.action === "monitor_target_subscriber_count_changed")!;
     expect(count.entityType).toBe("monitor_target");

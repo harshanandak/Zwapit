@@ -42,3 +42,15 @@ fixture dates.
 
 Backlog drain ops run (2427bbc4 part a) · audit retention/compaction · any UI of
 audit rows · Telegram/email senders · payment surfaces.
+
+## Acceptance scenarios (walked before ship)
+
+1. New buyer subscribes -> audit_logs gains want_created (entityId=wantKey, toState=open, actorRole=buyer) AND monitor_target_subscriber_count_changed (entityId=collapseKey, from->to counts, actorRole=buyer).
+2. Same buyer re-arms -> want_rearmed row; NO second count-change row.
+3. Second buyer joins -> own want_created + one more count-change (total 2).
+4. Chase selection: two past-opened general windows -> most recent wins.
+5. Sale window beyond event EOD -> not persisted, not audited as window-driven.
+
+## OWASP note (A09 Security Logging & Monitoring Failures)
+
+These rows close the gh#41 logging gap: every createAlert write is now attributable (actorId+actorRole) and sequenced (by_seq). No PII beyond existing buyer ids; no secrets in messages. Risk accepted: audit volume from re-arm spam (each call writes 1 rearmed row) � bounded by client action rate, compaction deferred.

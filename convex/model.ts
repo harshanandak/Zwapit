@@ -1,10 +1,10 @@
-// Internal Convex helpers (NOT public functions).
+﻿// Internal Convex helpers (NOT public functions).
 //
 // These map Convex documents to the existing local `Mock*` shapes, run the
 // SAME pure state-transition helpers that the local mock flow uses
 // (src/lib/state/*), persist the result, and append an audit-log entry. Reusing
 // the existing pure helpers keeps the Convex order/transfer/issue state machine
-// identical to the local one — no transition logic is re-implemented here.
+// identical to the local one â€” no transition logic is re-implemented here.
 
 import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -26,7 +26,7 @@ import {
 } from "../src/lib/state/orderTransitions";
 import { markListingSold } from "../src/lib/state/listingTransitions";
 
-// Mock clocks — kept identical to src/lib/flow/mockFlow.ts so the persisted
+// Mock clocks â€” kept identical to src/lib/flow/mockFlow.ts so the persisted
 // Convex flow reaches the same visible states as the local demo. Today is in
 // 2026 and the fixture deadlines are in Dec 2026, so a submit time before the
 // transfer deadline and a completion time after the protection window let the
@@ -167,7 +167,7 @@ export async function appendAuditLog(ctx: MutationCtx, event: AuditEvent): Promi
   const seq = (last?.seq ?? 0) + 1;
   await ctx.db.insert("audit_logs", {
     actorId: event.actorId,
-    actorRole: event.actorRole,
+    actorRole: event.actorRole ?? "system",
     action: event.action,
     entityType: event.entityType,
     entityId: event.entityId,
@@ -197,6 +197,9 @@ export type WatcherAuditEntityType =
 
 export interface WatcherAuditEvent {
   actorId: string;
+  /** Defaults to "system"; buyer-triggered effects pass the real role
+   *  so audit rows don't misclassify app users as automation (Codex P2). */
+  actorRole?: "buyer" | "seller" | "system";
   action: string;
   entityType: WatcherAuditEntityType;
   entityId: string;
@@ -207,9 +210,9 @@ export interface WatcherAuditEvent {
 
 /**
  * Append a watcher audit row. All watcher transitions are system-driven, so the
- * actorRole is always "system". Reuses the same monotonic seq as appendAuditLog
+ * actorRole defaults to "system"; buyer-triggered watcher effects pass "buyer". Reuses the same monotonic seq as appendAuditLog
  * (single audit_logs.by_seq sequence) so the watcher's events interleave with
- * order/listing events in one ordered, append-only log (design §A09).
+ * order/listing events in one ordered, append-only log (design Â§A09).
  */
 export async function appendWatcherAuditLog(
   ctx: MutationCtx,
@@ -219,7 +222,7 @@ export async function appendWatcherAuditLog(
   const seq = (last?.seq ?? 0) + 1;
   await ctx.db.insert("audit_logs", {
     actorId: event.actorId,
-    actorRole: "system",
+    actorRole: event.actorRole ?? "system",
     action: event.action,
     entityType: event.entityType,
     entityId: event.entityId,
@@ -233,7 +236,7 @@ export async function appendWatcherAuditLog(
 /**
  * Find the single shared monitor_targets row for a collapseKey, or null. The
  * collapse key (catalogItemId|city|date|format) is the find-or-create idempotency
- * anchor: many alerts on the same show collapse to ONE watcher (design §2). Uses
+ * anchor: many alerts on the same show collapse to ONE watcher (design Â§2). Uses
  * `.first()` (not `.unique()`) so a rare concurrent double-insert degrades to
  * "reuse the earliest" rather than throwing.
  */

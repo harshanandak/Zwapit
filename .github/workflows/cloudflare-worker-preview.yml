@@ -548,7 +548,7 @@ jobs:
     name: Close timed-out preview status
     runs-on: ubuntu-latest
     needs: [preview]
-    # In-job failure() steps cannot run when the job-level timeout fires —
+    # In-job failure() steps cannot run when the job-level timeout fires --
     # this needs-based job can (kernel 1428a544).
     if: ${{ !cancelled() && needs.preview.result == 'failure' && needs.preview.outputs.deployment_id }}
     permissions:

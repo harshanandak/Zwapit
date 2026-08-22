@@ -63,7 +63,7 @@ Each entry is earned from something that actually went wrong here. The tag is th
 
 5. **Touching the read-model seam without re-checking both sides.** `src/lib/convex/dataAdapter.ts` (11 commits) and `src/lib/convex/functionRefs.ts` (7) are the most-churned source files in the repo — that is where the UI meets Convex, and where drift lands. `[git: 11 and 7 commits, top of source churn]`
 
-6. **Loosening the watcher collapse key.** `convex/watcher.ts` and `convex/__tests__/watcher.test.ts` each appear in 3 fix commits. Dropping `format` or rounding showtime silently merges distinct shows and notifies the wrong subscribers. `[git: convex/watcher.ts in 3 fix commits]`
+6. **Loosening the watcher collapse key.** `convex/watcher.ts` and `convex/__tests__/watcher.test.ts` each appear in 3 fix commits. The collapse key inputs are exactly `catalogItemId|city|date|format` (`computeCollapseKey`, `convex/watcher/parse.ts`) — showtime was never one, so don't "fix" that. The real ways to merge distinct shows: dropping the `format` segment entirely (the empty trailing segment IS meaningful for events), normalizing city/date differently between `createAlert` and later callers, or letting a page-level booking marker fire without `eventShowMatchesTargetDate` narrowing it to this target's occurrence.
 
 7. **Hiding a real diff inside `convex/_generated/` churn.** It is committed on purpose (typecheck needs it) and regenerates constantly — `api.d.ts` has 8 commits. Assume nothing about whether it is currently dirty: run `git status` and stage it deliberately or not at all. Treat a generated diff as a real change to review, never as background noise you can skip. `[git: 8 commits]`
 
@@ -139,6 +139,13 @@ Deploy checks:
 ```bash
 bun run cf:dry-run     # verify a Worker deploy without deploying — use before claiming a route works
 bun run cf:preview     # wrangler versions upload
+```
+
+Local CodeRabbit review before push (WSL CLI, catches bot findings without burning a CI cycle):
+
+```bash
+wsl -d Ubuntu -e bash -lc "cd /mnt/c/Users/harsha_befach/Downloads/Zwapit && coderabbit review --dir convex --base master --light"
+# scope --dir to what changed (convex|src|docs); authenticated already (org harshanandak).
 ```
 
 Unwired helpers (no `package.json` entry — invoke directly): `bun scripts/verify-first-visible-slice.mjs`, `bun scripts/ui-smoke-buyer.mjs`, `bun scripts/e2e-buyer.mjs`, `bun scripts/e2e-seller.mjs`, `bash scripts/validate.sh`.
@@ -313,7 +320,6 @@ Issue tracking is Beads via `forge` (`forge ready` / `forge show <id>` / `forge 
 
 `docs/PRODUCT_SPEC.md`, `docs/UX_SPEC.md`, `docs/FLOWS.md`, `docs/DATA_MODEL.md`, `docs/RULE_ENGINE.md`, `docs/SOURCE_RULES.md`, `docs/PAYMENT_FLOW.md`, `docs/TRUST_SAFETY.md`, `docs/COPY_GUIDE.md`, `docs/decisions.md`, `docs/development-plan.md`.
 
-<!-- manual-sync: `npx convex ai-files install` does NOT rewrite this file. After running it, copy the current block from AGENTS.md into these markers by hand. Last synced: 2026-08-22. -->
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.

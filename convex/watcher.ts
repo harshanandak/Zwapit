@@ -1,4 +1,4 @@
-// Official-availability watcher engine (design 2026-06-22).
+﻿// Official-availability watcher engine (design 2026-06-22).
 //
 // Architecture — thin action / fat mutation:
 //   - All DB work lives in internal mutations/queries (use ctx.db).
@@ -344,6 +344,7 @@ export const createAlert = mutation({
       // Want-effect audit (AGENTS rule 4): re-arm mutates want fields.
       await appendWatcherAuditLog(ctx, {
         actorId: buyerId,
+        actorRole: "buyer",
         action: "want_rearmed",
         entityType: "want",
         entityId: wantKey,
@@ -372,6 +373,7 @@ export const createAlert = mutation({
       // Want-effect audit: subscription created (gh#41 — previously unaudited).
       await appendWatcherAuditLog(ctx, {
         actorId: buyerId,
+        actorRole: "buyer",
         action: "want_created",
         entityType: "want",
         entityId: wantKey,
@@ -382,6 +384,7 @@ export const createAlert = mutation({
       // Monitor-effect audit: subscriber count is a monitored field.
       await appendWatcherAuditLog(ctx, {
         actorId: buyerId,
+        actorRole: "buyer",
         action: "monitor_target_subscriber_count_changed",
         entityType: "monitor_target",
         entityId: collapseKey,
