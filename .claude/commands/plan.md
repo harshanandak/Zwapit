@@ -27,7 +27,7 @@ Before ANY planning work begins:
    ```bash
    bd create --title="<feature-name>" --type=epic
    bd update <id> --status=in_progress
-   forge issue comment <id> "stage transition: see summary fields"
+   forge issue comment <id> "stage <phase-name>: transition recorded"
    ```
 6. ONLY THEN begin Phase 1.
 
@@ -252,7 +252,7 @@ Do NOT begin Phase 2 (web research) until:
 
 Record the phase transition before starting research:
 ```bash
-forge issue comment <id> "stage transition: see summary fields"
+forge issue comment <id> "stage <phase-name>: transition recorded"
 ```
 
 Run these in parallel:
@@ -349,7 +349,7 @@ Do NOT begin Phase 3 (setup) until:
 
 Record the phase transition before starting setup:
 ```bash
-forge issue comment <id> "stage transition: see summary fields"
+forge issue comment <id> "stage <phase-name>: transition recorded"
 ```
 
 ### Step 1: Link child issues to the epic
@@ -511,7 +511,7 @@ After all HARD-GATE items pass, validate context and record the stage transition
 
 ```bash
 forge issue show <id> --json
-forge issue comment <id> "stage transition: see summary fields"
+forge issue comment <id> "stage <phase-name>: transition recorded"
 ```
 
 ---
