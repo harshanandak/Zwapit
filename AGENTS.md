@@ -67,7 +67,7 @@ Each entry is earned from something that actually went wrong here. The tag is th
 
 7. **Hiding a real diff inside `convex/_generated/` churn.** It is committed on purpose (typecheck needs it) and regenerates constantly — `api.d.ts` has 8 commits. Assume nothing about whether it is currently dirty: run `git status` and stage it deliberately or not at all. Treat a generated diff as a real change to review, never as background noise you can skip. `[git: 8 commits]`
 
-8. **Running `bd`/`forge` and leaving a Dolt server behind.** Invoking `bd ready` here moved the Dolt endpoint (port 52703 → 56174) and warned that other tools would see stale data. This is why `.beads/dolt-server.{port,pid,lock,log}` keep reappearing untracked. Pin `dolt.port` in `.beads/config.yaml` before running two Beads-backed tools at once. `[observed 2026-08-15: live port reassignment + stale-data warning]`
+8. **Removing a local dependency mid-flight.** Beads/Dolt was removed from this repo (2026-08-22, archived at `~/zwapit-beads-archive`) after its runtime files kept leaking into commits — t3 checkpoints once committed `.beads/dolt-server.{log,pid,port}`. Lesson: when deleting a tool's directory, also stop its background processes, untrack via `git rm --cached`, add the path to `.gitignore`, and prove independence by running the replacement (`forge issue ready`) before committing.
 
 9. **Reaching for `scripts/verify-first-visible-slice.mjs` and friends as if they were wired up.** `scripts/` holds 19 files with no `package.json` entry, including the most-churned file in the entire repo (21 commits), plus `ui-smoke-buyer.mjs` (9), `e2e-buyer.mjs`, `e2e-seller.mjs`, and `validate.sh`. They run only as `bun scripts/<name>.mjs`. `[git: 21 commits on an unwired script; 19 orphans total]`
 
@@ -314,7 +314,7 @@ Planning artifacts go in one folder per work item: `docs/work/YYYY-MM-DD-<slug>/
 **Known-broken references in the generated Forge files** (fix or ignore; do not follow):
 `.claude/rules/workflow.md` and `.claude/commands/validate.md` tell you to run `bun run lint`, `bun run typecheck`, `npm run lint`, `npm run test`, and `npm run typecheck` — none exist. `.claude/rules/workflow.md`, `.claude/commands/plan.md`, and `.claude/commands/research.md` invoke `Skill("parallel-deep-research")`; the real skill is `parallel-research`, and it comes from the harness (a Claude Code plugin), not from this repo — if your harness does not provide it, do the research directly and say so. `.claude/commands/review.md` points at `.claude/rules/greptile-review-process.md`, and `.claude/commands/sonarcloud.md` at `src/lib/integrations/sonarcloud.ts` — neither file exists. `.claude/settings.json`, `docs/pull_request_template.md`, and `.claude/commands/custom/` are also referenced and absent. The `forge` and `bd` binaries themselves are installed and every subcommand these files use is real (verified 2026-08-15).
 
-Issue tracking is Beads via `forge` (`forge ready` / `forge show <id>` / `forge claim <id>` / `forge close <id>`); use `bd` directly only for what Forge does not wrap (`bd init`, `bd comments`, `bd dep`, `bd dolt *`). Markdown TODO lists are never the source of truth.
+Issue tracking is the **Forge Kernel** (`forge issue ready` / `forge issue show <id>` / `forge claim <id>` / `forge issue close <id>`) with GitHub issues as the external mirror. Beads/Dolt was removed 2026-08-22 (archived at `~/zwapit-beads-archive`) — do not reintroduce it. Markdown TODO lists are never the source of truth.
 
 ## Product docs
 
