@@ -28,6 +28,8 @@ jobs:
       issues: write
       pull-requests: write
       statuses: write
+    outputs:
+      deployment_id: ${{ steps.deployment.outputs.deployment_id }}
     steps:
       - name: Detect preview mode
         id: mode
@@ -540,3 +542,41 @@ jobs:
       - name: Fail auth-rejected preview
         if: steps.mode.outputs.deployable == 'true' && steps.preview.outputs.auth_failed == 'true'
         run: exit 1
+
+  preview-failure-status:
+    timeout-minutes: 5
+    name: Close timed-out preview status
+    runs-on: ubuntu-latest
+    needs: [preview]
+    # In-job failure() steps cannot run when the job-level timeout fires --
+    # this needs-based job can (kernel 1428a544).
+    if: ${{ !cancelled() && needs.preview.result == 'failure' && needs.preview.outputs.deployment_id }}
+    permissions:
+      contents: read
+      deployments: write
+      statuses: write
+    steps:
+      - name: Publish failed preview status
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          DEPLOYMENT_ID: '${{ needs.preview.outputs.deployment_id }}'
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.DEPLOYMENT_ID),
+              state: "failure",
+              log_url: runUrl,
+              description: "Cloudflare Worker preview failed"
+            });
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: "failure",
+              target_url: runUrl,
+              description: "Cloudflare preview failed",
+              context: "Cloudflare Preview - zwapit"
+            });

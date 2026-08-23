@@ -448,3 +448,12 @@ describe("extractSaleOpensAt � New-Year roll-forward", () => {
     const now = Date.parse("2031-01-11T11:00:00.000Z"); // >24h after open
     expect(extractSaleOpensAt(text, new Date(now).toISOString())).toBeNull();
   });
+
+  test("should chase the MOST recently opened window when several have passed", () => {
+    // Two general-sale starts already inside lookback: the live one is latest.
+    const text =
+      "Sales timeline\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 20 Jan, 2031, 1 PM" +
+      "\n\nGeneral Sale Mon 12 Jan, 2031, 11 AM - Sat 7 Mar, 2031, 1 PM";
+    const now = new Date(Date.parse("2031-01-12T11:30:00.000Z")).toISOString();
+    expect(extractSaleOpensAt(text, now)).toBe("2031-01-12T11:00:00.000+05:30"); // 11 AM IST
+  });

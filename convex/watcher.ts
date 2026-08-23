@@ -1,4 +1,4 @@
-// Official-availability watcher engine (design 2026-06-22).
+﻿// Official-availability watcher engine (design 2026-06-22).
 //
 // Architecture — thin action / fat mutation:
 //   - All DB work lives in internal mutations/queries (use ctx.db).
@@ -341,6 +341,15 @@ export const createAlert = mutation({
         monitorTargetId: targetId,
       });
       wantKey = existingForBuyer.wantKey;
+      // Want-effect audit (AGENTS rule 4): re-arm mutates want fields.
+      await appendWatcherAuditLog(ctx, {
+        actorId: buyerId,
+        actorRole: "buyer",
+        action: "want_rearmed",
+        entityType: "want",
+        entityId: wantKey,
+        createdAt: nowIso,
+      });
     } else {
       isNewSubscriber = true;
       wantKey = `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -361,7 +370,28 @@ export const createAlert = mutation({
         channels: [...channels],
         monitorTargetId: targetId,
       });
+      // Want-effect audit: subscription created (gh#41 — previously unaudited).
+      await appendWatcherAuditLog(ctx, {
+        actorId: buyerId,
+        actorRole: "buyer",
+        action: "want_created",
+        entityType: "want",
+        entityId: wantKey,
+        toState: "open",
+        createdAt: nowIso,
+      });
       await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
+      // Monitor-effect audit: subscriber count is a monitored field.
+      await appendWatcherAuditLog(ctx, {
+        actorId: buyerId,
+        actorRole: "buyer",
+        action: "monitor_target_subscriber_count_changed",
+        entityType: "monitor_target",
+        entityId: collapseKey,
+        fromState: String(target.subscriberCount),
+        toState: String(target.subscriberCount + 1),
+        createdAt: nowIso,
+      });
     }
 
     // Late subscriber on an already-live target → notify immediately from last event.

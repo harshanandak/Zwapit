@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+﻿import { afterEach, describe, expect, test } from "bun:test";
 import { convexTest } from "convex-test";
 
 import { api, internal } from "../_generated/api";
@@ -33,7 +33,10 @@ const NOW = "2026-06-22T10:00:00.000Z";
 // createAlert sets nextCheckAt to the real wall clock (poll-immediately). Polling
 // with a clearly-later "now" makes the just-created target due regardless of the
 // machine clock — the watcher's cadence is real-time, only the watch DATE is fixed.
-const POLL_NOW = "2030-01-01T00:00:00.000Z";
+// Poll clock, relative to the real one so createAlert's wall-clock
+// nextCheckAt and these queries always agree (a fixed 2030 constant would
+// invert due-ness after that date). Keep fixture WATCH dates absolute.
+const POLL_NOW = new Date(Date.now() + 10 * 60_000).toISOString();
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -1223,9 +1226,12 @@ describe("crons — poll job registered (Task 10)", () => {
 describe("sale-window scheduling (kernel 9b317bb9)", () => {
   // Suite clock: POLL_NOW is 2030-01-01, so fixture instants must sit AFTER it
   // to be "future" windows (the suite's fixed watch dates are long expired).
+  // Suite-clock year + 1 keeps these fixtures future no matter when they run
+  // (same landmine class as the old fixed POLL_NOW).
+  const SALE_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
   const TIMELINE_ONLY =
     "Sales timeline\n\nMastercard Pre-Sale Mon 15 Dec, 1 PM - Sun 21 Dec, 1 PM" +
-    "\n\nGeneral Sale Sat 10 Jan, 2031, 10 AM - Sat 7 Mar, 2031, 1 PM";
+    "\n\nGeneral Sale Sat 10 Jan, " + SALE_YEAR + ", 10 AM - Sat 7 Mar, " + SALE_YEAR + ", 1 PM";
 
   test("a clean district event poll persists saleOpensAt and audits the scheduling effect", async () => {
     const tt = t();
@@ -1238,7 +1244,7 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
         title: "Gorillaz The Mountain Tour Bengaluru",
         city: "bengaluru",
         venueOrDestination: "District Arena @ Terraform",
-        startAt: "2031-03-07T12:30:00.000Z",
+        startAt: SALE_YEAR + "-03-07T12:30:00.000Z",
         isActive: true,
         lastSyncedAt: NOW,
         districtEventSlug: "gorillaz-the-mountain-tour-bengaluru-2027-buy-tickets",
@@ -1247,7 +1253,7 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_event_sched_1",
       city: "bengaluru",
-      date: "2031-03-07",
+      date: SALE_YEAR + "-03-07",
     });
 
     // Timeline WITHOUT availability markers -> clean not-open-yet poll.
@@ -1260,7 +1266,7 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
       target: (await ctx.db.query("monitor_targets").collect())[0],
       audits: await ctx.db.query("audit_logs").collect(),
     }));
-    expect(target.saleOpensAt).toBe("2031-01-10T10:00:00.000+05:30"); // 10 AM IST
+    expect(target.saleOpensAt).toBe(SALE_YEAR + "-01-10T10:00:00.000+05:30"); // 10 AM IST
     // Under the suite clock (POLL_NOW=2030) the window sits beyond the
     // 14d-distance tier, so the CAP wins: schedule on the tier, not past it.
     // Wake-at-open arithmetic itself is pinned in schedule.test.ts.
@@ -1283,7 +1289,7 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
         externalSource: "manual",
         title: "Persisted Window Event",
         city: "pune",
-        startAt: "2031-03-20T15:00:00.000Z",
+        startAt: SALE_YEAR + "-03-20T15:00:00.000Z",
         isActive: true,
         lastSyncedAt: NOW,
         bmsEventCode: "ET00999001",
@@ -1291,15 +1297,15 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
         districtEventSlug: "persisted-window-event-buy-tickets",
       });
       await ctx.db.insert("monitor_targets", {
-        collapseKey: "catalog_event_sched_2|pune|2031-03-20|",
+        collapseKey: "catalog_event_sched_2|pune|" + SALE_YEAR + "-03-20|",
         catalogItemId: "catalog_event_sched_2",
         city: "pune",
-        date: "2031-03-20",
+        date: SALE_YEAR + "-03-20",
         sources: ["bms", "district"],
         status: "watching",
         subscriberCount: 1,
         nextCheckAt: "2020-01-01T00:00:00.000Z",
-        saleOpensAt: "2031-02-01T07:30:00.000+05:30",
+        saleOpensAt: SALE_YEAR + "-02-01T07:30:00.000+05:30",
       });
     });
 
@@ -1316,7 +1322,11 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     // Reuse proof: the persisted Feb-2031 window is also beyond the tier cap
     // under the suite clock, but the point is the poll did NOT lose it — the
     // stored value still drove scheduling (tier-capped), and stayed intact.
-    expect(target.saleOpensAt).toBe("2031-02-01T07:30:00.000+05:30");
+    // Reuse proof: the persisted window (early SALE_YEAR) is also beyond the
+    // tier cap under the suite clock, but the point is the poll did NOT lose
+    // it — the stored value still drove scheduling (tier-capped), and stayed
+    // intact.
+    expect(target.saleOpensAt).toBe(SALE_YEAR + "-02-01T07:30:00.000+05:30");
     const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
     expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString());
   });
@@ -1372,6 +1382,7 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
 
   test("a window beyond the event date is neither persisted nor marked window-driven", async () => {
     const tt = t();
+    const SALE_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
     await seedUser(tt, APP_A, BUYER_A.subject);
     await tt.run(async (ctx) => {
       await ctx.db.insert("catalog_items", {
@@ -1380,7 +1391,7 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
         externalSource: "manual",
         title: "Phantom Window Event",
         city: "delhi",
-        startAt: "2031-01-20T15:00:00.000Z",
+        startAt: SALE_YEAR + "-01-20T15:00:00.000Z",
         isActive: true,
         lastSyncedAt: NOW,
         districtEventSlug: "phantom-window-event-buy-tickets",
@@ -1389,12 +1400,12 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_event_sched_4",
       city: "delhi",
-      date: "2031-01-20",
+      date: SALE_YEAR + "-01-20",
     });
 
     // Timeline window (Mar 2031) lands AFTER the watched day (Jan 20 2031).
     const phantom =
-      "Sales timeline\n\nGeneral Sale Sat 7 Mar, 2031, 10 AM - Sat 14 Mar, 2031, 1 PM";
+      "Sales timeline\n\nGeneral Sale Sat 7 Mar, " + (SALE_YEAR + 2) + ", 10 AM - Sat 14 Mar, " + (SALE_YEAR + 2) + ", 1 PM";
     __setFetcher(async (urls: string[]) => ({
       results: urls.map((url) => ({ url, content: phantom })),
     }));
@@ -1410,3 +1421,70 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     const tierCap = Date.parse(POLL_NOW) + 24 * 3600_000;
     expect(target.nextCheckAt).toBe(new Date(tierCap).toISOString()); // pure tiers
   });
+
+describe("createAlert � want-write audits (gh#41)", () => {
+  test("a NEW subscriber writes want_created + subscriber-count audit rows", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    });
+
+    const { want, target, audits } = await tt.run(async (ctx) => ({
+      want: (await ctx.db.query("wants").collect())[0],
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      audits: (await ctx.db.query("audit_logs").collect()).filter(
+        (a) => a.action.startsWith("want_") || a.action.includes("subscriber_count"),
+      ),
+    }));
+    const actions = audits.map((a) => a.action).sort();
+    expect(actions).toEqual(["monitor_target_subscriber_count_changed", "want_created"]);
+
+    const created = audits.find((a) => a.action === "want_created")!;
+    expect(created.entityType).toBe("want");
+    expect(created.entityId).toBe(want.wantKey);
+    expect(created.toState).toBe("open");
+    expect(created.actorRole).toBe("buyer"); // buyer-triggered, not system
+
+    const count = audits.find((a) => a.action === "monitor_target_subscriber_count_changed")!;
+    expect(count.entityType).toBe("monitor_target");
+    expect(count.entityId).toBe(target.collapseKey);
+  });
+
+  test("a RE-ARMING buyer writes want_rearmed but no second count-change row", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+
+    // Buyer A subscribes; buyer B joins; buyer A re-arms.
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      ...args,
+      alertTypes: ["availability" as const, "last_minute" as const],
+    });
+
+    const audits = await tt.run(async (ctx) =>
+      (await ctx.db.query("audit_logs").collect()).filter((a) => a.action === "want_rearmed"),
+    );
+    expect(audits).toHaveLength(1); // only buyer A's re-arm
+    const countChanges = await tt.run(async (ctx) =>
+      (await ctx.db.query("audit_logs").collect()).filter(
+        (a) => a.action === "monitor_target_subscriber_count_changed",
+      ),
+    );
+    expect(countChanges).toHaveLength(2); // A then B � the re-arm adds none
+  });
+});

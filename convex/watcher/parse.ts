@@ -444,9 +444,10 @@ function parseSaleStartIso(raw: string, fallbackYear: number | undefined): strin
 /**
  * Earliest future ticket-sale-open instant from a District event page's sales
  * timeline — general-sale starts preferred, else pre-sale starts. Returns an
- * ISO string with explicit IST offset, or null when nothing ahead (already
- * live, all past, or unparseable) so callers fall back to distance tiers —
- * never worse than today's behavior.
+ * ISO string with explicit IST offset. Returns the earliest future general
+ * sale, then the earliest future pre-sale. If a window opened within the
+ * chase lookback, returns the most recently opened window for tight polling.
+ * Returns null when no usable window exists.
  */
 export function extractSaleOpensAt(text: string, nowIso?: string): string | null {
   if (!text) return null;
@@ -502,7 +503,8 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
     usable
       .filter((f) => f.phase === phase)
       .map((f) => f.iso)
-      .sort((a, b) => a.localeCompare(b))[0];
+      // Chase phase: the MOST recently opened window is the live sale.
+      .sort((a, b) => b.localeCompare(a))[0];
   // Earliest still-future general sale wins outright; else the earliest future
   // pre-sale; else the most recently opened window (chase cadence).
   const earliestFutureGeneral = usable

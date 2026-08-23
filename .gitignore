@@ -51,3 +51,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Convex local/anonymous backend (local dev only; contains admin key — never commit)
 .convex/
 # convex/_generated is intentionally committed (generated API types for typecheck)
+
+# Beads removed from repo (archived at ~/zwapit-beads-archive); runtime files must not return.
+.beads/

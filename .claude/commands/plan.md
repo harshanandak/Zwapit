@@ -1,4 +1,4 @@
----
+﻿---
 description: Design intent → research → branch + worktree + task list
 ---
 
@@ -27,7 +27,7 @@ Before ANY planning work begins:
    ```bash
    bd create --title="<feature-name>" --type=epic
    bd update <id> --status=in_progress
-   bash scripts/beads-context.sh stage-transition <id> none plan
+   forge issue comment <id> "stage <phase-name>: transition recorded"
    ```
 6. ONLY THEN begin Phase 1.
 
@@ -252,7 +252,7 @@ Do NOT begin Phase 2 (web research) until:
 
 Record the phase transition before starting research:
 ```bash
-bash scripts/beads-context.sh stage-transition <id> plan research
+forge issue comment <id> "stage <phase-name>: transition recorded"
 ```
 
 Run these in parallel:
@@ -349,7 +349,7 @@ Do NOT begin Phase 3 (setup) until:
 
 Record the phase transition before starting setup:
 ```bash
-bash scripts/beads-context.sh stage-transition <id> research setup
+forge issue comment <id> "stage <phase-name>: transition recorded"
 ```
 
 ### Step 1: Link child issues to the epic
@@ -445,10 +445,10 @@ After saving the task list, attach design context and acceptance criteria to the
 
 ```bash
 # Link design metadata (task count + task file path) to the Beads issue
-bash scripts/beads-context.sh set-design <id> <task-count> docs/work/YYYY-MM-DD-<slug>/tasks.md
+forge issue update <id> --design "docs/work/YYYY-MM-DD-<slug>/tasks.md"
 
 # Record the success criteria from the design doc on the issue
-bash scripts/beads-context.sh set-acceptance <id> "<success-criteria from design doc>"
+forge issue comment <id> "acceptance: <success-criteria from design doc>"
 ```
 
 Both commands must exit with code 0. If either fails, investigate (wrong issue ID? missing script?) before continuing.
@@ -500,8 +500,8 @@ Do NOT proceed to /dev until ALL are confirmed:
 4. Beads issue is created with status=in_progress
 5. Task list exists at docs/work/YYYY-MM-DD-<slug>/tasks.md
 6. User has confirmed task list is correct
-7. `beads-context.sh set-design` ran successfully (exit code 0)
-8. `beads-context.sh set-acceptance` ran successfully (exit code 0)
+7. `forge issue update --design` ran successfully (exit code 0)
+8. `forge issue comment acceptance` ran successfully (exit code 0)
 9. `dep-guard.sh store-contracts` ran successfully (exit code 0) — or skipped if no contracts found
 10. `dep-guard.sh check-ripple` ran successfully and any proposed dependency mutation was reviewed with the user before calling `apply-decision`
 </HARD-GATE>
@@ -510,12 +510,8 @@ Do NOT proceed to /dev until ALL are confirmed:
 After all HARD-GATE items pass, validate context and record the stage transition:
 
 ```bash
-bash scripts/beads-context.sh validate <id>
-bash scripts/beads-context.sh stage-transition <id> plan dev \
-  --summary "<design approach chosen, task count>" \
-  --decisions "<key trade-offs resolved during Q&A>" \
-  --artifacts "docs/work/YYYY-MM-DD-<slug>/design.md docs/work/YYYY-MM-DD-<slug>/tasks.md" \
-  --next "<first dev task focus area>"
+forge issue show <id> --json
+forge issue comment <id> "stage <phase-name>: transition recorded"
 ```
 
 ---
