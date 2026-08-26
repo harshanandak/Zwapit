@@ -336,9 +336,14 @@ export const createAlert = mutation({
       .query("wants")
       .withIndex("by_key", (q) => q.eq("wantKey", wantCandidateKey))
       .collect();
+    // Legacy rows (pre-collapseKey) match on key alone — their key was derived
+    // from this same occurrence's inputs at creation (Codex P1 backfill note);
+    // new rows must match exactly.
     const existingForBuyer =
       subscribers.find((w) => w.buyerId === buyerId) ??
-      byKeyRows.find((w) => w.buyerId === buyerId && w.collapseKey === collapseKey);
+      byKeyRows.find(
+        (w) => w.buyerId === buyerId && (w.collapseKey ?? collapseKey) === collapseKey,
+      );
 
     let wantKey: string;
     let isNewSubscriber = false;
