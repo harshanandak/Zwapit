@@ -330,7 +330,15 @@ export const createAlert = mutation({
     // it because expiry cleared monitorTargetId, so also look up by_key and
     // REATTACH instead of inserting a duplicate-key second row (kernel
     // 47f4dfb8). Convex has no unique constraint — by_key is lookup-only.
-    const wantCandidateKey = `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_");
+    // Public key embeds a hash of the RAW collapse key: sanitization alone is
+    // lossy (mumbai-east / mumbai_east collide), and two distinct occurrences
+    // must never share one public key (Codex P1 Z8rW).
+    let keyHash = 0;
+    for (const ch of collapseKey) keyHash = (keyHash * 31 + ch.charCodeAt(0)) >>> 0;
+    const wantCandidateKey =
+      `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_") +
+      "_" +
+      keyHash.toString(36);
     const subscribers = await subscribersForTarget(ctx, targetId);
     const byKeyRows = await ctx.db
       .query("wants")
@@ -376,11 +384,10 @@ export const createAlert = mutation({
         // target that CLOSED when its last subscriber left must reopen —
         // dueTargets only polls watching targets (Codex P1 on 47f4dfb8).
         newlyAttached = true;
+        const reopened = target.status === "closed";
         await ctx.db.patch(target._id, {
           subscriberCount: target.subscriberCount + 1,
-          ...(target.status === "closed"
-            ? { status: "watching" as const, nextCheckAt: nowIso, failCount: 0 }
-            : {}),
+          ...(reopened ? { status: "watching" as const, nextCheckAt: nowIso, failCount: 0 } : {}),
         });
         await appendWatcherAuditLog(ctx, {
           actorId: buyerId,
@@ -392,6 +399,19 @@ export const createAlert = mutation({
           toState: String(target.subscriberCount + 1),
           createdAt: nowIso,
         });
+        if (reopened) {
+          // State transition is a monitor effect -> audited (Codex P1 Z8rm).
+          await appendWatcherAuditLog(ctx, {
+            actorId: buyerId,
+            actorRole: "buyer",
+            action: "monitor_target_reopened",
+            entityType: "monitor_target",
+            entityId: collapseKey,
+            fromState: "closed",
+            toState: "watching",
+            createdAt: nowIso,
+          });
+        }
       }
     } else {
       isNewSubscriber = true;
