@@ -381,13 +381,25 @@ export const createAlert = mutation({
       });
       if (!wasAttachedToThisTarget) {
         // Reattached after expiry/detachment: the count must come back, and a
-        // target that CLOSED when its last subscriber left must reopen —
-        // dueTargets only polls watching targets (Codex P1 on 47f4dfb8).
+        // target that CLOSED must reopen — dueTargets only polls watching.
+        // A closed target that had already gone LIVE keeps its snapshot hash:
+        // reopening it as watching would let the next identical poll dedupe
+        // before restoring live, stranding the buyer (Codex P1 cahmH) — so
+        // restore live directly and let the late-subscriber enqueue deliver
+        // the known payoff.
         newlyAttached = true;
-        const reopened = target.status === "closed";
+        const wasLiveBefore = target.status === "live";
+        const reopen = target.status === "closed";
+        const reopenToLive = reopen && Boolean(target.lastSnapshotHash);
         await ctx.db.patch(target._id, {
           subscriberCount: target.subscriberCount + 1,
-          ...(reopened ? { status: "watching" as const, nextCheckAt: nowIso, failCount: 0 } : {}),
+          ...(reopen
+            ? {
+                status: reopenToLive ? ("live" as const) : ("watching" as const),
+                nextCheckAt: nowIso,
+                failCount: 0,
+              }
+            : {}),
         });
         await appendWatcherAuditLog(ctx, {
           actorId: buyerId,
@@ -399,8 +411,7 @@ export const createAlert = mutation({
           toState: String(target.subscriberCount + 1),
           createdAt: nowIso,
         });
-        if (reopened) {
-          // State transition is a monitor effect -> audited (Codex P1 Z8rm).
+        if (reopen) {
           await appendWatcherAuditLog(ctx, {
             actorId: buyerId,
             actorRole: "buyer",
@@ -408,9 +419,16 @@ export const createAlert = mutation({
             entityType: "monitor_target",
             entityId: collapseKey,
             fromState: "closed",
-            toState: "watching",
+            toState: reopenToLive ? "live" : "watching",
             createdAt: nowIso,
           });
+        }
+        if (reopenToLive && !wasLiveBefore) {
+          // Restore the live payoff for the reattached buyer immediately.
+          const lastEvent = await latestAvailabilityEvent(ctx, target._id ?? targetId);
+          if (lastEvent) {
+            await enqueueForEvent(ctx, lastEvent._id, nowIso);
+          }
         }
       }
     } else {

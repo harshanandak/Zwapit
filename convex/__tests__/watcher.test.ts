@@ -1599,3 +1599,35 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     expect(wants.targets).toHaveLength(2);
   });
 });
+
+  test("a closed target with a known payoff reopens LIVE and notifies the reattached buyer", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+      channels: ["email" as const],
+    };
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    // Simulate a full lifecycle: live detection, then last-subscriber expiry closes it.
+    __setFetcher(fetcherReturning(openBmsJson()));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    const liveTarget = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(liveTarget.status).toBe("live");
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(closed.status).toBe("closed");
+
+    // Reattach: snapshot hash survives, so reopen must restore LIVE + deliver.
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const { target, notifs } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      notifs: await ctx.db.query("notification_queue").collect(),
+    }));
+    expect(target.status).toBe("live");
+    expect(notifs.length).toBeGreaterThan(0); // payoff delivered, not stranded
+  });
