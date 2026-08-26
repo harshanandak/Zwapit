@@ -435,6 +435,9 @@ export default defineSchema({
     channels: v.optional(v.array(channel)),
     // Internal app id of the shared monitor_targets row this alert subscribes to.
     monitorTargetId: v.optional(v.string()),
+    // Exact collapse key (kernel 47f4dfb8): the sanitized wantKey is lossy
+    // (-/_ collide), so the raw key disambiguates resubscribe lookups.
+    collapseKey: v.optional(v.string()),
   })
     .index("by_key", ["wantKey"])
     .index("by_buyer", ["buyerId"])

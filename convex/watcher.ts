@@ -332,12 +332,13 @@ export const createAlert = mutation({
     // 47f4dfb8). Convex has no unique constraint — by_key is lookup-only.
     const wantCandidateKey = `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_");
     const subscribers = await subscribersForTarget(ctx, targetId);
+    const byKeyRows = await ctx.db
+      .query("wants")
+      .withIndex("by_key", (q) => q.eq("wantKey", wantCandidateKey))
+      .collect();
     const existingForBuyer =
       subscribers.find((w) => w.buyerId === buyerId) ??
-      (await ctx.db
-        .query("wants")
-        .withIndex("by_key", (q) => q.eq("wantKey", wantCandidateKey))
-        .first());
+      byKeyRows.find((w) => w.buyerId === buyerId && w.collapseKey === collapseKey);
 
     let wantKey: string;
     let isNewSubscriber = false;
@@ -352,6 +353,7 @@ export const createAlert = mutation({
         alertTypes: [...alertTypes],
         channels: [...channels],
         monitorTargetId: targetId,
+        collapseKey,
         expiresAt: date,
       });
       wantKey = existingForBuyer.wantKey;
@@ -365,9 +367,16 @@ export const createAlert = mutation({
         createdAt: nowIso,
       });
       if (!wasAttachedToThisTarget) {
-        // Reattached after expiry/detachment: the count must come back.
+        // Reattached after expiry/detachment: the count must come back, and a
+        // target that CLOSED when its last subscriber left must reopen —
+        // dueTargets only polls watching targets (Codex P1 on 47f4dfb8).
         newlyAttached = true;
-        await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
+        await ctx.db.patch(target._id, {
+          subscriberCount: target.subscriberCount + 1,
+          ...(target.status === "closed"
+            ? { status: "watching" as const, nextCheckAt: nowIso, failCount: 0 }
+            : {}),
+        });
         await appendWatcherAuditLog(ctx, {
           actorId: buyerId,
           actorRole: "buyer",
@@ -399,6 +408,7 @@ export const createAlert = mutation({
         alertTypes: [...alertTypes],
         channels: [...channels],
         monitorTargetId: targetId,
+        collapseKey,
       });
       // Want-effect audit: subscription created (gh#41 — previously unaudited).
       await appendWatcherAuditLog(ctx, {
