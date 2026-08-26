@@ -325,20 +325,49 @@ export const createAlert = mutation({
     const category = KIND_TO_CATEGORY[catalogItem.kind];
 
     // ---- find-or-create THIS buyer's want for the target (dedupe per buyer) ----
-    const existingForBuyer = (await subscribersForTarget(ctx, targetId)).find(
-      (w) => w.buyerId === buyerId,
-    );
+    // The deterministic key can collide with an EXPIRED row of the same
+    // buyer+occurrence (resubscribe-after-expiry): subscribersForTarget misses
+    // it because expiry cleared monitorTargetId, so also look up by_key and
+    // REATTACH instead of inserting a duplicate-key second row (kernel
+    // 47f4dfb8). Convex has no unique constraint — by_key is lookup-only.
+    // Public key embeds a hash of the RAW collapse key: sanitization alone is
+    // lossy (mumbai-east / mumbai_east collide), and two distinct occurrences
+    // must never share one public key (Codex P1 Z8rW).
+    let keyHash = 0;
+    for (const ch of collapseKey) keyHash = (keyHash * 31 + ch.charCodeAt(0)) >>> 0;
+    const wantCandidateKey =
+      `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_") +
+      "_" +
+      keyHash.toString(36);
+    const subscribers = await subscribersForTarget(ctx, targetId);
+    const byKeyRows = await ctx.db
+      .query("wants")
+      .withIndex("by_key", (q) => q.eq("wantKey", wantCandidateKey))
+      .collect();
+    // Legacy rows (pre-collapseKey) match on key alone — their key was derived
+    // from this same occurrence's inputs at creation (Codex P1 backfill note);
+    // new rows must match exactly.
+    const existingForBuyer =
+      subscribers.find((w) => w.buyerId === buyerId) ??
+      byKeyRows.find(
+        (w) => w.buyerId === buyerId && (w.collapseKey ?? collapseKey) === collapseKey,
+      );
 
     let wantKey: string;
     let isNewSubscriber = false;
+    let newlyAttached = false;
     if (existingForBuyer) {
+      const wasAttachedToThisTarget = existingForBuyer.monitorTargetId === targetId;
       await ctx.db.patch(existingForBuyer._id, {
+        state: "open",
         watchCity: city,
         watchDate: date,
         ...(format ? { watchFormat: format } : {}),
         alertTypes: [...alertTypes],
         channels: [...channels],
         monitorTargetId: targetId,
+        collapseKey,
+        expiresAt: date,
       });
       wantKey = existingForBuyer.wantKey;
       // Want-effect audit (AGENTS rule 4): re-arm mutates want fields.
@@ -350,9 +379,62 @@ export const createAlert = mutation({
         entityId: wantKey,
         createdAt: nowIso,
       });
+      if (!wasAttachedToThisTarget) {
+        // Reattached after expiry/detachment: the count must come back, and a
+        // target that CLOSED must reopen — dueTargets only polls watching.
+        // A closed target that had already gone LIVE keeps its snapshot hash:
+        // reopening it as watching would let the next identical poll dedupe
+        // before restoring live, stranding the buyer (Codex P1 cahmH) — so
+        // restore live directly and let the late-subscriber enqueue deliver
+        // the known payoff.
+        newlyAttached = true;
+        const wasLiveBefore = target.status === "live";
+        const reopen = target.status === "closed";
+        const reopenToLive = reopen && Boolean(target.lastSnapshotHash);
+        await ctx.db.patch(target._id, {
+          subscriberCount: target.subscriberCount + 1,
+          ...(reopen
+            ? {
+                status: reopenToLive ? ("live" as const) : ("watching" as const),
+                nextCheckAt: nowIso,
+                failCount: 0,
+              }
+            : {}),
+        });
+        await appendWatcherAuditLog(ctx, {
+          actorId: buyerId,
+          actorRole: "buyer",
+          action: "monitor_target_subscriber_count_changed",
+          entityType: "monitor_target",
+          entityId: collapseKey,
+          fromState: String(target.subscriberCount),
+          toState: String(target.subscriberCount + 1),
+          createdAt: nowIso,
+        });
+        if (reopen) {
+          await appendWatcherAuditLog(ctx, {
+            actorId: buyerId,
+            actorRole: "buyer",
+            action: "monitor_target_reopened",
+            entityType: "monitor_target",
+            entityId: collapseKey,
+            fromState: "closed",
+            toState: reopenToLive ? "live" : "watching",
+            createdAt: nowIso,
+          });
+        }
+        if (reopenToLive && !wasLiveBefore) {
+          // Restore the live payoff for the reattached buyer immediately.
+          const lastEvent = await latestAvailabilityEvent(ctx, target._id ?? targetId);
+          if (lastEvent) {
+            await enqueueForEvent(ctx, lastEvent._id, nowIso);
+          }
+        }
+      }
     } else {
       isNewSubscriber = true;
-      wantKey = `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_");
+      newlyAttached = true;
+      wantKey = wantCandidateKey;
       await ctx.db.insert("wants", {
         wantKey,
         buyerId,
@@ -369,6 +451,7 @@ export const createAlert = mutation({
         alertTypes: [...alertTypes],
         channels: [...channels],
         monitorTargetId: targetId,
+        collapseKey,
       });
       // Want-effect audit: subscription created (gh#41 — previously unaudited).
       await appendWatcherAuditLog(ctx, {
@@ -395,7 +478,7 @@ export const createAlert = mutation({
     }
 
     // Late subscriber on an already-live target → notify immediately from last event.
-    if (isNewSubscriber && target.status === "live") {
+    if (newlyAttached && target.status === "live") {
       const lastEvent = await latestAvailabilityEvent(ctx, targetId);
       if (lastEvent) {
         await enqueueForEvent(ctx, lastEvent._id, nowIso);

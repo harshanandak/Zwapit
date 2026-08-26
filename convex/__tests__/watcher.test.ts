@@ -1488,3 +1488,146 @@ describe("createAlert � want-write audits (gh#41)", () => {
     expect(countChanges).toHaveLength(2); // A then B � the re-arm adds none
   });
 });
+
+describe("createAlert — resubscribe after expiry (kernel 47f4dfb8)", () => {
+  test("re-subscribing to an expired occurrence REUSES the row instead of duplicating the key", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    // Expire the want (detaches from target, state=expired, count--).
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+
+    // Re-subscribe to the SAME occurrence: deterministic key collides with
+    // the expired row — must reuse/reattach it, not insert a duplicate.
+    const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+
+    const { wants, target } = await tt.run(async (ctx) => ({
+      wants: await ctx.db.query("wants").collect(),
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+    }));
+    expect(wants).toHaveLength(1); // THE fix: no duplicate-key second row
+    expect(wants[0].state).toBe("open");
+    expect(wants[0].monitorTargetId).toBe(monitorTargetId);
+    expect(target.subscriberCount).toBe(1);
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const rearmed = audits.filter((a) => a.action === "want_rearmed");
+    expect(rearmed.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
+  test("reattaching onto a CLOSED target reopens it to watching", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW }); // last subscriber out -> target closes
+    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(closed.status).toBe("closed");
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const target = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(target.status).toBe("watching"); // reopened, or the alert never polls
+    expect(target.subscriberCount).toBe(1);
+  });
+
+  test("lossy key collision does NOT cross-attach between distinct occurrences", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    // Two catalog items whose cities differ only by -/_ so the SANITIZED
+    // candidate keys collide while collapse keys stay distinct.
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_movie_dup_a",
+        kind: "movie",
+        externalSource: "manual",
+        title: "Dup A",
+        city: "mumbai-east",
+        bmsEventCode: "ETDUP00001",
+        bmsRegionCode: "MUMBAI",
+        isActive: true,
+        lastSyncedAt: NOW,
+      });
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_movie_dup_b",
+        kind: "movie",
+        externalSource: "manual",
+        title: "Dup B",
+        city: "mumbai_east",
+        bmsEventCode: "ETDUP00002",
+        bmsRegionCode: "MUMBAI",
+        isActive: true,
+        lastSyncedAt: NOW,
+      });
+    });
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_dup_a",
+      city: "mumbai-east",
+      date: "2026-06-25",
+    });
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_dup_b",
+      city: "mumbai_east",
+      date: "2026-06-25",
+    });
+
+    const wants = await tt.run(async (ctx) => ({
+      rows: await ctx.db.query("wants").collect(),
+      targets: await ctx.db.query("monitor_targets").collect(),
+    }));
+    expect(wants.rows).toHaveLength(2); // distinct occurrences stay distinct
+    const attachedA = wants.rows.find((w) => w.catalogItemId === "catalog_movie_dup_a")!;
+    const attachedB = wants.rows.find((w) => w.catalogItemId === "catalog_movie_dup_b")!;
+    expect(attachedA.monitorTargetId).not.toBe(attachedB.monitorTargetId ?? attachedA.monitorTargetId);
+    expect(wants.targets).toHaveLength(2);
+  });
+});
+
+  test("a closed target with a known payoff reopens LIVE and notifies the reattached buyer", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+      channels: ["email" as const],
+    };
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    // Simulate a full lifecycle: live detection, then last-subscriber expiry closes it.
+    __setFetcher(fetcherReturning(openBmsJson()));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    const liveTarget = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(liveTarget.status).toBe("live");
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    expect(closed.status).toBe("closed");
+
+    // Reattach: snapshot hash survives, so reopen must restore LIVE + deliver.
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const { target, notifs } = await tt.run(async (ctx) => ({
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+      notifs: await ctx.db.query("notification_queue").collect(),
+    }));
+    expect(target.status).toBe("live");
+    expect(notifs.length).toBeGreaterThan(0); // payoff delivered, not stranded
+  });
