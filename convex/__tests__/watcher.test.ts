@@ -1488,3 +1488,38 @@ describe("createAlert � want-write audits (gh#41)", () => {
     expect(countChanges).toHaveLength(2); // A then B � the re-arm adds none
   });
 });
+
+describe("createAlert — resubscribe after expiry (kernel 47f4dfb8)", () => {
+  test("re-subscribing to an expired occurrence REUSES the row instead of duplicating the key", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: "2026-06-25",
+      format: "2D",
+    };
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    // Expire the want (detaches from target, state=expired, count--).
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+
+    // Re-subscribe to the SAME occurrence: deterministic key collides with
+    // the expired row — must reuse/reattach it, not insert a duplicate.
+    const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+
+    const { wants, target } = await tt.run(async (ctx) => ({
+      wants: await ctx.db.query("wants").collect(),
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+    }));
+    expect(wants).toHaveLength(1); // THE fix: no duplicate-key second row
+    expect(wants[0].state).toBe("open");
+    expect(wants[0].monitorTargetId).toBe(monitorTargetId);
+    expect(target.subscriberCount).toBe(1);
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const rearmed = audits.filter((a) => a.action === "want_rearmed");
+    expect(rearmed.length).toBeGreaterThanOrEqual(1);
+  });
+});
