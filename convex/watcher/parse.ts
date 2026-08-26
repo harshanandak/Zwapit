@@ -187,7 +187,10 @@ const EVENT_STATUS_PRIORITY: ReadonlyArray<ShowStatus> = [
 ];
 
 /** Text markers → status, scanned case-insensitively. From live probes:
- * BMS "Filling Fast"/"Book Now"; District "General Sale is live now"/"Live". */
+ * BMS "Filling Fast"/"Book Now"; District "General Sale is live now" and
+ * "Book tickets". A standalone "Live" timeline state is deliberately NOT a
+ * marker — bare "live" appears inside event descriptions and would
+ * false-fire; the sales-timeline phrases carry the live signal. */
 const BMS_EVENT_STATUS_MARKERS: ReadonlyArray<readonly [string, ShowStatus]> = [
   ["sold out", "sold_out"],
   ["filling fast", "filling_fast"],
@@ -518,6 +521,19 @@ export function extractSaleOpensAt(text: string, nowIso?: string): string | null
     .sort((a, b) => a.localeCompare(b))[0];
   if (earliestFuturePresale) return earliestFuturePresale;
   return byPriority("general") ?? byPriority("presale") ?? null;
+}
+
+/**
+ * True when the watch date is strictly before today (UTC calendar day).
+ * Same-day passes: matches endOfWatchDay's deliberate grace (watcher.ts
+ * ~L959) so last-minute alerts for today still work. One time basis in
+ * the codebase — UTC, not IST.
+ */
+export function isPastAlertDate(date: string, nowIso?: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date ?? "");
+  if (!m) return true;
+  const today = (nowIso ?? new Date().toISOString()).slice(0, 10);
+  return date < today;
 }
 
 // ---------------------------------------------------------------------------
