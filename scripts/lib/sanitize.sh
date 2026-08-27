@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # sanitize.sh — Shared input sanitization and validation library.
 #
-# Extracted from file-index.sh, dep-guard.sh, beads-context.sh, sync-utils.sh
-# to eliminate duplication. Source this file; do NOT run it directly.
+# Shared input sanitization and validation library.
+#
+# Extracted from file-index.sh, dep-guard.sh to eliminate duplication.
+# Source this file; do NOT run it directly.
 #
 # Functions:
 #   sanitize              <string>    Strip shell-injection patterns (OWASP A03)

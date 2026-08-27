@@ -1,4 +1,4 @@
-# Zwapit
+﻿# Zwapit
 
 Zwapit is a mobile-first Indian marketplace where a buyer says what they want *before* supply exists — a request for a specific movie show, event, or bus seat — and Zwapit tells them the moment it becomes available. Two supply sources fill that one demand: **official availability alerts** (Zwapit watches BookMyShow and District, notifies, and deep-links the user OUT to book on the official site, touching none of that money) and **community resale** (a protected-payment match between two users, where Zwapit earns a flat success fee). Closest analogues: Dice's waiting list crossed with StubHub's resale protection, except the request — not the listing — is the primary object.
 

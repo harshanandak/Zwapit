@@ -70,6 +70,8 @@ const allowedFirstSlicePaths = [
   /^\.claude\//,
   /^\.cursor\//,
   /^\.opencode\//,
+  /^\.kilocode\//,
+  /^\.forge\//,
   "README.md",
   "bun.lock",
   "package.json",
