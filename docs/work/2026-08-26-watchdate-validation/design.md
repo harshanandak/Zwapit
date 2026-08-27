@@ -1,4 +1,4 @@
-# Watch-date validation + catalog bootstrap slice — FINAL plan (v2, post cross-rating)
+﻿# Watch-date validation + catalog bootstrap slice — FINAL plan (v2, post cross-rating)
 
 **Date:** 2026-08-26 · **Kernel:** 1a6575c7 (past dates), 2427bbc4 (backlog), ff3e0a5a (chase test)
 **Planning loop:** R1 independent plans (Sol ✓, Muse ✓, GLM-5.3-ocgo ✓, DeepSeek-pro-ocgo ✓) →
