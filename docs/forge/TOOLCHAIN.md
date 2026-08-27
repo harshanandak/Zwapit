@@ -1,4 +1,4 @@
-# Forge Toolchain Reference
+﻿# Forge Toolchain Reference
 
 Complete reference for all tools integrated with the Forge workflow.
 

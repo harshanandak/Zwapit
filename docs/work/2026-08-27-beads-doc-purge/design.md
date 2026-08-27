@@ -34,3 +34,9 @@ Muse-Spark-contributor (opencode-go), GLM-5.3 (opencode-go).
 
 dep-guard-analyze/render-review/keyword-ripple.js orphans (follow-up issue);
 AGENTS.md history wording; ~/zwapit-beads-archive; forge CLI changes.
+
+## Decision rationale + alternatives (PR #50 review follow-up)
+
+- **Excise vs migrate dep-guard store-contracts**: chose excise — the ripple analyzer reads machine-readable contract rows that `forge issue comment` cannot reproduce; a comment migration would be a facade. Alternative rejected: building a forge dep-graph API (out of scope, CLI change).
+- **Delete stage-command docs vs rewrite them onto forge verbs**: deletion. The docs were already documented half-broken (AGENTS.md known-issues) and the skill+AGENTS pair is authoritative; rewriting 300 refs of dead content into polished prose nobody executes was rejected as scope inflation. OWASP A09 note: no security surface touched — all removed files referenced a tracker backend that no longer exists, and live flows already audit via audit_logs.
+- **Mirrors deleted, not migrated** (.codex/.cline/.roo/.opencode/.github-prompts): they were per-harness byte-copies of stage docs; keeping synchronized copies of deleted content recreates drift risk permanently.

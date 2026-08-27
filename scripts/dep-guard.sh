@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # dep-guard.sh — dependency-guard helper (post-Beads migration).
 #
+# Inline sanitize helper (extracted from scripts/lib/sanitize.sh so this
+# script stays self-contained).
+sanitize() {
+  printf '%s' "$1" | tr -d '`$;|&><'
+}
+#
 # Pure-local subcommands only: find-consumers and extract-contracts.
 # Beads-backed subcommands (check-ripple / apply-decision / store-contracts)
 # were excised with the bd backend — kernel 965c6d76.
