@@ -54,3 +54,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Beads removed from repo (archived at ~/zwapit-beads-archive); runtime files must not return.
 .beads/
+
+# pi-harness taskflow runtime (agent-companion lanes)
+.pi/

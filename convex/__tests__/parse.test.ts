@@ -5,6 +5,7 @@ import {
   AVAIL_STATUS_MAP,
   computeCollapseKey,
   eventShowMatchesTargetDate,
+  isPastAlertDate,
   extractSaleOpensAt,
   looksLikeEventPage,
   officialBookingUrl,
@@ -457,3 +458,13 @@ describe("extractSaleOpensAt � New-Year roll-forward", () => {
     const now = new Date(Date.parse("2031-01-12T11:30:00.000Z")).toISOString();
     expect(extractSaleOpensAt(text, now)).toBe("2031-01-12T11:00:00.000+05:30"); // 11 AM IST
   });
+
+describe("isPastAlertDate (kernel 1a6575c7)", () => {
+  test("should reject dates before today, allow today, allow future", () => {
+    const now = "2026-08-26T10:00:00.000Z";
+    expect(isPastAlertDate("2026-08-25", now)).toBe(true);
+    expect(isPastAlertDate("2026-08-26", now)).toBe(false);
+    expect(isPastAlertDate("2027-01-18", now)).toBe(false);
+  });
+});
+

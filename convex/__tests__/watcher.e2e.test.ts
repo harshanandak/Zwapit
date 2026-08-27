@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+﻿import { afterEach, describe, expect, test } from "bun:test";
 import { convexTest } from "convex-test";
 
 import { api, internal } from "../_generated/api";
@@ -111,7 +111,7 @@ async function seedMovie(
 const ALERT_ARGS = {
   catalogItemId: "catalog_movie_1",
   city: "mumbai",
-  date: "2026-06-25",
+  date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
   format: "2D",
   alertTypes: ["availability" as const],
   channels: ["email" as const],

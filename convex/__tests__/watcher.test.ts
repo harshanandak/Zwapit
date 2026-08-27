@@ -37,6 +37,8 @@ const NOW = "2026-06-22T10:00:00.000Z";
 // nextCheckAt and these queries always agree (a fixed 2030 constant would
 // invert due-ness after that date). Keep fixture WATCH dates absolute.
 const POLL_NOW = new Date(Date.now() + 10 * 60_000).toISOString();
+// Alert watch date: always ~30 days ahead so fixtures never trip WATCH_DATE_IN_PAST.
+const WATCH_DATE = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -160,7 +162,7 @@ describe("createAlert — shared monitor target collapse", () => {
     const argsBase = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
       alertTypes: ["availability" as const],
       channels: ["email" as const],
@@ -189,7 +191,7 @@ describe("createAlert — shared monitor target collapse", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     };
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
@@ -207,7 +209,7 @@ describe("createAlert — shared monitor target collapse", () => {
       tt.mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_movie_1",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
       }),
     ).rejects.toThrow("AUTH_REQUIRED");
   });
@@ -220,7 +222,7 @@ describe("createAlert — shared monitor target collapse", () => {
       tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_no_codes",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
       }),
     ).rejects.toThrow("NO_WATCHABLE_SOURCE");
     const targets = await tt.run((ctx) => ctx.db.query("monitor_targets").collect());
@@ -343,7 +345,7 @@ describe("createAlert — curated live events (events-phase2 T2)", () => {
       .mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_movie_x",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
         format: "2D",
       });
 
@@ -454,7 +456,7 @@ describe("markEventAvailable — curated availability → notify + deep-link OUT
       .mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_movie_y",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
         format: "2D",
       });
     await expect(
@@ -504,7 +506,7 @@ describe("recordAvailability — detection → live + snapshot dedup", () => {
       .mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_movie_1",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
         format: "2D",
       });
 
@@ -545,7 +547,7 @@ describe("recordAvailability — detection → live + snapshot dedup", () => {
       .mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_movie_1",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
         format: "2D",
       });
 
@@ -600,7 +602,7 @@ describe("enqueueNotifications — idempotent, fire-once", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
       alertTypes: ["availability" as const],
       channels: ["email" as const],
@@ -650,7 +652,7 @@ describe("enqueueNotifications — fan-out per delivered alertType × channel (z
     const { monitorTargetId } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
       alertTypes,
       channels,
@@ -700,7 +702,7 @@ describe("degrade lifecycle — K consecutive empty polls", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -736,7 +738,7 @@ describe("degrade lifecycle — K consecutive empty polls", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -769,7 +771,7 @@ describe("pollDueTargets — detection + platform routing", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
       alertTypes: ["availability" as const],
       channels: ["email" as const],
@@ -800,7 +802,7 @@ describe("pollDueTargets — detection + platform routing", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_district",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
     });
 
     const seenUrls: string[][] = [];
@@ -826,7 +828,7 @@ describe("dispatchNotifications — sender routing", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
       alertTypes: ["availability" as const],
       channels: ["email" as const],
@@ -873,7 +875,7 @@ describe("dispatchNotifications — claim race guard + bounded retry (zwapit-46i
   const ALERT = {
     catalogItemId: "catalog_movie_1",
     city: "mumbai",
-    date: "2026-06-25",
+    date: WATCH_DATE,
     format: "2D",
     alertTypes: ["availability" as const],
     channels: ["email" as const],
@@ -1002,7 +1004,7 @@ describe("getAlertPayoff — live payoff with deep-link OUT", () => {
     const { wantKey } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -1027,7 +1029,7 @@ describe("getAlertPayoff — live payoff with deep-link OUT", () => {
     const { wantKey } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -1040,7 +1042,8 @@ describe("getAlertPayoff — live payoff with deep-link OUT", () => {
 describe("expireWants — close a target once every subscriber's date has passed (zwapit-46i.1)", () => {
   // Watch date is 2026-06-25; this "now" is years later so the alert is unambiguously
   // past its watch window (mirrors POLL_NOW — only the watch DATE is fixed in fixtures).
-  const PAST_EXPIRY_NOW = "2030-01-01T00:00:00.000Z";
+  // Perpetually in the future relative to any real run date, so expiry-cron tests stay deterministic no matter when they execute (Codex P2 cs1My).
+const PAST_EXPIRY_NOW = new Date(Date.now() + 365 * 86_400_000).toISOString();
 
   test("the only subscriber's past-date alert → want expired + target closed", async () => {
     const tt = t();
@@ -1051,7 +1054,7 @@ describe("expireWants — close a target once every subscriber's date has passed
       .mutation(api.watcher.createAlert, {
         catalogItemId: "catalog_movie_1",
         city: "mumbai",
-        date: "2026-06-25",
+        date: WATCH_DATE,
         format: "2D",
       });
 
@@ -1077,7 +1080,7 @@ describe("expireWants — close a target once every subscriber's date has passed
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     };
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
@@ -1103,7 +1106,7 @@ describe("expireWants — close a target once every subscriber's date has passed
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -1129,7 +1132,7 @@ describe("expireWants — close a target once every subscriber's date has passed
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
     });
 
     const first = await tt.action(internal.watcher.expireWants, { now: PAST_EXPIRY_NOW });
@@ -1151,7 +1154,7 @@ describe("expireWants — close a target once every subscriber's date has passed
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -1188,7 +1191,7 @@ describe("expireWants — close a target once every subscriber's date has passed
     const { wantKey } = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -1431,7 +1434,7 @@ describe("createAlert � want-write audits (gh#41)", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     });
 
@@ -1464,7 +1467,7 @@ describe("createAlert � want-write audits (gh#41)", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     };
 
@@ -1497,7 +1500,7 @@ describe("createAlert — resubscribe after expiry (kernel 47f4dfb8)", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     };
 
@@ -1532,12 +1535,12 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
     };
 
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
-    await tt.action(internal.watcher.expireWants, { now: POLL_NOW }); // last subscriber out -> target closes
+    await tt.run(async (ctx) => { const want = (await ctx.db.query("wants").collect())[0]; const tgt = (await ctx.db.query("monitor_targets").collect())[0]; await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" }); await ctx.db.patch(tgt._id, { date: "2020-01-01", windowEnd: "2020-01-01T23:59:59.999Z" }); }); await tt.action(internal.watcher.expireWants, { now: POLL_NOW }); // last subscriber out -> target closes
     const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
     expect(closed.status).toBe("closed");
 
@@ -1580,12 +1583,12 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_dup_a",
       city: "mumbai-east",
-      date: "2026-06-25",
+      date: WATCH_DATE,
     });
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
       catalogItemId: "catalog_movie_dup_b",
       city: "mumbai_east",
-      date: "2026-06-25",
+      date: WATCH_DATE,
     });
 
     const wants = await tt.run(async (ctx) => ({
@@ -1607,7 +1610,7 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     const args = {
       catalogItemId: "catalog_movie_1",
       city: "mumbai",
-      date: "2026-06-25",
+      date: WATCH_DATE,
       format: "2D",
       channels: ["email" as const],
     };
@@ -1618,8 +1621,11 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
     const liveTarget = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
     expect(liveTarget.status).toBe("live");
-    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
-    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+    // Time-shift the want into the expiry window before closing.
+    await tt.run(async (ctx) => {
+      const want = (await ctx.db.query("wants").collect())[0];
+      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" });
+    });    await tt.run(async (ctx) => { const want = (await ctx.db.query("wants").collect())[0]; await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" }); });    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
     expect(closed.status).toBe("closed");
 
     // Reattach: snapshot hash survives, so reopen must restore LIVE + deliver.
@@ -1631,3 +1637,52 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     expect(target.status).toBe("live");
     expect(notifs.length).toBeGreaterThan(0); // payoff delivered, not stranded
   });
+
+  test("createAlert rejects a PAST watch date at the mutation surface (gh#41 sibling)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+
+    await expect(
+      tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_1",
+        city: "mumbai",
+        date: "2020-01-01",
+        format: "2D",
+      }),
+    ).rejects.toThrow("WATCH_DATE_IN_PAST");
+
+    // Nothing written on rejection.
+    const { wants, targets } = await tt.run(async (ctx) => ({
+      wants: await ctx.db.query("wants").collect(),
+      targets: await ctx.db.query("monitor_targets").collect(),
+    }));
+    expect(wants).toHaveLength(0);
+    expect(targets).toHaveLength(0);
+  });
+
+describe("createAlert — past watch date rejected at the surface (kernel 1a6575c7)", () => {
+  test("createAlert throws WATCH_DATE_IN_PAST and writes nothing", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+
+    await expect(
+      tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+        catalogItemId: "catalog_movie_1",
+        city: "mumbai",
+        date: "2020-01-01",
+        format: "2D",
+      }),
+    ).rejects.toThrow("WATCH_DATE_IN_PAST");
+
+    const state = await tt.run(async (ctx) => ({
+      wants: await ctx.db.query("wants").collect(),
+      targets: await ctx.db.query("monitor_targets").collect(),
+      audits: await ctx.db.query("audit_logs").collect(),
+    }));
+    expect(state.wants).toHaveLength(0);
+    expect(state.targets).toHaveLength(0);
+    expect(state.audits).toHaveLength(0);
+  });
+});

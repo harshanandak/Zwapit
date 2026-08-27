@@ -49,6 +49,7 @@ import {
   computeCollapseKey,
   eventShowMatchesTargetDate,
   extractSaleOpensAt,
+  isPastAlertDate,
   looksLikeEventPage,
   parseBmsByVenue,
   parseBmsEventPage,
@@ -215,17 +216,23 @@ async function auditNotification(
 /** Validate + normalize createAlert's client input (trim; reject empty city /
  * malformed date) so semantically-identical alerts collapse and malformed ones are
  * never persisted. Extracted to keep createAlert's cognitive complexity down. */
-function normalizeAlertInput(args: {
-  city: string;
-  date: string;
-  format?: string;
-}): { city: string; date: string; format?: string } {
+function normalizeAlertInput(
+  args: {
+    city: string;
+    date: string;
+    format?: string;
+  },
+  nowIso?: string,
+): { city: string; date: string; format?: string } {
   const city = args.city.trim();
   const date = args.date.trim();
   const format = args.format?.trim() || undefined;
   if (!city) throw new Error("ALERT_CITY_REQUIRED");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
     throw new Error("ALERT_DATE_INVALID");
+  }
+  if (isPastAlertDate(date, nowIso)) {
+    throw new Error("WATCH_DATE_IN_PAST");
   }
   return { city, date, ...(format ? { format } : {}) };
 }
@@ -256,13 +263,13 @@ export const createAlert = mutation({
     const catalogItem = await catalogItemByKey(ctx, args.catalogItemId);
     if (!catalogItem) throw new Error("CATALOG_ITEM_NOT_FOUND");
 
-    // Validate + normalize client input before it flows into the collapse key,
-    // monitor_targets, wants.expiresAt and source URLs (coding guideline: validate
-    // all user input). See normalizeAlertInput.
-    const { city, date, format } = normalizeAlertInput(args);
-
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
+    // Validate + normalize client input before it flows into the collapse key,
+    // monitor_targets, wants.expiresAt and source URLs (coding guideline: validate
+    // all user input). See normalizeAlertInput. Clock passed in so the past-date
+    // check is deterministic under test.
+    const { city, date, format } = normalizeAlertInput(args, nowIso);
     const collapseKey = computeCollapseKey({
       catalogItemId: args.catalogItemId,
       city,
