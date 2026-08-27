@@ -1042,7 +1042,8 @@ describe("getAlertPayoff — live payoff with deep-link OUT", () => {
 describe("expireWants — close a target once every subscriber's date has passed (zwapit-46i.1)", () => {
   // Watch date is 2026-06-25; this "now" is years later so the alert is unambiguously
   // past its watch window (mirrors POLL_NOW — only the watch DATE is fixed in fixtures).
-  const PAST_EXPIRY_NOW = "2030-01-01T00:00:00.000Z";
+  // Perpetually in the future relative to any real run date, so expiry-cron tests stay deterministic no matter when they execute (Codex P2 cs1My).
+const PAST_EXPIRY_NOW = new Date(Date.now() + 365 * 86_400_000).toISOString();
 
   test("the only subscriber's past-date alert → want expired + target closed", async () => {
     const tt = t();
