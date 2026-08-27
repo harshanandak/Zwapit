@@ -158,19 +158,16 @@ export async function submitCreateAlert(
   const client = await deps.getClient();
   if (!client) return { ok: true, status: "mock" };
 
-  try {
-    const res = (await client.mutation(createAlertRef, args)) as
-      | { wantKey?: string; monitorTargetId?: string }
-      | null;
-    return {
-      ok: true,
-      status: "created",
-      ...(res?.wantKey ? { wantKey: res.wantKey } : {}),
-      ...(res?.monitorTargetId ? { monitorTargetId: res.monitorTargetId } : {}),
-    };
-  } catch {
-    // Auth/transport failure: keep the screen working with a mock confirmation
-    // rather than surfacing an opaque error to the buyer.
-    return { ok: true, status: "mock" };
-  }
+  // Mutation errors PROPAGATE (e.g. WATCH_DATE_IN_PAST): masking them as a
+  // mock confirmation told the buyer "we'll alert you" while nothing was
+  // persisted — the exact silent-failure Codex flagged on PR #49.
+  const res = (await client.mutation(createAlertRef, args)) as
+    | { wantKey?: string; monitorTargetId?: string }
+    | null;
+  return {
+    ok: true,
+    status: "created",
+    ...(res?.wantKey ? { wantKey: res.wantKey } : {}),
+    ...(res?.monitorTargetId ? { monitorTargetId: res.monitorTargetId } : {}),
+  };
 }

@@ -103,7 +103,7 @@ describe("submitCreateAlert (wrapper, U-watcher)", () => {
     });
   });
 
-  test("should fall back to a mock confirmation when the mutation throws (never breaks the screen)", async () => {
+  test("should PROPAGATE mutation errors (a swallowed WATCH_DATE_IN_PAST would lie to the buyer)", async () => {
     const fakeClient = {
       mutation: async () => {
         throw new Error("AUTH_REQUIRED");
@@ -113,8 +113,7 @@ describe("submitCreateAlert (wrapper, U-watcher)", () => {
       isConfigured: () => true,
       getClient: async () => fakeClient as never,
     };
-    const result = await submitCreateAlert(selection(), deps);
-    expect(result).toEqual({ ok: true, status: "mock" });
+    await expect(submitCreateAlert(selection(), deps)).rejects.toThrow("AUTH_REQUIRED");
   });
 });
 
