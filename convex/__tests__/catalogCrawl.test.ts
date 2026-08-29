@@ -1,47 +1,42 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
-// Pure-logic tests for the adaptive bootstrap limit + chunked-wave planning
-// used by crawlBmsMovies (kernel 2427bbc4). The Convex action itself is
-// exercised against the live Parallel pipeline; here we pin the decision math.
+import { chunkIntoWaves, crawlBmsMovies, effectiveCrawlLimit } from "../catalogCrawl";
 
-const BOOTSTRAP_THRESHOLD = 500;
-const BOOTSTRAP_LIMIT = 250;
-const WAVE_SIZE = 25;
+type ConvexActionForTest = {
+  _handler: (ctx: unknown, args: { limit?: number }) => Promise<unknown>;
+};
 
-function effectiveLimit(storedCount: number, requestedLimit?: number): number {
-  if (storedCount < BOOTSTRAP_THRESHOLD) {
-    return Math.max(requestedLimit ?? 0, BOOTSTRAP_LIMIT);
+const originalParallelApiKey = process.env.PARALLEL_API_KEY;
+
+afterEach(() => {
+  if (originalParallelApiKey === undefined) {
+    delete process.env.PARALLEL_API_KEY;
+  } else {
+    process.env.PARALLEL_API_KEY = originalParallelApiKey;
   }
-  return requestedLimit ?? 10;
-}
+});
 
-function chunk<T>(items: T[], size = WAVE_SIZE): T[][] {
-  const waves: T[][] = [];
-  for (let i = 0; i < items.length; i += size) waves.push(items.slice(i, i + size));
-  return waves;
+function handlerOf(fn: unknown): ConvexActionForTest["_handler"] {
+  return (fn as ConvexActionForTest)._handler;
 }
 
 describe("adaptive crawl limit", () => {
-  test("should use the bootstrap limit when the stored catalog is cold", () => {
-    expect(effectiveLimit(0)).toBe(250);
-    expect(effectiveLimit(12, 25)).toBe(250); // cron's 25 is overridden during bootstrap
+  test("should keep bootstrap active until the backlog fits in one maintenance run", () => {
+    expect(effectiveCrawlLimit(4_900, 25)).toBe(250);
+    expect(effectiveCrawlLimit(4_400, 25)).toBe(250);
+    expect(effectiveCrawlLimit(26, 25)).toBe(250);
+    expect(effectiveCrawlLimit(25, 25)).toBe(25);
   });
 
-  test("should keep the requested limit once the catalog is warm", () => {
-    expect(effectiveLimit(4900, 25)).toBe(25);
-    expect(effectiveLimit(499, 25)).toBe(250);
-    expect(effectiveLimit(500, 25)).toBe(25);
-  });
-
-  test("should respect an explicit larger limit during bootstrap", () => {
-    expect(effectiveLimit(100, 400)).toBe(400);
+  test("should respect an explicit larger limit", () => {
+    expect(effectiveCrawlLimit(4_900, 400)).toBe(400);
   });
 });
 
 describe("chunked waves", () => {
   test("should split the delta into waves of 25 with a partial tail", () => {
     const delta = Array.from({ length: 60 }, (_, i) => i);
-    const waves = chunk(delta);
+    const waves = chunkIntoWaves(delta);
     expect(waves.length).toBe(3);
     expect(waves[0].length).toBe(25);
     expect(waves[2].length).toBe(10);
@@ -49,6 +44,28 @@ describe("chunked waves", () => {
   });
 
   test("should produce no waves for an empty delta", () => {
-    expect(chunk([])).toEqual([]);
+    expect(chunkIntoWaves([])).toEqual([]);
+  });
+});
+
+describe("crawl action validation", () => {
+  test("should reject an invalid limit even when Parallel is not configured", async () => {
+    delete process.env.PARALLEL_API_KEY;
+
+    await expect(handlerOf(crawlBmsMovies)({}, { limit: 0 })).rejects.toThrow("CRAWL_LIMIT_INVALID");
+    await expect(handlerOf(crawlBmsMovies)({}, { limit: 1.5 })).rejects.toThrow("CRAWL_LIMIT_INVALID");
+  });
+
+  test("should no-op safely without a Parallel key when the limit is valid", async () => {
+    delete process.env.PARALLEL_API_KEY;
+
+    await expect(handlerOf(crawlBmsMovies)({}, { limit: 25 })).resolves.toEqual({
+      scanned: 0,
+      delta: 0,
+      hydrated: 0,
+      created: 0,
+      updated: 0,
+      remaining: 0,
+    });
   });
 });

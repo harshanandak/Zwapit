@@ -11,6 +11,8 @@ import { bmsCatalogKey, diffByLastmod, parseParallelEntities } from "../src/lib/
 
 const MOVIES_SITEMAP = "https://in.bookmyshow.com/sitemap/movies-synopsis.xml";
 const PARALLEL_EXTRACT = "https://api.parallel.ai/v1beta/extract";
+const BOOTSTRAP_LIMIT = 250;
+const CRAWL_WAVE_SIZE = 25;
 
 interface ExtractResult {
   content: string;
@@ -56,6 +58,18 @@ function extractYear(pageTitle: string, content: string): string | undefined {
   return (pageTitle.match(/\((\d{4})\)/)?.[1] ?? content.match(/\b(19|20)\d{2}\b/)?.[0]) || undefined;
 }
 
+export function effectiveCrawlLimit(backlogCount: number, requestedLimit: number): number {
+  return backlogCount > requestedLimit ? Math.max(requestedLimit, BOOTSTRAP_LIMIT) : requestedLimit;
+}
+
+export function chunkIntoWaves<T>(items: T[], size = CRAWL_WAVE_SIZE): T[][] {
+  const waves: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    waves.push(items.slice(i, i + size));
+  }
+  return waves;
+}
+
 export const getMovieSyncState = internalQuery({
   args: {},
   returns: v.array(v.object({ externalId: v.string(), sourceLastmod: v.optional(v.string()) })),
@@ -86,15 +100,13 @@ export const crawlBmsMovies = internalAction({
     ctx,
     args,
   ): Promise<{ scanned: number; delta: number; hydrated: number; created: number; updated: number; remaining: number }> => {
-    // No-op safely when the key is unset (same contract as the watcher crons:
-    // "read their secrets from Convex env and no-op safely when unset") so the
-    // scheduled cron cannot error-spam on a deployment without egress configured.
-    if (!process.env.PARALLEL_API_KEY) {
-      return { scanned: 0, delta: 0, hydrated: 0, created: 0, updated: 0, remaining: 0 };
-    }
     const limit = args.limit ?? 10;
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new Error("CRAWL_LIMIT_INVALID: limit must be a positive integer");
+    }
+    // Scheduled crawls no-op when egress is not configured.
+    if (!process.env.PARALLEL_API_KEY) {
+      return { scanned: 0, delta: 0, hydrated: 0, created: 0, updated: 0, remaining: 0 };
     }
     const sitemap = await parallelExtract([MOVIES_SITEMAP]);
     const entities = parseParallelEntities(sitemap[MOVIES_SITEMAP]?.content ?? "", "movie");
@@ -104,17 +116,10 @@ export const crawlBmsMovies = internalAction({
       {},
     );
     const existing = new Map<string, string | undefined>(state.map((s) => [s.externalId, s.sourceLastmod]));
-
-    // Adaptive bootstrap (kernel 2427bbc4): a cold catalog drains at 250/run
-    // (~20 days to fill ~4.9k movies) instead of 25/day (~196 days); warm
-    // catalogs keep the requested maintenance limit. Explicit limits still
-    // apply once warm; during bootstrap an explicit LARGER limit is honored.
-    const BOOTSTRAP_THRESHOLD = 500;
-    const BOOTSTRAP_LIMIT = 250;
-    const effectiveLimit =
-      state.length < BOOTSTRAP_THRESHOLD ? Math.max(limit, BOOTSTRAP_LIMIT) : limit;
-
     const fullDelta = diffByLastmod(entities, existing);
+
+    // Keep bootstrap active until the backlog fits within one maintenance run.
+    const effectiveLimit = effectiveCrawlLimit(fullDelta.length, limit);
     const delta = fullDelta.slice(0, effectiveLimit);
     if (delta.length === 0) {
       return { scanned: entities.length, delta: 0, hydrated: 0, created: 0, updated: 0, remaining: 0 };
@@ -125,8 +130,7 @@ export const crawlBmsMovies = internalAction({
     let hydrated = 0;
     let created = 0;
     let updated = 0;
-    for (let i = 0; i < delta.length; i += 25) {
-      const wave = delta.slice(i, i + 25);
+    for (const wave of chunkIntoWaves(delta)) {
       const pages = await parallelExtract(wave.map((e) => e.loc));
       const movies = wave.map((e) => {
         const page = pages[e.loc] ?? { content: "", title: "" };
