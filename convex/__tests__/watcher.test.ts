@@ -109,6 +109,71 @@ async function seedUser(
   });
 }
 
+// Sale-window chase fixtures (kernel ff3e0a5a): District event pages carry a
+// "Sales timeline" whose wall-clock labels parseSaleStartIso reads as IST
+// (+05:30). istSaleWindow builds the label AND the exact ISO instant the
+// parser derives from it — rescheduleTarget compares saleOpensAt as a string,
+// so seeded stored values must be string-identical to fresh parses.
+const IST_OFFSET_MS = 5.5 * 3_600_000;
+const IST_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const IST_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function istSaleWindow(nowIso: string, agoMs: number): { label: string; iso: string } {
+  const wall = new Date(Date.parse(nowIso) - agoMs + IST_OFFSET_MS);
+  const h24 = wall.getUTCHours();
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const label =
+    IST_DAYS[wall.getUTCDay()] + " " + wall.getUTCDate() + " " + IST_MONTHS[wall.getUTCMonth()] + ", " +
+    wall.getUTCFullYear() + ", " + h12 + " " + (h24 < 12 ? "AM" : "PM");
+  const iso =
+    wall.getUTCFullYear() + "-" +
+    String(wall.getUTCMonth() + 1).padStart(2, "0") + "-" +
+    String(wall.getUTCDate()).padStart(2, "0") + "T" +
+    String(wall.getUTCHours()).padStart(2, "0") + ":00:00.000+05:30";
+  return { label, iso };
+}
+
+// A watching live_event target with a District slug, due immediately. When
+// saleOpensAt is omitted the target holds no stored window yet.
+async function seedChaseEventFixture(
+  tt: ReturnType<typeof t>,
+  opts: { catalogKey: string; slug: string; title: string; date: string; saleOpensAt?: string },
+): Promise<void> {
+  await tt.run(async (ctx) => {
+    await ctx.db.insert("catalog_items", {
+      catalogKey: opts.catalogKey,
+      kind: "live_event",
+      externalSource: "manual",
+      title: opts.title,
+      city: "goa",
+      startAt: opts.date + "T15:00:00.000Z",
+      isActive: true,
+      lastSyncedAt: NOW,
+      districtEventSlug: opts.slug,
+    });
+    await ctx.db.insert("monitor_targets", {
+      collapseKey: opts.catalogKey + "|goa|" + opts.date + "|",
+      catalogItemId: opts.catalogKey,
+      city: "goa",
+      date: opts.date,
+      sources: ["district"],
+      status: "watching",
+      subscriberCount: 1,
+      nextCheckAt: "2020-01-01T00:00:00.000Z",
+      ...(opts.saleOpensAt ? { saleOpensAt: opts.saleOpensAt } : {}),
+    });
+  });
+}
+
+// Re-arm the due target so the next poll re-enters the floor-chase branch
+// (the floor-based nextCheckAt always differs after a poll).
+async function reopenChaseTarget(tt: ReturnType<typeof t>): Promise<void> {
+  await tt.run(async (ctx) => {
+    const tgt = (await ctx.db.query("monitor_targets").collect())[0];
+    if (tgt.status === "watching") await ctx.db.patch(tgt._id, { nextCheckAt: "2020-01-01T00:00:00.000Z" });
+  });
+}
+
 async function seedMovie(
   tt: ReturnType<typeof t>,
   catalogKey = "catalog_movie_1",
@@ -1338,42 +1403,19 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
   test("window-driven reschedules audit once per 6h (no flood from the 5-min chase)", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
-    await tt.run(async (ctx) => {
-      await ctx.db.insert("catalog_items", {
-        catalogKey: "catalog_event_sched_3",
-        kind: "live_event",
-        externalSource: "manual",
-        title: "Chase Event",
-        city: "goa",
-        startAt: "2031-04-10T15:00:00.000Z",
-        isActive: true,
-        lastSyncedAt: NOW,
-        districtEventSlug: "chase-event-buy-tickets",
-      });
-      await ctx.db.insert("monitor_targets", {
-        collapseKey: "catalog_event_sched_3|goa|2031-04-10|",
-        catalogItemId: "catalog_event_sched_3",
-        city: "goa",
-        date: "2031-04-10",
-        sources: ["district"],
-        status: "watching",
-        subscriberCount: 1,
-        nextCheckAt: "2020-01-01T00:00:00.000Z",
-        saleOpensAt: "2020-06-01T00:00:00.000Z", // already opened: floor-chase regime
-      });
+    await seedChaseEventFixture(tt, {
+      catalogKey: "catalog_event_sched_3",
+      slug: "chase-event-buy-tickets",
+      title: "Chase Event",
+      date: "2031-04-10",
+      saleOpensAt: "2020-06-01T00:00:00.000Z", // already opened: floor-chase regime
     });
 
     __setFetcher(emptyFetcher());
     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
-    // Re-open the window; the floor-based nextCheckAt always differs.
-    const reopen = async () =>
-      tt.run(async (ctx) => {
-        const tgt = (await ctx.db.query("monitor_targets").collect())[0];
-        if (tgt.status === "watching") await ctx.db.patch(tgt._id, { nextCheckAt: "2020-01-01T00:00:00.000Z" });
-      });
-    await reopen();
+    await reopenChaseTarget(tt);
     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
-    await reopen();
+    await reopenChaseTarget(tt);
     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
 
     const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
@@ -1381,6 +1423,144 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     expect(scheduled.length).toBe(1); // deduped within the 6h window
     const chasePolls = audits.filter((a) => a.action === "monitor_target_rescheduled");
     expect(chasePolls.length).toBe(0);
+  });
+
+  test("an interleaved sale_window_set cannot reset the 6h scheduled-audit dedupe", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    const EVENT_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
+    const W1 = istSaleWindow(POLL_NOW, 2 * 3_600_000); // opened 2h ago: chase regime
+    const W2 = istSaleWindow(POLL_NOW, 1 * 3_600_000); // a DIFFERENT, more recent instant
+    const pageFor = (w: { label: string }): string =>
+      "app-store\n\nSelect Location\n\n### Interleave Chase Event | Goa\n\nDistrict Arena @ Terraform, Goa" +
+      "\n\nSales timeline\n\nGeneral Sale " + w.label;
+
+    await seedChaseEventFixture(tt, {
+      catalogKey: "catalog_event_sched_5",
+      slug: "interleave-chase-event-buy-tickets",
+      title: "Interleave Chase Event",
+      date: EVENT_YEAR + "-04-10",
+      // No stored window: poll 1 acquires W1 (set), poll 2 schedules from it.
+    });
+
+    let page = pageFor(W1);
+    __setFetcher(async (urls: string[]) => ({ results: urls.map((url) => ({ url, content: page })) }));
+
+    // Sequence: set(W1) → scheduled → set(W2) → scheduled within the same 6h
+    // window. The changed instant must not bypass the once-per-6h bound.
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    await reopenChaseTarget(tt);
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    page = pageFor(W2);
+    await reopenChaseTarget(tt);
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    await reopenChaseTarget(tt);
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    const sets = audits.filter((a) => a.action === "monitor_target_sale_window_set");
+    expect(sets).toHaveLength(2); // both instants were acquired
+    expect(scheduled).toHaveLength(1); // the 6h dedupe survives the interleaved set
+  });
+
+  test("dedupe keys off the action clock, not insertion order (delayed replay)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    const EVENT_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
+    const { label: W, iso: W_ISO } = istSaleWindow(POLL_NOW, 30 * 60_000); // opened 30 min before the poll
+    const page = "app-store\n\n### Replay Chase Event | Goa\n\nSales timeline\n\nGeneral Sale " + W;
+
+    await seedChaseEventFixture(tt, {
+      catalogKey: "catalog_event_sched_6",
+      slug: "replay-chase-event-buy-tickets",
+      title: "Replay Chase Event",
+      date: EVENT_YEAR + "-04-10",
+      saleOpensAt: W_ISO,
+    });
+    // Two prior scheduled audits, INSERTED out of action-clock order (each
+    // in its own transaction so insertion time is unambiguous): the
+    // newer-inserted row is a delayed replay stamped with a far-past clock.
+    const insertScheduledAudit = (seq: number, agoMs: number) =>
+      tt.run(async (ctx) => {
+        await ctx.db.insert("audit_logs", {
+          actorId: "system",
+          actorRole: "system",
+          action: "monitor_target_sale_window_scheduled",
+          entityType: "monitor_target",
+          entityId: "catalog_event_sched_6|goa|" + EVENT_YEAR + "-04-10|",
+          seq,
+          createdAt: new Date(Date.parse(POLL_NOW) - agoMs).toISOString(),
+        });
+      });
+    // Six prior scheduled audits, INSERTED out of action-clock order: the
+    // five newer-inserted rows are delayed replays stamped with far-past
+    // clocks. A page bounded by insertion order cannot contain the real
+    // latest row, so the dedupe must key off the action-time index.
+    await insertScheduledAudit(1, 1 * 3_600_000); // real latest: inside 6h
+    for (let seq = 2; seq <= 6; seq++) {
+      await insertScheduledAudit(seq, 7 * 3_600_000); // stale replay clocks
+    }
+
+    __setFetcher(fetcherReturning(page));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    // The fresh poll is within 6h of the real latest scheduled action (the
+    // -1h row), so it must be deduped — insertion order must not surface the
+    // stale -7h replay rows instead. Six seeded rows remain, no new write.
+    expect(scheduled).toHaveLength(6); // 1 recent + 5 stale; no duplicate written
+  });
+
+  test("interleaved audit actions cannot crowd the scheduled row out of the dedupe window", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    const EVENT_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
+    const { iso: W_ISO } = istSaleWindow(POLL_NOW, 30 * 60_000);
+    const page = "app-store\n\n### Crowd Chase Event | Goa\n\nSales timeline\n\nGeneral Sale " +
+      istSaleWindow(POLL_NOW, 30 * 60_000).label;
+
+    await seedChaseEventFixture(tt, {
+      catalogKey: "catalog_event_sched_7",
+      slug: "crowd-chase-event-buy-tickets",
+      title: "Crowd Chase Event",
+      date: EVENT_YEAR + "-04-10",
+      saleOpensAt: W_ISO,
+    });
+    await tt.run(async (ctx) => {
+      // The real latest scheduling audit, one hour old: inside the 6h bound.
+      await ctx.db.insert("audit_logs", {
+        actorId: "system",
+        actorRole: "system",
+        action: "monitor_target_sale_window_scheduled",
+        entityType: "monitor_target",
+        entityId: "catalog_event_sched_7|goa|" + EVENT_YEAR + "-04-10|",
+        seq: 1,
+        createdAt: new Date(Date.parse(POLL_NOW) - 1 * 3_600_000).toISOString(),
+      });
+      // A dozen newer-inserted OTHER-action rows (resubscribe churn) — under
+      // an unfiltered entity page these would push the scheduling row out of
+      // the take() window and defeat the dedupe.
+      for (let seq = 2; seq <= 13; seq++) {
+        await ctx.db.insert("audit_logs", {
+          actorId: "system",
+          actorRole: "system",
+          action: "monitor_target_subscriber_count_changed",
+          entityType: "monitor_target",
+          entityId: "catalog_event_sched_7|goa|" + EVENT_YEAR + "-04-10|",
+          seq,
+          createdAt: new Date(Date.parse(POLL_NOW) - 40 * 60_000).toISOString(),
+        });
+      }
+    });
+
+    __setFetcher(fetcherReturning(page));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    expect(scheduled).toHaveLength(1); // deduped despite the crowding rows
   });
 
   test("a window beyond the event date is neither persisted nor marked window-driven", async () => {

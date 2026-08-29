@@ -848,18 +848,29 @@ export const rescheduleTarget = internalMutation({
         createdAt: nowIso,
       });
     } else if (args.saleWindowDriven === true && args.nextCheckAt !== target.nextCheckAt) {
-      const recentSame = await ctx.db
+      // Dedupe against the latest SCHEDULING audit, not the latest row of any
+      // action: an interleaved sale_window_set (a changed instant between
+      // chase polls) must not reset the once-per-6h bound (CodeRabbit on #46,
+      // kernel ff3e0a5a). by_entity_action_time orders scheduling rows by
+      // their action clock, so no insertion-ordered page can hide the true
+      // latest row behind interleaved actions or replay-stamped rows (Codex
+      // P2 + CodeRabbit on #52). Audit createdAt is always toISOString()
+      // UTC, whose lexicographic order is chronological.
+      const latestScheduled = await ctx.db
         .query("audit_logs")
-        .withIndex("by_entity", (q) =>
-          q.eq("entityType", "monitor_target").eq("entityId", target.collapseKey),
+        .withIndex("by_entity_action_time", (q) =>
+          q
+            .eq("entityType", "monitor_target")
+            .eq("entityId", target.collapseKey)
+            .eq("action", "monitor_target_sale_window_scheduled"),
         )
         .order("desc")
         .first();
       const isDuplicate =
-        recentSame?.action === "monitor_target_sale_window_scheduled" &&
+        latestScheduled !== null &&
         // Compare against the ACTION clock (args.now), not the host —
         // deterministic replays stamp rows with a past `now` (Codex P2).
-        Date.parse(recentSame.createdAt) >= Date.parse(nowIso) - 6 * 3600_000;
+        Date.parse(latestScheduled.createdAt) >= Date.parse(nowIso) - 6 * 3_600_000;
       if (!isDuplicate) {
         await appendWatcherAuditLog(ctx, {
           actorId: "system",
