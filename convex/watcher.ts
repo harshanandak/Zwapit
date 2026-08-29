@@ -859,14 +859,19 @@ export const rescheduleTarget = internalMutation({
         )
         .order("desc")
         .take(10);
-      const recentScheduled = recentRows.find(
-        (row) => row.action === "monitor_target_sale_window_scheduled",
-      );
+      const recentScheduledMs = recentRows
+        .filter((row) => row.action === "monitor_target_sale_window_scheduled")
+        .map((row) => Date.parse(row.createdAt))
+        .filter((ms) => Number.isFinite(ms))
+        .sort((a, b) => b - a)[0];
       const isDuplicate =
-        recentScheduled !== undefined &&
+        // Key the dedupe on the newest scheduled ACTION time, not insertion
+        // order: a delayed replay stamps a past `now` while landing last, so
+        // `find` on the insertion-ordered page could surface a stale clock.
+        recentScheduledMs !== undefined &&
         // Compare against the ACTION clock (args.now), not the host —
         // deterministic replays stamp rows with a past `now` (Codex P2).
-        Date.parse(recentScheduled.createdAt) >= Date.parse(nowIso) - 6 * 3600_000;
+        recentScheduledMs >= Date.parse(nowIso) - 6 * 3600_000;
       if (!isDuplicate) {
         await appendWatcherAuditLog(ctx, {
           actorId: "system",

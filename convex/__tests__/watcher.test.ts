@@ -1459,6 +1459,96 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     expect(scheduled).toHaveLength(1); // the 6h dedupe survives the interleaved set
   });
 
+  test("dedupe keys off the action clock, not insertion order (delayed replay)", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    const EVENT_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
+    const IST_OFFSET_MS = 5.5 * 3600_000;
+    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const label = (agoMs: number): string => {
+      const wall = new Date(Date.parse(POLL_NOW) - agoMs + IST_OFFSET_MS);
+      const h24 = wall.getUTCHours();
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      return (
+        DAYS[wall.getUTCDay()] + " " + wall.getUTCDate() + " " + MONTHS[wall.getUTCMonth()] + ", " +
+        wall.getUTCFullYear() + ", " + h12 + " " + (h24 < 12 ? "AM" : "PM")
+      );
+    };
+    const W = label(30 * 60_000); // window opened 30 min before the poll
+    // rescheduleTarget compares saleOpensAt as a STRING, and parseSaleStartIso
+    // emits zero-padded IST wall-clock ("...T07:00:00.000+05:30"). Build the
+    // seeded value in exactly that format so the poll's fresh parse equals the
+    // stored value and the dedupe branch (not the set branch) runs.
+    const wallIso = new Date(Date.parse(POLL_NOW) - 30 * 60_000 + IST_OFFSET_MS);
+    const W_ISO =
+      wallIso.getUTCFullYear() + "-" +
+      String(wallIso.getUTCMonth() + 1).padStart(2, "0") + "-" +
+      String(wallIso.getUTCDate()).padStart(2, "0") + "T" +
+      String(wallIso.getUTCHours()).padStart(2, "0") + ":00:00.000+05:30";
+    const page = "app-store\n\n### Replay Chase Event | Goa\n\nSales timeline\n\nGeneral Sale " + W;
+
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_6",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Replay Chase Event",
+        city: "goa",
+        startAt: EVENT_YEAR + "-04-10T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "replay-chase-event-buy-tickets",
+      });
+      await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_sched_6|goa|" + EVENT_YEAR + "-04-10|",
+        catalogItemId: "catalog_event_sched_6",
+        city: "goa",
+        date: EVENT_YEAR + "-04-10",
+        sources: ["district"],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2020-01-01T00:00:00.000Z",
+        saleOpensAt: W_ISO,
+      });
+      // Two prior scheduled audits, INSERTED out of action-clock order (each
+      // in its own transaction so insertion time is unambiguous): the
+      // newer-inserted row is a delayed replay stamped with a far-past clock.
+      await ctx.db.insert("audit_logs", {
+        actorId: "system",
+        actorRole: "system",
+        action: "monitor_target_sale_window_scheduled",
+        entityType: "monitor_target",
+        entityId: "catalog_event_sched_6|goa|" + EVENT_YEAR + "-04-10|",
+        seq: 1,
+        createdAt: new Date(Date.parse(POLL_NOW) - 1 * 3600_000).toISOString(), // real latest: inside 6h
+      });
+    });
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("audit_logs", {
+        actorId: "system",
+        actorRole: "system",
+        action: "monitor_target_sale_window_scheduled",
+        entityType: "monitor_target",
+        entityId: "catalog_event_sched_6|goa|" + EVENT_YEAR + "-04-10|",
+        seq: 2,
+        createdAt: new Date(Date.parse(POLL_NOW) - 7 * 3600_000).toISOString(), // stale replay clock
+      });
+    });
+
+    __setFetcher(async (urls: string[]) => ({
+      results: urls.map((url) => ({ url, content: page })),
+    }));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    // The fresh poll is within 6h of the real latest scheduled action (the
+    // -1h row), so it must be deduped — insertion order must not surface the
+    // stale -7h replay row instead.
+    expect(scheduled).toHaveLength(2);
+  });
+
   test("a window beyond the event date is neither persisted nor marked window-driven", async () => {
     const tt = t();
     const SALE_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
