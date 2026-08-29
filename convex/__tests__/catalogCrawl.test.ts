@@ -37,10 +37,10 @@ describe("chunked waves", () => {
   test("should split into waves of 25 when the delta has a partial tail", () => {
     const delta = Array.from({ length: 60 }, (_, i) => i);
     const waves = chunkIntoWaves(delta);
-    expect(waves.length).toBe(3);
-    expect(waves[0].length).toBe(25);
-    expect(waves[2].length).toBe(10);
-    expect(waves.flat().length).toBe(60);
+    expect(waves).toHaveLength(3);
+    expect(waves[0]).toHaveLength(25);
+    expect(waves[2]).toHaveLength(10);
+    expect(waves.flat()).toHaveLength(60);
   });
 
   test("should produce no waves when the delta is empty", () => {
