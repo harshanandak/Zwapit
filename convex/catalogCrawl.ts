@@ -58,11 +58,31 @@ function extractYear(pageTitle: string, content: string): string | undefined {
   return (pageTitle.match(/\((\d{4})\)/)?.[1] ?? content.match(/\b(19|20)\d{2}\b/)?.[0]) || undefined;
 }
 
+/**
+ * Selects the bootstrap or maintenance crawl limit.
+ * @param backlogCount Number of sitemap entries whose lastmod is not current.
+ * @param requestedLimit Positive integer requested by the caller.
+ * @returns At least 250 while the backlog exceeds one requested run; otherwise the requested limit.
+ * @example effectiveCrawlLimit(4_900, 25) // 250
+ * @remarks This additive helper does not validate inputs; the action validates the requested limit first.
+ */
 export function effectiveCrawlLimit(backlogCount: number, requestedLimit: number): number {
   return backlogCount > requestedLimit ? Math.max(requestedLimit, BOOTSTRAP_LIMIT) : requestedLimit;
 }
 
+/**
+ * Splits crawl inputs into sequential fetch waves without changing their order.
+ * @param items Inputs to split.
+ * @param size Maximum items per wave.
+ * @returns New arrays containing every input exactly once, or an empty array for no inputs.
+ * @throws `CRAWL_WAVE_SIZE_INVALID` when size is not a positive integer.
+ * @example chunkIntoWaves([1, 2, 3], 2) // [[1, 2], [3]]
+ * @remarks This additive helper does not mutate its input.
+ */
 export function chunkIntoWaves<T>(items: T[], size = CRAWL_WAVE_SIZE): T[][] {
+  if (!Number.isInteger(size) || size <= 0) {
+    throw new Error("CRAWL_WAVE_SIZE_INVALID: size must be a positive integer");
+  }
   const waves: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
     waves.push(items.slice(i, i + size));
