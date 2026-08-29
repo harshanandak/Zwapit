@@ -848,18 +848,25 @@ export const rescheduleTarget = internalMutation({
         createdAt: nowIso,
       });
     } else if (args.saleWindowDriven === true && args.nextCheckAt !== target.nextCheckAt) {
-      const recentSame = await ctx.db
+      // Dedupe against the latest SCHEDULING audit, not the latest row of any
+      // action: an interleaved sale_window_set (a changed instant between
+      // chase polls) must not reset the once-per-6h bound (CodeRabbit on #46,
+      // kernel ff3e0a5a). The window scan is bounded and sparse in the chase.
+      const recentRows = await ctx.db
         .query("audit_logs")
         .withIndex("by_entity", (q) =>
           q.eq("entityType", "monitor_target").eq("entityId", target.collapseKey),
         )
         .order("desc")
-        .first();
+        .take(10);
+      const recentScheduled = recentRows.find(
+        (row) => row.action === "monitor_target_sale_window_scheduled",
+      );
       const isDuplicate =
-        recentSame?.action === "monitor_target_sale_window_scheduled" &&
+        recentScheduled !== undefined &&
         // Compare against the ACTION clock (args.now), not the host —
         // deterministic replays stamp rows with a past `now` (Codex P2).
-        Date.parse(recentSame.createdAt) >= Date.parse(nowIso) - 6 * 3600_000;
+        Date.parse(recentScheduled.createdAt) >= Date.parse(nowIso) - 6 * 3600_000;
       if (!isDuplicate) {
         await appendWatcherAuditLog(ctx, {
           actorId: "system",

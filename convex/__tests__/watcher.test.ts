@@ -1383,6 +1383,82 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     expect(chasePolls.length).toBe(0);
   });
 
+  test("an interleaved sale_window_set cannot reset the 6h scheduled-audit dedupe", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    const EVENT_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
+    const IST_OFFSET_MS = 5.5 * 3600_000;
+    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    // parseSaleStartIso reads the label wall-clock as IST (+05:30), so build
+    // the label from (target instant + 5.5h) UTC fields. agoMs selects an
+    // instant inside the 24h chase lookback (opened → floor-chase regime).
+    const label = (agoMs: number): string => {
+      const wall = new Date(Date.parse(POLL_NOW) - agoMs + IST_OFFSET_MS);
+      const h24 = wall.getUTCHours();
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      return (
+        DAYS[wall.getUTCDay()] + " " + wall.getUTCDate() + " " + MONTHS[wall.getUTCMonth()] + ", " +
+        wall.getUTCFullYear() + ", " + h12 + " " + (h24 < 12 ? "AM" : "PM")
+      );
+    };
+    const W1 = label(2 * 3600_000);
+    const W2 = label(1 * 3600_000); // a DIFFERENT, more recent instant
+    const pageFor = (w: string): string =>
+      "app-store\n\nSelect Location\n\n### Interleave Chase Event | Goa\n\nDistrict Arena @ Terraform, Goa" +
+      "\n\nSales timeline\n\nGeneral Sale " + w;
+
+    await tt.run(async (ctx) => {
+      await ctx.db.insert("catalog_items", {
+        catalogKey: "catalog_event_sched_5",
+        kind: "live_event",
+        externalSource: "manual",
+        title: "Interleave Chase Event",
+        city: "goa",
+        startAt: EVENT_YEAR + "-04-10T15:00:00.000Z",
+        isActive: true,
+        lastSyncedAt: NOW,
+        districtEventSlug: "interleave-chase-event-buy-tickets",
+      });
+      await ctx.db.insert("monitor_targets", {
+        collapseKey: "catalog_event_sched_5|goa|" + EVENT_YEAR + "-04-10|",
+        catalogItemId: "catalog_event_sched_5",
+        city: "goa",
+        date: EVENT_YEAR + "-04-10",
+        sources: ["district"],
+        status: "watching",
+        subscriberCount: 1,
+        nextCheckAt: "2020-01-01T00:00:00.000Z",
+        // No stored window: poll 1 acquires W1 (set), poll 2 schedules from it.
+      });
+    });
+
+    let page = pageFor(W1);
+    __setFetcher(async (urls: string[]) => ({ results: urls.map((url) => ({ url, content: page })) }));
+    const reopen = async () =>
+      tt.run(async (ctx) => {
+        const tgt = (await ctx.db.query("monitor_targets").collect())[0];
+        if (tgt.status === "watching") await ctx.db.patch(tgt._id, { nextCheckAt: "2020-01-01T00:00:00.000Z" });
+      });
+
+    // Sequence: set(W1) → scheduled → set(W2) → scheduled within the same 6h
+    // window. The changed instant must not bypass the once-per-6h bound.
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    page = pageFor(W2);
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    await reopen();
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    const sets = audits.filter((a) => a.action === "monitor_target_sale_window_set");
+    expect(sets).toHaveLength(2); // both instants were acquired
+    expect(scheduled).toHaveLength(1); // the 6h dedupe survives the interleaved set
+  });
+
   test("a window beyond the event date is neither persisted nor marked window-driven", async () => {
     const tt = t();
     const SALE_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
