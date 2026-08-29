@@ -851,23 +851,28 @@ export const rescheduleTarget = internalMutation({
       // Dedupe against the latest SCHEDULING audit, not the latest row of any
       // action: an interleaved sale_window_set (a changed instant between
       // chase polls) must not reset the once-per-6h bound (CodeRabbit on #46,
-      // kernel ff3e0a5a). The window scan is bounded and sparse in the chase.
-      const recentRows = await ctx.db
+      // kernel ff3e0a5a). by_entity_action filters the page to scheduling rows
+      // so interleaved audit actions cannot crowd the recent row out (Codex
+      // P2 on #52); the small page still covers replay-stamped rows for the
+      // max-action-time selection below.
+      const recentScheduledRows = await ctx.db
         .query("audit_logs")
-        .withIndex("by_entity", (q) =>
-          q.eq("entityType", "monitor_target").eq("entityId", target.collapseKey),
+        .withIndex("by_entity_action", (q) =>
+          q
+            .eq("entityType", "monitor_target")
+            .eq("entityId", target.collapseKey)
+            .eq("action", "monitor_target_sale_window_scheduled"),
         )
         .order("desc")
-        .take(10);
-      const recentScheduledMs = recentRows
-        .filter((row) => row.action === "monitor_target_sale_window_scheduled")
+        .take(5);
+      const recentScheduledMs = recentScheduledRows
         .map((row) => Date.parse(row.createdAt))
         .filter((ms) => Number.isFinite(ms))
         .sort((a, b) => b - a)[0];
       const isDuplicate =
         // Key the dedupe on the newest scheduled ACTION time, not insertion
         // order: a delayed replay stamps a past `now` while landing last, so
-        // `find` on the insertion-ordered page could surface a stale clock.
+        // newest-inserted alone could surface a stale clock.
         recentScheduledMs !== undefined &&
         // Compare against the ACTION clock (args.now), not the host —
         // deterministic replays stamp rows with a past `now` (Codex P2).

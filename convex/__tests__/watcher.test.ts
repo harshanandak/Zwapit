@@ -1507,6 +1507,56 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     expect(scheduled).toHaveLength(2);
   });
 
+  test("interleaved audit actions cannot crowd the scheduled row out of the dedupe window", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    const EVENT_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;
+    const { iso: W_ISO } = istSaleWindow(POLL_NOW, 30 * 60_000);
+    const page = "app-store\n\n### Crowd Chase Event | Goa\n\nSales timeline\n\nGeneral Sale " +
+      istSaleWindow(POLL_NOW, 30 * 60_000).label;
+
+    await seedChaseEventFixture(tt, {
+      catalogKey: "catalog_event_sched_7",
+      slug: "crowd-chase-event-buy-tickets",
+      title: "Crowd Chase Event",
+      date: EVENT_YEAR + "-04-10",
+      saleOpensAt: W_ISO,
+    });
+    await tt.run(async (ctx) => {
+      // The real latest scheduling audit, one hour old: inside the 6h bound.
+      await ctx.db.insert("audit_logs", {
+        actorId: "system",
+        actorRole: "system",
+        action: "monitor_target_sale_window_scheduled",
+        entityType: "monitor_target",
+        entityId: "catalog_event_sched_7|goa|" + EVENT_YEAR + "-04-10|",
+        seq: 1,
+        createdAt: new Date(Date.parse(POLL_NOW) - 1 * 3_600_000).toISOString(),
+      });
+      // A dozen newer-inserted OTHER-action rows (resubscribe churn) — under
+      // an unfiltered entity page these would push the scheduling row out of
+      // the take() window and defeat the dedupe.
+      for (let seq = 2; seq <= 13; seq++) {
+        await ctx.db.insert("audit_logs", {
+          actorId: "system",
+          actorRole: "system",
+          action: "monitor_target_subscriber_count_changed",
+          entityType: "monitor_target",
+          entityId: "catalog_event_sched_7|goa|" + EVENT_YEAR + "-04-10|",
+          seq,
+          createdAt: new Date(Date.parse(POLL_NOW) - 40 * 60_000).toISOString(),
+        });
+      }
+    });
+
+    __setFetcher(fetcherReturning(page));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+
+    const audits = await tt.run(async (ctx) => ctx.db.query("audit_logs").collect());
+    const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
+    expect(scheduled).toHaveLength(1); // deduped despite the crowding rows
+  });
+
   test("a window beyond the event date is neither persisted nor marked window-driven", async () => {
     const tt = t();
     const SALE_YEAR = new Date(Date.parse(POLL_NOW)).getUTCFullYear() + 1;

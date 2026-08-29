@@ -581,5 +581,6 @@ export default defineSchema({
     createdAt: v.string(),
   })
     .index("by_entity", ["entityType", "entityId"])
+    .index("by_entity_action", ["entityType", "entityId", "action"])
     .index("by_seq", ["seq"]),
 });
