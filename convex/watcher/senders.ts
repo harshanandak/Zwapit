@@ -143,8 +143,11 @@ const webpushSender: Sender = async (message) => {
 };
 
 /**
- * Default injectable sender set. Both channels no-op safely until their env is
- * configured. watcher.ts uses these by default and tests inject mocks.
+ * Default injectable sender set. Both channels are DISABLED pending recipient
+ * and subscription wiring: emailSender has no recipient plumbing and
+ * webpushSender has no subscription store, so both return skipped regardless
+ * of environment configuration. Configuring keys alone does not activate
+ * them. watcher.ts uses these by default and tests inject mocks.
  */
 export const defaultSenders: Senders = {
   email: emailSender,

@@ -79,18 +79,23 @@ export const crawlBmsMovies = internalAction({
     hydrated: v.number(),
     created: v.number(),
     updated: v.number(),
+    // Delta items not hydrated this run (bootstrap visibility, kernel 2427bbc4).
+    remaining: v.number(),
   }),
   handler: async (
     ctx,
     args,
-  ): Promise<{ scanned: number; delta: number; hydrated: number; created: number; updated: number }> => {
+  ): Promise<{ scanned: number; delta: number; hydrated: number; created: number; updated: number; remaining: number }> => {
     // No-op safely when the key is unset (same contract as the watcher crons:
     // "read their secrets from Convex env and no-op safely when unset") so the
     // scheduled cron cannot error-spam on a deployment without egress configured.
     if (!process.env.PARALLEL_API_KEY) {
-      return { scanned: 0, delta: 0, hydrated: 0, created: 0, updated: 0 };
+      return { scanned: 0, delta: 0, hydrated: 0, created: 0, updated: 0, remaining: 0 };
     }
     const limit = args.limit ?? 10;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new Error("CRAWL_LIMIT_INVALID: limit must be a positive integer");
+    }
     const sitemap = await parallelExtract([MOVIES_SITEMAP]);
     const entities = parseParallelEntities(sitemap[MOVIES_SITEMAP]?.content ?? "", "movie");
 
@@ -99,36 +104,58 @@ export const crawlBmsMovies = internalAction({
       {},
     );
     const existing = new Map<string, string | undefined>(state.map((s) => [s.externalId, s.sourceLastmod]));
-    const delta = diffByLastmod(entities, existing).slice(0, limit);
+
+    // Adaptive bootstrap (kernel 2427bbc4): a cold catalog drains at 250/run
+    // (~20 days to fill ~4.9k movies) instead of 25/day (~196 days); warm
+    // catalogs keep the requested maintenance limit. Explicit limits still
+    // apply once warm; during bootstrap an explicit LARGER limit is honored.
+    const BOOTSTRAP_THRESHOLD = 500;
+    const BOOTSTRAP_LIMIT = 250;
+    const effectiveLimit =
+      state.length < BOOTSTRAP_THRESHOLD ? Math.max(limit, BOOTSTRAP_LIMIT) : limit;
+
+    const fullDelta = diffByLastmod(entities, existing);
+    const delta = fullDelta.slice(0, effectiveLimit);
     if (delta.length === 0) {
-      return { scanned: entities.length, delta: 0, hydrated: 0, created: 0, updated: 0 };
+      return { scanned: entities.length, delta: 0, hydrated: 0, created: 0, updated: 0, remaining: 0 };
     }
 
-    const pages = await parallelExtract(delta.map((e) => e.loc));
-    const movies = delta.map((e) => {
-      const page = pages[e.loc] ?? { content: "", title: "" };
-      const title = cleanTitle(page.title, page.content) || e.slug.replace(/-/g, " ");
-      const year = extractYear(page.title, page.content);
-      return {
-        externalId: e.eventCode,
-        catalogKey: bmsCatalogKey(e.eventCode),
-        title,
-        subtitle: year, // metadata-only v1; richer language/genre + posters later
-        sourceLastmod: e.lastmod,
-      };
-    });
+    // Chunked fetch waves: a mid-run failure preserves prior waves (paid
+    // egress is never discarded) and keeps Convex action wall-clock safe.
+    let hydrated = 0;
+    let created = 0;
+    let updated = 0;
+    for (let i = 0; i < delta.length; i += 25) {
+      const wave = delta.slice(i, i + 25);
+      const pages = await parallelExtract(wave.map((e) => e.loc));
+      const movies = wave.map((e) => {
+        const page = pages[e.loc] ?? { content: "", title: "" };
+        const title = cleanTitle(page.title, page.content) || e.slug.replace(/-/g, " ");
+        const year = extractYear(page.title, page.content);
+        return {
+          externalId: e.eventCode,
+          catalogKey: bmsCatalogKey(e.eventCode),
+          title,
+          subtitle: year, // metadata-only v1; richer language/genre + posters later
+          sourceLastmod: e.lastmod,
+        };
+      });
+      const res: { created: number; updated: number } = await ctx.runMutation(
+        internal.catalog.upsertMoviesFromSource,
+        { source: "bookmyshow", syncedAt: new Date().toISOString(), movies },
+      );
+      hydrated += movies.length;
+      created += res.created;
+      updated += res.updated;
+    }
 
-    const res: { created: number; updated: number } = await ctx.runMutation(internal.catalog.upsertMoviesFromSource, {
-      source: "bookmyshow",
-      syncedAt: new Date().toISOString(),
-      movies,
-    });
     return {
       scanned: entities.length,
       delta: delta.length,
-      hydrated: movies.length,
-      created: res.created,
-      updated: res.updated,
+      hydrated,
+      created,
+      updated,
+      remaining: Math.max(0, fullDelta.length - delta.length),
     };
   },
 });
