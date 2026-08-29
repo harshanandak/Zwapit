@@ -1493,8 +1493,14 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
           createdAt: new Date(Date.parse(POLL_NOW) - agoMs).toISOString(),
         });
       });
+    // Six prior scheduled audits, INSERTED out of action-clock order: the
+    // five newer-inserted rows are delayed replays stamped with far-past
+    // clocks. A page bounded by insertion order cannot contain the real
+    // latest row, so the dedupe must key off the action-time index.
     await insertScheduledAudit(1, 1 * 3_600_000); // real latest: inside 6h
-    await insertScheduledAudit(2, 7 * 3_600_000); // stale replay clock
+    for (let seq = 2; seq <= 6; seq++) {
+      await insertScheduledAudit(seq, 7 * 3_600_000); // stale replay clocks
+    }
 
     __setFetcher(fetcherReturning(page));
     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
@@ -1503,8 +1509,8 @@ describe("sale-window scheduling (kernel 9b317bb9)", () => {
     const scheduled = audits.filter((a) => a.action === "monitor_target_sale_window_scheduled");
     // The fresh poll is within 6h of the real latest scheduled action (the
     // -1h row), so it must be deduped — insertion order must not surface the
-    // stale -7h replay row instead.
-    expect(scheduled).toHaveLength(2);
+    // stale -7h replay rows instead. Six seeded rows remain, no new write.
+    expect(scheduled).toHaveLength(6); // 1 recent + 5 stale; no duplicate written
   });
 
   test("interleaved audit actions cannot crowd the scheduled row out of the dedupe window", async () => {
