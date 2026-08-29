@@ -871,7 +871,7 @@ export const rescheduleTarget = internalMutation({
         recentScheduledMs !== undefined &&
         // Compare against the ACTION clock (args.now), not the host —
         // deterministic replays stamp rows with a past `now` (Codex P2).
-        recentScheduledMs >= Date.parse(nowIso) - 6 * 3600_000;
+        recentScheduledMs >= Date.parse(nowIso) - 6 * 3_600_000;
       if (!isDuplicate) {
         await appendWatcherAuditLog(ctx, {
           actorId: "system",
