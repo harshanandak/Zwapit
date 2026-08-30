@@ -146,10 +146,10 @@ describe("seedDemoFixture — watcher demo slice", () => {
     }
   });
 
-  test("re-running reattaches an exact detached legacy seed want", async () => {
+  test("re-running restores a detached legacy want's known-live payoff and audit trail", async () => {
     const tt = t();
     await tt.mutation(api.seed.seedDemoFixture, {});
-    const originalWantId = await tt.run(async (ctx) => {
+    const seeded = await tt.run(async (ctx) => {
       const want = (await ctx.db.query("wants").collect()).find(
         (row) => row.catalogItemId === "catalog_movie_watcher_demo",
       )!;
@@ -162,8 +162,32 @@ describe("seedDemoFixture — watcher demo slice", () => {
         monitorTargetId: undefined,
         state: "expired",
       });
-      await ctx.db.patch(target._id, { subscriberCount: 0, status: "closed" });
-      return want._id;
+      await ctx.db.patch(target._id, {
+        subscriberCount: 0,
+        status: "closed",
+        lastSnapshotHash: "known-live-snapshot",
+      });
+      const eventId = await ctx.db.insert("availability_events", {
+        monitorTargetId: target._id,
+        source: "bms",
+        detectedAt: "2026-08-30T08:00:00.000Z",
+        theatresJson: "[]",
+        bookingUrl: "https://in.bookmyshow.com/demo",
+        snapshotHash: "known-live-snapshot",
+      });
+      const notificationId = await ctx.db.insert("notification_queue", {
+        userId: want.buyerId,
+        monitorTargetId: target._id,
+        availabilityEventId: eventId,
+        alertType: "availability",
+        channel: "email",
+        status: "sent",
+        dedupeKey: `${want.buyerId}|${target._id}|${eventId}|availability|email`,
+        createdAt: "2026-08-30T08:00:00.000Z",
+        sentAt: "2026-08-30T08:01:00.000Z",
+        attempts: 1,
+      });
+      return { wantId: want._id, notificationId };
     });
 
     await tt.mutation(api.seed.seedDemoFixture, {});
@@ -175,15 +199,29 @@ describe("seedDemoFixture — watcher demo slice", () => {
       target: (await ctx.db.query("monitor_targets").collect()).find(
         (row) => row.collapseKey === "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
       )!,
+      notification: await ctx.db.get(seeded.notificationId),
+      audits: await ctx.db.query("audit_logs").collect(),
     }));
     expect(state.wants).toHaveLength(1);
-    expect(state.wants[0]._id).toBe(originalWantId);
+    expect(state.wants[0]._id).toBe(seeded.wantId);
     expect(state.wants[0].wantKey).toBe("want_alert_legacy_detached");
     expect(state.wants[0].state).toBe("open");
     expect(state.wants[0].monitorTargetId).toBe(state.target._id);
     expect(state.wants[0].collapseKey).toBe(state.target.collapseKey);
-    expect(state.target.status).toBe("watching");
+    expect(state.target.status).toBe("live");
     expect(state.target.subscriberCount).toBe(1);
+    expect(state.notification?.status).toBe("pending");
+    expect(state.notification?.attempts).toBe(0);
+    expect(state.notification?.sentAt).toBeUndefined();
+    expect(state.audits.map((row) => row.action).sort()).toEqual([
+      "monitor_target_reopened",
+      "monitor_target_subscriber_count_changed",
+      "notification_requeued",
+      "want_rearmed",
+    ]);
+    expect(
+      state.audits.every((row) => row.actorId === "system" && row.actorRole === "system"),
+    ).toBe(true);
   });
 
   // events-phase2 T4: the events watcher relies on curated live_event catalog rows
