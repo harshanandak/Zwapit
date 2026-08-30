@@ -12,7 +12,7 @@ import { mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { createMockFixture } from "../src/lib/mock/fixtures";
-import { computeCollapseKey } from "./watcher/parse";
+import { buildAlertWantKey, collapseKeyForWant, computeCollapseKey } from "./watcher/parse";
 import { monitorTargetByCollapseKey } from "./model";
 
 type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
@@ -297,16 +297,21 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
     target = (await ctx.db.get(targetId))!;
   }
 
-  // 3. One linked alert (`wants` row), find-or-create on wantKey. Increment the
-  // shared subscriberCount ONLY when the want is first inserted.
-  const wantKey = `want_alert_${WATCHER_DEMO.buyerId}_${collapseKey}`.replace(
-    /[^a-zA-Z0-9_]/g,
-    "_",
-  );
-  const existingWant = await ctx.db
+  // 3. One linked alert (`wants` row). Exact occurrence fallback preserves
+  // idempotency for demo rows created under older public-key formats.
+  const wantKey = buildAlertWantKey(WATCHER_DEMO.buyerId, collapseKey);
+  let existingWant = await ctx.db
     .query("wants")
     .withIndex("by_key", (q) => q.eq("wantKey", wantKey))
-    .unique();
+    .first();
+  if (!existingWant) {
+    const buyerWants = await ctx.db
+      .query("wants")
+      .withIndex("by_buyer", (q) => q.eq("buyerId", WATCHER_DEMO.buyerId))
+      .order("asc")
+      .collect();
+    existingWant = buyerWants.find((want) => collapseKeyForWant(want) === collapseKey) ?? null;
+  }
   if (!existingWant) {
     inserted = true;
     await ctx.db.insert("wants", {
@@ -325,6 +330,7 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
       alertTypes: ["availability"],
       channels: ["email"],
       monitorTargetId: target._id,
+      collapseKey,
     });
     await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
   }

@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 
 import {
   AVAIL_STATUS_MAP,
+  buildAlertWantKey,
+  collapseKeyForWant,
   computeCollapseKey,
   eventShowMatchesTargetDate,
   isPastAlertDate,
@@ -172,6 +174,35 @@ describe("computeCollapseKey", () => {
         date: "2026-06-25",
       }),
     ).toBe("catalog_movie_1|mumbai|2026-06-25|");
+  });
+});
+
+describe("buildAlertWantKey", () => {
+  test("losslessly separates astral occurrence values and is disjoint from legacy keys", () => {
+    const buyerId = "app_buyer_a";
+    const first = buildAlertWantKey(buyerId, "catalog_movie_1|Delhi😀|2026-06-25|");
+    const second = buildAlertWantKey(buyerId, "catalog_movie_1|Delhi😁|2026-06-25|");
+
+    expect(first).not.toBe(second);
+    expect(first).toStartWith("want_alert_v2~");
+    expect(first).toContain("~");
+    expect(first).not.toBe("want_alert_app_buyer_a_catalog_movie_1_Delhi___2026_06_25_");
+
+    const loneHigh = buildAlertWantKey(buyerId, String.fromCharCode(0xd83d));
+    const loneLow = buildAlertWantKey(buyerId, String.fromCharCode(0xde00));
+    expect(loneHigh).not.toBe(loneLow);
+  });
+
+  test("reconstructs normalized legacy watch fields and rejects non-watcher rows", () => {
+    expect(
+      collapseKeyForWant({
+        catalogItemId: "catalog_movie_1",
+        watchCity: " mumbai ",
+        watchDate: " 2026-06-25 ",
+        watchFormat: " 2D ",
+      }),
+    ).toBe("catalog_movie_1|mumbai|2026-06-25|2D");
+    expect(collapseKeyForWant({ catalogItemId: "catalog_movie_1" })).toBeNull();
   });
 });
 
