@@ -333,6 +333,19 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
       collapseKey,
     });
     await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
+  } else if (!existingWant.monitorTargetId) {
+    await ctx.db.patch(existingWant._id, {
+      state: "open",
+      expiresAt: WATCHER_DEMO.date,
+      monitorTargetId: target._id,
+      collapseKey,
+    });
+    await ctx.db.patch(target._id, {
+      subscriberCount: target.subscriberCount + 1,
+      ...(target.status === "closed"
+        ? { status: "watching" as const, nextCheckAt: SEED_SYNCED_AT, failCount: 0 }
+        : {}),
+    });
   }
   return inserted;
 }

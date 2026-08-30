@@ -146,6 +146,46 @@ describe("seedDemoFixture — watcher demo slice", () => {
     }
   });
 
+  test("re-running reattaches an exact detached legacy seed want", async () => {
+    const tt = t();
+    await tt.mutation(api.seed.seedDemoFixture, {});
+    const originalWantId = await tt.run(async (ctx) => {
+      const want = (await ctx.db.query("wants").collect()).find(
+        (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+      )!;
+      const target = (await ctx.db.query("monitor_targets").collect()).find(
+        (row) => row.collapseKey === "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+      )!;
+      await ctx.db.patch(want._id, {
+        wantKey: "want_alert_legacy_detached",
+        collapseKey: undefined,
+        monitorTargetId: undefined,
+        state: "expired",
+      });
+      await ctx.db.patch(target._id, { subscriberCount: 0, status: "closed" });
+      return want._id;
+    });
+
+    await tt.mutation(api.seed.seedDemoFixture, {});
+
+    const state = await tt.run(async (ctx) => ({
+      wants: (await ctx.db.query("wants").collect()).filter(
+        (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+      ),
+      target: (await ctx.db.query("monitor_targets").collect()).find(
+        (row) => row.collapseKey === "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+      )!,
+    }));
+    expect(state.wants).toHaveLength(1);
+    expect(state.wants[0]._id).toBe(originalWantId);
+    expect(state.wants[0].wantKey).toBe("want_alert_legacy_detached");
+    expect(state.wants[0].state).toBe("open");
+    expect(state.wants[0].monitorTargetId).toBe(state.target._id);
+    expect(state.wants[0].collapseKey).toBe(state.target.collapseKey);
+    expect(state.target.status).toBe("watching");
+    expect(state.target.subscriberCount).toBe(1);
+  });
+
   // events-phase2 T4: the events watcher relies on curated live_event catalog rows
   // (no BMS/District codes → createAlert yields a curated, sources:[] target). Lock
   // that contract so a later edit (e.g. adding source codes) can't silently break
