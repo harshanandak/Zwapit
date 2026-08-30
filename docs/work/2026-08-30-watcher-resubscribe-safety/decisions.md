@@ -15,7 +15,7 @@ same outbox row only after `sent` or terminal `failed`; preserve delivery histor
 
 New keys use a `want_alert_v2~...~...` base-36 code-point encoding whose token and
 tuple delimiters are disjoint. `createAlert` and fresh demo seeds share the helper;
-the seed retains an explicit lookup for its known sanitize-only legacy key.
+the seed uses the same exact-occurrence fallback to preserve every legacy key format.
 
 ## D4: no destructive duplicate cleanup
 

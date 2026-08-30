@@ -1,6 +1,6 @@
 # Watcher resubscribe safety design
 
-Status: revised after cross-model review round 1
+Status: approved at 9/10 after cross-model review round 2
 
 ## Problem
 
