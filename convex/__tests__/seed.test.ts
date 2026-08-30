@@ -146,7 +146,7 @@ describe("seedDemoFixture — watcher demo slice", () => {
     }
   });
 
-  test("re-running restores a detached legacy want's known-live payoff and audit trail", async () => {
+  test("re-running never reattaches a detached legacy want or requeues its payoff", async () => {
     const tt = t();
     await tt.mutation(api.seed.seedDemoFixture, {});
     const seeded = await tt.run(async (ctx) => {
@@ -205,23 +205,15 @@ describe("seedDemoFixture — watcher demo slice", () => {
     expect(state.wants).toHaveLength(1);
     expect(state.wants[0]._id).toBe(seeded.wantId);
     expect(state.wants[0].wantKey).toBe("want_alert_legacy_detached");
-    expect(state.wants[0].state).toBe("open");
-    expect(state.wants[0].monitorTargetId).toBe(state.target._id);
-    expect(state.wants[0].collapseKey).toBe(state.target.collapseKey);
-    expect(state.target.status).toBe("live");
-    expect(state.target.subscriberCount).toBe(1);
-    expect(state.notification?.status).toBe("pending");
-    expect(state.notification?.attempts).toBe(0);
-    expect(state.notification?.sentAt).toBeUndefined();
-    expect(state.audits.map((row) => row.action).sort()).toEqual([
-      "monitor_target_reopened",
-      "monitor_target_subscriber_count_changed",
-      "notification_requeued",
-      "want_rearmed",
-    ]);
-    expect(
-      state.audits.every((row) => row.actorId === "system" && row.actorRole === "system"),
-    ).toBe(true);
+    expect(state.wants[0].state).toBe("expired");
+    expect(state.wants[0].monitorTargetId).toBeUndefined();
+    expect(state.wants[0].collapseKey).toBeUndefined();
+    expect(state.target.status).toBe("closed");
+    expect(state.target.subscriberCount).toBe(0);
+    expect(state.notification?.status).toBe("sent");
+    expect(state.notification?.attempts).toBe(1);
+    expect(state.notification?.sentAt).toBe("2026-08-30T08:01:00.000Z");
+    expect(state.audits).toEqual([]);
   });
 
   // events-phase2 T4: the events watcher relies on curated live_event catalog rows

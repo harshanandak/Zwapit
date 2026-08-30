@@ -676,14 +676,11 @@ export const markEventAvailable = internalMutation({
  * explicit reattachment may requeue terminal rows for that want only. Returns how
  * many NEW rows were inserted (requeues are not counted).
  */
-export async function enqueueForEvent(
+async function enqueueForEvent(
   ctx: MutationCtx,
   availabilityEventId: Id<"availability_events"> | string,
   nowIso: string,
-  options?: {
-    reattachedWantId?: Id<"wants">;
-    requeueActor?: { actorId: string; actorRole: "buyer" | "system" };
-  },
+  options?: { reattachedWantId?: Id<"wants"> },
 ): Promise<number> {
   const event = await ctx.db.get(availabilityEventId as Id<"availability_events">);
   if (!event) return 0;
@@ -723,8 +720,8 @@ export async function enqueueForEvent(
             claimedAt: undefined,
           });
           await appendWatcherAuditLog(ctx, {
-            actorId: options?.requeueActor?.actorId ?? want.buyerId,
-            actorRole: options?.requeueActor?.actorRole ?? "buyer",
+            actorId: want.buyerId,
+            actorRole: "buyer",
             action: "notification_requeued",
             entityType: "notification",
             entityId: key,

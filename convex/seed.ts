@@ -5,16 +5,15 @@
 // Orders) can read/write through Convex without changing what the user sees.
 //
 // Idempotent by public demo keys: re-running `seedDemoFixture` never creates a
-// duplicate user/listing/order/transfer task/issue/source rule. Initial fixture
-// rows do not synthesize historical audits; repair transitions append live audits.
+// duplicate user/listing/order/transfer task/issue/source rule. Audit logs are
+// intentionally NOT seeded — they are append-only from the transition mutations.
 
 import { mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { createMockFixture } from "../src/lib/mock/fixtures";
 import { buildAlertWantKey, collapseKeyForWant, computeCollapseKey } from "./watcher/parse";
-import { appendWatcherAuditLog, monitorTargetByCollapseKey } from "./model";
-import { enqueueForEvent } from "./watcher";
+import { monitorTargetByCollapseKey } from "./model";
 
 type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
 
@@ -311,6 +310,8 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
       .withIndex("by_buyer", (q) => q.eq("buyerId", WATCHER_DEMO.buyerId))
       .order("asc")
       .collect();
+    // Detached matches still count as existing: this public loader seed must
+    // never rearm a request or re-deliver an alert on the buyer's behalf.
     existingWant = buyerWants.find((want) => collapseKeyForWant(want) === collapseKey) ?? null;
   }
   if (!existingWant) {
@@ -334,69 +335,6 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
       collapseKey,
     });
     await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
-  } else if (!existingWant.monitorTargetId) {
-    const reattachedAt = new Date().toISOString();
-    let nextTargetStatus = target.status;
-    if (target.status === "closed") {
-      nextTargetStatus = target.lastSnapshotHash ? "live" : "watching";
-    }
-    await ctx.db.patch(existingWant._id, {
-      state: "open",
-      expiresAt: WATCHER_DEMO.date,
-      monitorTargetId: target._id,
-      collapseKey,
-    });
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      actorRole: "system",
-      action: "want_rearmed",
-      entityType: "want",
-      entityId: existingWant.wantKey,
-      fromState: existingWant.state,
-      toState: "open",
-      createdAt: reattachedAt,
-    });
-    await ctx.db.patch(target._id, {
-      subscriberCount: target.subscriberCount + 1,
-      ...(target.status === "closed"
-        ? { status: nextTargetStatus, nextCheckAt: reattachedAt, failCount: 0 }
-        : {}),
-    });
-    await appendWatcherAuditLog(ctx, {
-      actorId: "system",
-      actorRole: "system",
-      action: "monitor_target_subscriber_count_changed",
-      entityType: "monitor_target",
-      entityId: collapseKey,
-      fromState: String(target.subscriberCount),
-      toState: String(target.subscriberCount + 1),
-      createdAt: reattachedAt,
-    });
-    if (target.status === "closed") {
-      await appendWatcherAuditLog(ctx, {
-        actorId: "system",
-        actorRole: "system",
-        action: "monitor_target_reopened",
-        entityType: "monitor_target",
-        entityId: collapseKey,
-        fromState: "closed",
-        toState: nextTargetStatus,
-        createdAt: reattachedAt,
-      });
-    }
-    if (nextTargetStatus === "live") {
-      const availabilityEvent = await ctx.db
-        .query("availability_events")
-        .withIndex("by_target", (q) => q.eq("monitorTargetId", target._id))
-        .order("desc")
-        .first();
-      if (availabilityEvent) {
-        await enqueueForEvent(ctx, availabilityEvent._id, reattachedAt, {
-          reattachedWantId: existingWant._id,
-          requeueActor: { actorId: "system", actorRole: "system" },
-        });
-      }
-    }
   }
   return inserted;
 }
