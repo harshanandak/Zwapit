@@ -39,6 +39,12 @@ const NOW = "2026-06-22T10:00:00.000Z";
 const POLL_NOW = new Date(Date.now() + 10 * 60_000).toISOString();
 // Alert watch date: always ~30 days ahead so fixtures never trip WATCH_DATE_IN_PAST.
 const WATCH_DATE = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+const MOVIE_ALERT_ARGS = {
+  catalogItemId: "catalog_movie_1",
+  city: "mumbai",
+  date: WATCH_DATE,
+  format: "2D",
+};
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -1142,12 +1148,7 @@ const PAST_EXPIRY_NOW = new Date(Date.now() + 365 * 86_400_000).toISOString();
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
     await seedMovie(tt);
-    const args = {
-      catalogItemId: "catalog_movie_1",
-      city: "mumbai",
-      date: WATCH_DATE,
-      format: "2D",
-    };
+    const args = MOVIE_ALERT_ARGS;
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
     await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
 
@@ -1644,12 +1645,7 @@ describe("createAlert � want-write audits (gh#41)", () => {
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
     await seedMovie(tt);
-    const args = {
-      catalogItemId: "catalog_movie_1",
-      city: "mumbai",
-      date: WATCH_DATE,
-      format: "2D",
-    };
+    const args = MOVIE_ALERT_ARGS;
 
     // Buyer A subscribes; buyer B joins; buyer A re-arms.
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
@@ -1730,60 +1726,42 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     expect(target.subscriberCount).toBe(1);
   });
 
-  test("lossy key collision does NOT cross-attach between distinct occurrences", async () => {
+  test("astral city values on the same catalog occurrence get distinct public keys", async () => {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
-    // Two catalog items whose cities differ only by -/_ so the SANITIZED
-    // candidate keys collide while collapse keys stay distinct.
-    await tt.run(async (ctx) => {
-      await ctx.db.insert("catalog_items", {
-        catalogKey: "catalog_movie_dup_a",
-        kind: "movie",
-        externalSource: "manual",
-        title: "Dup A",
-        city: "mumbai-east",
-        bmsEventCode: "ETDUP00001",
-        bmsRegionCode: "MUMBAI",
-        isActive: true,
-        lastSyncedAt: NOW,
-      });
-      await ctx.db.insert("catalog_items", {
-        catalogKey: "catalog_movie_dup_b",
-        kind: "movie",
-        externalSource: "manual",
-        title: "Dup B",
-        city: "mumbai_east",
-        bmsEventCode: "ETDUP00002",
-        bmsRegionCode: "MUMBAI",
-        isActive: true,
-        lastSyncedAt: NOW,
-      });
-    });
+    await seedMovie(tt);
 
-    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
-      catalogItemId: "catalog_movie_dup_a",
-      city: "mumbai-east",
+    const first = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "Delhi😀",
       date: WATCH_DATE,
     });
-    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
-      catalogItemId: "catalog_movie_dup_b",
-      city: "mumbai_east",
+    const second = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "Delhi😁",
       date: WATCH_DATE,
     });
 
-    const wants = await tt.run(async (ctx) => ({
+    expect(first.wantKey).not.toBe(second.wantKey);
+    await expect(
+      tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey: first.wantKey }),
+    ).resolves.toMatchObject({ status: "watching" });
+    await expect(
+      tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey: second.wantKey }),
+    ).resolves.toMatchObject({ status: "watching" });
+
+    const state = await tt.run(async (ctx) => ({
       rows: await ctx.db.query("wants").collect(),
       targets: await ctx.db.query("monitor_targets").collect(),
     }));
-    expect(wants.rows).toHaveLength(2); // distinct occurrences stay distinct
-    const attachedA = wants.rows.find((w) => w.catalogItemId === "catalog_movie_dup_a")!;
-    const attachedB = wants.rows.find((w) => w.catalogItemId === "catalog_movie_dup_b")!;
-    expect(attachedA.monitorTargetId).not.toBe(attachedB.monitorTargetId ?? attachedA.monitorTargetId);
-    expect(wants.targets).toHaveLength(2);
+    expect(state.rows).toHaveLength(2);
+    expect(new Set(state.rows.map((row) => row.wantKey)).size).toBe(2);
+    expect(state.targets.map((target) => target.city).sort()).toEqual(
+      ["Delhi😀", "Delhi😁"].sort(),
+    );
   });
-});
 
-  test("a closed target with a known payoff reopens LIVE and notifies the reattached buyer", async () => {
+  async function assertDetachedLegacyWantRearms(keepCollapseKey: boolean): Promise<void> {
     const tt = t();
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedMovie(tt);
@@ -1792,30 +1770,244 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
       city: "mumbai",
       date: WATCH_DATE,
       format: "2D",
-      channels: ["email" as const],
+    };
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.run(async (ctx) => {
+      const want = (await ctx.db.query("wants").collect())[0];
+      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z" });
+    });
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+    const legacyKey = keepCollapseKey
+      ? "want_alert_legacy_current_hash"
+      : "want_alert_legacy_pre_hash";
+    await tt.run(async (ctx) => {
+      const want = (await ctx.db.query("wants").collect())[0];
+      await ctx.db.patch(want._id, {
+        wantKey: legacyKey,
+        ...(keepCollapseKey ? {} : { collapseKey: undefined }),
+      });
+    });
+
+    const rearmed = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const state = await tt.run(async (ctx) => ({
+      wants: await ctx.db.query("wants").collect(),
+      target: (await ctx.db.query("monitor_targets").collect())[0],
+    }));
+    expect(rearmed.wantKey).toBe(legacyKey);
+    expect(state.wants).toHaveLength(1);
+    expect(state.wants[0].state).toBe("open");
+    expect(state.wants[0].monitorTargetId).toBe(state.target._id);
+    expect(state.target.subscriberCount).toBe(1);
+    await expect(
+      tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey: legacyKey }),
+    ).resolves.toMatchObject({ status: state.target.status });
+  }
+
+  test("detached current-hash want is found by its exact persisted collapse key", async () => {
+    await assertDetachedLegacyWantRearms(true);
+  });
+
+  test("detached pre-hash want reconstructs its exact occurrence from watch fields", async () => {
+    await assertDetachedLegacyWantRearms(false);
+  });
+
+  test("legacy fallback does not reuse a detached want for another occurrence", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "pune",
+      date: WATCH_DATE,
+      format: "2D",
+    });
+    await tt.run(async (ctx) => {
+      const want = (await ctx.db.query("wants").collect())[0];
+      await ctx.db.patch(want._id, {
+        wantKey: "want_alert_legacy_other_occurrence",
+        collapseKey: undefined,
+        expiresAt: "2020-01-01T00:00:00.000Z",
+      });
+    });
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+
+    const created = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: WATCH_DATE,
+      format: "2D",
+    });
+    const wants = await tt.run((ctx) => ctx.db.query("wants").collect());
+    expect(wants).toHaveLength(2);
+    expect(created.wantKey).not.toBe("want_alert_legacy_other_occurrence");
+    expect(wants.find((want) => want.wantKey === "want_alert_legacy_other_occurrence")?.state).toBe(
+      "expired",
+    );
+  });
+
+  test("legacy fallback never reuses a non-watcher request", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    await tt.run((ctx) =>
+      ctx.db.insert("wants", {
+        wantKey: "want_demand_only",
+        buyerId: APP_A,
+        catalogItemId: "catalog_movie_1",
+        category: "movie_ticket",
+        quantity: 1,
+        maxPricePerUnit: 500,
+        state: "open",
+        expiresAt: WATCH_DATE,
+        createdAt: NOW,
+      }),
+    );
+
+    const created = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: WATCH_DATE,
+      format: "2D",
+    });
+    const wants = await tt.run((ctx) => ctx.db.query("wants").collect());
+    expect(wants).toHaveLength(2);
+    expect(created.wantKey).not.toBe("want_demand_only");
+  });
+});
+
+  test("a closed known-live target requeues terminal rows without disturbing active delivery", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedMovie(tt);
+    const args = {
+      catalogItemId: "catalog_movie_1",
+      city: "mumbai",
+      date: WATCH_DATE,
+      format: "2D",
+      alertTypes: ["availability" as const, "last_minute" as const],
+      channels: ["email" as const, "web_push" as const],
     };
 
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
-    // Simulate a full lifecycle: live detection, then last-subscriber expiry closes it.
     __setFetcher(fetcherReturning(openBmsJson()));
     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
-    const liveTarget = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
-    expect(liveTarget.status).toBe("live");
-    // Time-shift the want into the expiry window before closing.
-    await tt.run(async (ctx) => {
+    const seeded = await tt.run(async (ctx) => {
       const want = (await ctx.db.query("wants").collect())[0];
-      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" });
-    });    await tt.run(async (ctx) => { const want = (await ctx.db.query("wants").collect())[0]; await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" }); });    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
-    expect(closed.status).toBe("closed");
+      const rows = (await ctx.db.query("notification_queue").collect()).sort((a, b) =>
+        a.dedupeKey.localeCompare(b.dedupeKey),
+      );
+      expect(rows).toHaveLength(4);
+      await ctx.db.patch(rows[0]._id, {
+        status: "sent",
+        attempts: 2,
+        sentAt: POLL_NOW,
+        claimedAt: POLL_NOW,
+      });
+      await ctx.db.patch(rows[1]._id, {
+        status: "failed",
+        attempts: 3,
+        claimedAt: POLL_NOW,
+      });
+      await ctx.db.patch(rows[2]._id, { status: "pending", attempts: 1 });
+      await ctx.db.patch(rows[3]._id, {
+        status: "sending",
+        attempts: 1,
+        claimedAt: POLL_NOW,
+      });
+      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z" });
+      const event = (await ctx.db.query("availability_events").first())!;
+      return {
+        ids: rows.map((row) => row._id),
+        eventId: event._id,
+      };
+    });
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+    expect(
+      await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0].status),
+    ).toBe("closed");
 
-    // Reattach: snapshot hash survives, so reopen must restore LIVE + deliver.
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
-    const { target, notifs } = await tt.run(async (ctx) => ({
+    const state = await tt.run(async (ctx) => ({
       target: (await ctx.db.query("monitor_targets").collect())[0],
-      notifs: await ctx.db.query("notification_queue").collect(),
+      rows: await Promise.all(seeded.ids.map((id) => ctx.db.get(id))),
+      audits: (await ctx.db.query("audit_logs").collect()).filter(
+        (row) => row.action === "notification_requeued",
+      ),
     }));
-    expect(target.status).toBe("live");
-    expect(notifs.length).toBeGreaterThan(0); // payoff delivered, not stranded
+    expect(state.target.status).toBe("live");
+    expect(state.rows.map((row) => row?.status)).toEqual([
+      "pending",
+      "pending",
+      "pending",
+      "sending",
+    ]);
+    expect(state.rows[0]).toMatchObject({ attempts: 0 });
+    expect(state.rows[0]?.sentAt).toBeUndefined();
+    expect(state.rows[0]?.claimedAt).toBeUndefined();
+    expect(state.rows[1]).toMatchObject({ attempts: 0 });
+    expect(state.rows[1]?.claimedAt).toBeUndefined();
+    expect(state.rows[2]).toMatchObject({ attempts: 1 });
+    expect(state.rows[3]).toMatchObject({ attempts: 1, claimedAt: POLL_NOW });
+    expect(state.audits).toHaveLength(2);
+    expect(state.audits.every((row) => row.actorId === APP_A && row.actorRole === "buyer")).toBe(
+      true,
+    );
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const auditCount = await tt.run(async (ctx) =>
+      (await ctx.db.query("audit_logs").collect()).filter(
+        (row) => row.action === "notification_requeued",
+      ).length,
+    );
+    expect(auditCount).toBe(2);
+
+    await tt.run((ctx) => ctx.db.patch(seeded.ids[0], { status: "sent" }));
+    await tt.mutation(internal.watcher.enqueueNotifications, {
+      availabilityEventId: seeded.eventId,
+      nowIso: POLL_NOW,
+    });
+    expect(await tt.run(async (ctx) => (await ctx.db.get(seeded.ids[0]))?.status)).toBe("sent");
+  });
+
+  test("reattaching while another buyer keeps the target live requeues only that buyer", async () => {
+    const tt = t();
+    await seedUser(tt, APP_A, BUYER_A.subject);
+    await seedUser(tt, APP_B, BUYER_B.subject);
+    await seedMovie(tt);
+    const args = MOVIE_ALERT_ARGS;
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
+    __setFetcher(fetcherReturning(openBmsJson()));
+    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+    const ids = await tt.run(async (ctx) => {
+      const wants = await ctx.db.query("wants").collect();
+      const rows = await ctx.db.query("notification_queue").collect();
+      const wantA = wants.find((row) => row.buyerId === APP_A)!;
+      const rowA = rows.find((row) => row.userId === APP_A)!;
+      const rowB = rows.find((row) => row.userId === APP_B)!;
+      await ctx.db.patch(rowA._id, { status: "sent", sentAt: POLL_NOW, attempts: 1 });
+      await ctx.db.patch(rowB._id, { status: "sent", sentAt: POLL_NOW, attempts: 1 });
+      await ctx.db.patch(wantA._id, { expiresAt: "2020-01-01T00:00:00.000Z" });
+      return { rowA: rowA._id, rowB: rowB._id };
+    });
+    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
+    expect(
+      await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0].status),
+    ).toBe("live");
+
+    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+    const state = await tt.run(async (ctx) => ({
+      rowA: await ctx.db.get(ids.rowA),
+      rowB: await ctx.db.get(ids.rowB),
+      audits: (await ctx.db.query("audit_logs").collect()).filter(
+        (row) => row.action === "notification_requeued",
+      ),
+    }));
+    expect(state.rowA).toMatchObject({ status: "pending", attempts: 0 });
+    expect(state.rowA?.sentAt).toBeUndefined();
+    expect(state.rowB).toMatchObject({ status: "sent", attempts: 1 });
+    expect(state.audits).toHaveLength(1);
+    expect(state.audits[0]).toMatchObject({ actorId: APP_A, actorRole: "buyer" });
   });
 
   test("createAlert rejects a PAST watch date at the mutation surface (gh#41 sibling)", async () => {

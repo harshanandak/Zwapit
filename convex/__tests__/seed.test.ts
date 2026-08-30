@@ -67,6 +67,10 @@ describe("seedDemoFixture — watcher demo slice", () => {
     expect(want?.watchCity).toBe("mumbai");
     expect(want?.watchDate).toBe("2026-12-19");
     expect(want?.watchFormat).toBe("IMAX 3D");
+    expect(want?.wantKey).toStartWith("want_alert_v2~");
+    expect(want?.collapseKey).toBe(
+      "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+    );
   });
 
   test("re-running seedDemoFixture does NOT duplicate the target or inflate subscriberCount", async () => {
@@ -99,6 +103,117 @@ describe("seedDemoFixture — watcher demo slice", () => {
     expect(targets).toHaveLength(1);
     expect(targets[0].subscriberCount).toBe(1);
     expect(wants).toHaveLength(1);
+  });
+
+  test("re-running preserves an exact legacy seed want regardless of its old key format", async () => {
+    for (const legacy of [
+      { key: "want_alert_legacy_hashed", keepCollapseKey: true },
+      { key: "want_alert_legacy_sanitized", keepCollapseKey: false },
+    ]) {
+      const tt = t();
+      await tt.mutation(api.seed.seedDemoFixture, {});
+      await tt.run(async (ctx) => {
+        const want = (await ctx.db.query("wants").collect()).find(
+          (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+        )!;
+        await ctx.db.patch(want._id, {
+          wantKey: legacy.key,
+          ...(legacy.keepCollapseKey ? {} : { collapseKey: undefined }),
+        });
+      });
+
+      await tt.mutation(api.seed.seedDemoFixture, {});
+
+      const state = await tt.run(async (ctx) => ({
+        wants: (await ctx.db.query("wants").collect()).filter(
+          (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+        ),
+        target: (
+          await ctx.db
+            .query("monitor_targets")
+            .withIndex("by_collapse_key", (q) =>
+              q.eq(
+                "collapseKey",
+                "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+              ),
+            )
+            .unique()
+        )!,
+      }));
+      expect(state.wants).toHaveLength(1);
+      expect(state.wants[0].wantKey).toBe(legacy.key);
+      expect(state.target.subscriberCount).toBe(1);
+    }
+  });
+
+  test("re-running never reattaches a detached legacy want or requeues its payoff", async () => {
+    const tt = t();
+    await tt.mutation(api.seed.seedDemoFixture, {});
+    const seeded = await tt.run(async (ctx) => {
+      const want = (await ctx.db.query("wants").collect()).find(
+        (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+      )!;
+      const target = (await ctx.db.query("monitor_targets").collect()).find(
+        (row) => row.collapseKey === "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+      )!;
+      await ctx.db.patch(want._id, {
+        wantKey: "want_alert_legacy_detached",
+        collapseKey: undefined,
+        monitorTargetId: undefined,
+        state: "expired",
+      });
+      await ctx.db.patch(target._id, {
+        subscriberCount: 0,
+        status: "closed",
+        lastSnapshotHash: "known-live-snapshot",
+      });
+      const eventId = await ctx.db.insert("availability_events", {
+        monitorTargetId: target._id,
+        source: "bms",
+        detectedAt: "2026-08-30T08:00:00.000Z",
+        theatresJson: "[]",
+        bookingUrl: "https://in.bookmyshow.com/demo",
+        snapshotHash: "known-live-snapshot",
+      });
+      const notificationId = await ctx.db.insert("notification_queue", {
+        userId: want.buyerId,
+        monitorTargetId: target._id,
+        availabilityEventId: eventId,
+        alertType: "availability",
+        channel: "email",
+        status: "sent",
+        dedupeKey: `${want.buyerId}|${target._id}|${eventId}|availability|email`,
+        createdAt: "2026-08-30T08:00:00.000Z",
+        sentAt: "2026-08-30T08:01:00.000Z",
+        attempts: 1,
+      });
+      return { wantId: want._id, notificationId };
+    });
+
+    await tt.mutation(api.seed.seedDemoFixture, {});
+
+    const state = await tt.run(async (ctx) => ({
+      wants: (await ctx.db.query("wants").collect()).filter(
+        (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+      ),
+      target: (await ctx.db.query("monitor_targets").collect()).find(
+        (row) => row.collapseKey === "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+      )!,
+      notification: await ctx.db.get(seeded.notificationId),
+      audits: await ctx.db.query("audit_logs").collect(),
+    }));
+    expect(state.wants).toHaveLength(1);
+    expect(state.wants[0]._id).toBe(seeded.wantId);
+    expect(state.wants[0].wantKey).toBe("want_alert_legacy_detached");
+    expect(state.wants[0].state).toBe("expired");
+    expect(state.wants[0].monitorTargetId).toBeUndefined();
+    expect(state.wants[0].collapseKey).toBeUndefined();
+    expect(state.target.status).toBe("closed");
+    expect(state.target.subscriberCount).toBe(0);
+    expect(state.notification?.status).toBe("sent");
+    expect(state.notification?.attempts).toBe(1);
+    expect(state.notification?.sentAt).toBe("2026-08-30T08:01:00.000Z");
+    expect(state.audits).toEqual([]);
   });
 
   // events-phase2 T4: the events watcher relies on curated live_event catalog rows

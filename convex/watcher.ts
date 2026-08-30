@@ -46,6 +46,8 @@ import {
   defaultParallelFetch,
 } from "./watcher/adapters";
 import {
+  buildAlertWantKey,
+  collapseKeyForWant,
   computeCollapseKey,
   eventShowMatchesTargetDate,
   extractSaleOpensAt,
@@ -332,37 +334,32 @@ export const createAlert = mutation({
     const category = KIND_TO_CATEGORY[catalogItem.kind];
 
     // ---- find-or-create THIS buyer's want for the target (dedupe per buyer) ----
-    // The deterministic key can collide with an EXPIRED row of the same
-    // buyer+occurrence (resubscribe-after-expiry): subscribersForTarget misses
-    // it because expiry cleared monitorTargetId, so also look up by_key and
-    // REATTACH instead of inserting a duplicate-key second row (kernel
-    // 47f4dfb8). Convex has no unique constraint — by_key is lookup-only.
-    // Public key embeds a hash of the RAW collapse key: sanitization alone is
-    // lossy (mumbai-east / mumbai_east collide), and two distinct occurrences
-    // must never share one public key (Codex P1 Z8rW).
-    let keyHash = 0;
-    for (const ch of collapseKey) keyHash = (keyHash * 31 + ch.charCodeAt(0)) >>> 0;
-    const wantCandidateKey =
-      `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_") +
-      "_" +
-      keyHash.toString(36);
+    // The v2 key losslessly encodes the exact buyer/occurrence tuple. Old keys
+    // remain valid and are recovered by exact occurrence below.
+    const wantCandidateKey = buildAlertWantKey(buyerId, collapseKey);
     const subscribers = await subscribersForTarget(ctx, targetId);
     const byKeyRows = await ctx.db
       .query("wants")
       .withIndex("by_key", (q) => q.eq("wantKey", wantCandidateKey))
       .collect();
-    // Legacy rows (pre-collapseKey) match on key alone — their key was derived
-    // from this same occurrence's inputs at creation (Codex P1 backfill note);
-    // new rows must match exactly.
-    const existingForBuyer =
+    let existingForBuyer: Doc<"wants"> | undefined =
       subscribers.find((w) => w.buyerId === buyerId) ??
       byKeyRows.find(
-        (w) => w.buyerId === buyerId && (w.collapseKey ?? collapseKey) === collapseKey,
+        (w) => w.buyerId === buyerId && collapseKeyForWant(w) === collapseKey,
       );
+    if (!existingForBuyer) {
+      const buyerWants = await ctx.db
+        .query("wants")
+        .withIndex("by_buyer", (q) => q.eq("buyerId", buyerId))
+        .order("asc")
+        .collect();
+      existingForBuyer = buyerWants.find((want) => collapseKeyForWant(want) === collapseKey);
+    }
 
     let wantKey: string;
-    let isNewSubscriber = false;
     let newlyAttached = false;
+    let reattachedWantId: Id<"wants"> | undefined;
+    let effectiveTargetStatus = target.status;
     if (existingForBuyer) {
       const wasAttachedToThisTarget = existingForBuyer.monitorTargetId === targetId;
       await ctx.db.patch(existingForBuyer._id, {
@@ -395,14 +392,18 @@ export const createAlert = mutation({
         // restore live directly and let the late-subscriber enqueue deliver
         // the known payoff.
         newlyAttached = true;
-        const wasLiveBefore = target.status === "live";
+        reattachedWantId = existingForBuyer._id;
         const reopen = target.status === "closed";
-        const reopenToLive = reopen && Boolean(target.lastSnapshotHash);
+        let nextTargetStatus = target.status;
+        if (reopen) {
+          nextTargetStatus = target.lastSnapshotHash ? "live" : "watching";
+        }
+        effectiveTargetStatus = nextTargetStatus;
         await ctx.db.patch(target._id, {
           subscriberCount: target.subscriberCount + 1,
           ...(reopen
             ? {
-                status: reopenToLive ? ("live" as const) : ("watching" as const),
+                status: nextTargetStatus,
                 nextCheckAt: nowIso,
                 failCount: 0,
               }
@@ -426,20 +427,12 @@ export const createAlert = mutation({
             entityType: "monitor_target",
             entityId: collapseKey,
             fromState: "closed",
-            toState: reopenToLive ? "live" : "watching",
+            toState: nextTargetStatus,
             createdAt: nowIso,
           });
         }
-        if (reopenToLive && !wasLiveBefore) {
-          // Restore the live payoff for the reattached buyer immediately.
-          const lastEvent = await latestAvailabilityEvent(ctx, target._id ?? targetId);
-          if (lastEvent) {
-            await enqueueForEvent(ctx, lastEvent._id, nowIso);
-          }
-        }
       }
     } else {
-      isNewSubscriber = true;
       newlyAttached = true;
       wantKey = wantCandidateKey;
       await ctx.db.insert("wants", {
@@ -485,10 +478,10 @@ export const createAlert = mutation({
     }
 
     // Late subscriber on an already-live target → notify immediately from last event.
-    if (newlyAttached && target.status === "live") {
+    if (newlyAttached && effectiveTargetStatus === "live") {
       const lastEvent = await latestAvailabilityEvent(ctx, targetId);
       if (lastEvent) {
-        await enqueueForEvent(ctx, lastEvent._id, nowIso);
+        await enqueueForEvent(ctx, lastEvent._id, nowIso, { reattachedWantId });
       }
     }
 
@@ -679,13 +672,15 @@ export const markEventAvailable = internalMutation({
 /**
  * Shared enqueue core (used by enqueueNotifications + the createAlert late-subscriber
  * path). For a live availability_event, fan out one pending notification_queue row
- * per subscriber × channel × DELIVERED alertType, idempotent on dedupeKey. Returns
- * how many NEW rows were inserted.
+ * per subscriber × channel × DELIVERED alertType, idempotent on dedupeKey. An
+ * explicit reattachment may requeue terminal rows for that want only. Returns how
+ * many NEW rows were inserted (requeues are not counted).
  */
 async function enqueueForEvent(
   ctx: MutationCtx,
   availabilityEventId: Id<"availability_events"> | string,
   nowIso: string,
+  options?: { reattachedWantId?: Id<"wants"> },
 ): Promise<number> {
   const event = await ctx.db.get(availabilityEventId as Id<"availability_events">);
   if (!event) return 0;
@@ -700,33 +695,55 @@ async function enqueueForEvent(
   for (const want of subscribers) {
     const alertTypes = deliveredAlertTypesFor(want);
     const channels = channelsFor(want);
-    for (const alertType of alertTypes) {
-      for (const channel of channels) {
-        const key = dedupeKey({
-          userId: want.buyerId,
-          monitorTargetId,
-          availabilityEventId,
-          alertType,
-          channel,
-        });
-        const existing = await ctx.db
-          .query("notification_queue")
-          .withIndex("by_dedupe", (q) => q.eq("dedupeKey", key))
-          .unique();
-        if (existing) continue;
-        await ctx.db.insert("notification_queue", {
-          userId: want.buyerId,
-          monitorTargetId,
-          availabilityEventId,
-          alertType,
-          channel,
-          status: "pending",
-          dedupeKey: key,
-          createdAt: nowIso,
-        });
-        await auditNotification(ctx, key, "notification_enqueued", "pending", nowIso);
-        inserted += 1;
+    const deliveries = alertTypes.flatMap((alertType) =>
+      channels.map((channel) => ({ alertType, channel })),
+    );
+    for (const { alertType, channel } of deliveries) {
+      const key = dedupeKey({
+        userId: want.buyerId,
+        monitorTargetId,
+        availabilityEventId,
+        alertType,
+        channel,
+      });
+      const existing = await ctx.db
+        .query("notification_queue")
+        .withIndex("by_dedupe", (q) => q.eq("dedupeKey", key))
+        .unique();
+      if (existing) {
+        const canRequeue = options?.reattachedWantId === want._id;
+        if (canRequeue && (existing.status === "sent" || existing.status === "failed")) {
+          await ctx.db.patch(existing._id, {
+            status: "pending",
+            attempts: 0,
+            sentAt: undefined,
+            claimedAt: undefined,
+          });
+          await appendWatcherAuditLog(ctx, {
+            actorId: want.buyerId,
+            actorRole: "buyer",
+            action: "notification_requeued",
+            entityType: "notification",
+            entityId: key,
+            fromState: existing.status,
+            toState: "pending",
+            createdAt: nowIso,
+          });
+        }
+        continue;
       }
+      await ctx.db.insert("notification_queue", {
+        userId: want.buyerId,
+        monitorTargetId,
+        availabilityEventId,
+        alertType,
+        channel,
+        status: "pending",
+        dedupeKey: key,
+        createdAt: nowIso,
+      });
+      await auditNotification(ctx, key, "notification_enqueued", "pending", nowIso);
+      inserted += 1;
     }
   }
   return inserted;

@@ -556,6 +556,29 @@ export function computeCollapseKey(input: {
   return [input.catalogItemId, input.city, input.date, input.format ?? ""].join("|");
 }
 
+/** Collision-free public id for a buyer's exact watcher occurrence. */
+export function buildAlertWantKey(buyerId: string, collapseKey: string): string {
+  const encode = (value: string) =>
+    Array.from(value, (character) => character.codePointAt(0)!.toString(36)).join("-");
+  return `want_alert_v2~${encode(buyerId)}~${encode(collapseKey)}`;
+}
+
+/** Exact watcher occurrence for a stored want, including pre-collapseKey rows. */
+export function collapseKeyForWant(input: {
+  catalogItemId: string;
+  collapseKey?: string;
+  watchCity?: string;
+  watchDate?: string;
+  watchFormat?: string;
+}): string | null {
+  if (input.collapseKey) return input.collapseKey;
+  const city = input.watchCity?.trim();
+  const date = input.watchDate?.trim();
+  if (!city || !date) return null;
+  const format = input.watchFormat?.trim() || undefined;
+  return computeCollapseKey({ catalogItemId: input.catalogItemId, city, date, format });
+}
+
 const OFFICIAL_BOOKING_HOSTS = ["bookmyshow.com", "district.in"];
 
 /**
