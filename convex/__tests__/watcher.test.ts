@@ -39,6 +39,12 @@ const NOW = "2026-06-22T10:00:00.000Z";
 const POLL_NOW = new Date(Date.now() + 10 * 60_000).toISOString();
 // Alert watch date: always ~30 days ahead so fixtures never trip WATCH_DATE_IN_PAST.
 const WATCH_DATE = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+const MOVIE_ALERT_ARGS = {
+  catalogItemId: "catalog_movie_1",
+  city: "mumbai",
+  date: WATCH_DATE,
+  format: "2D",
+};
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -1142,12 +1148,7 @@ const PAST_EXPIRY_NOW = new Date(Date.now() + 365 * 86_400_000).toISOString();
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
     await seedMovie(tt);
-    const args = {
-      catalogItemId: "catalog_movie_1",
-      city: "mumbai",
-      date: WATCH_DATE,
-      format: "2D",
-    };
+    const args = MOVIE_ALERT_ARGS;
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
     await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
 
@@ -1644,12 +1645,7 @@ describe("createAlert � want-write audits (gh#41)", () => {
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
     await seedMovie(tt);
-    const args = {
-      catalogItemId: "catalog_movie_1",
-      city: "mumbai",
-      date: WATCH_DATE,
-      format: "2D",
-    };
+    const args = MOVIE_ALERT_ARGS;
 
     // Buyer A subscribes; buyer B joins; buyer A re-arms.
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
@@ -1978,12 +1974,7 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
     await seedUser(tt, APP_A, BUYER_A.subject);
     await seedUser(tt, APP_B, BUYER_B.subject);
     await seedMovie(tt);
-    const args = {
-      catalogItemId: "catalog_movie_1",
-      city: "mumbai",
-      date: WATCH_DATE,
-      format: "2D",
-    };
+    const args = MOVIE_ALERT_ARGS;
     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
     await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
     __setFetcher(fetcherReturning(openBmsJson()));

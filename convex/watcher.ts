@@ -394,13 +394,16 @@ export const createAlert = mutation({
         newlyAttached = true;
         reattachedWantId = existingForBuyer._id;
         const reopen = target.status === "closed";
-        const reopenToLive = reopen && Boolean(target.lastSnapshotHash);
-        effectiveTargetStatus = reopenToLive ? "live" : reopen ? "watching" : target.status;
+        let nextTargetStatus = target.status;
+        if (reopen) {
+          nextTargetStatus = target.lastSnapshotHash ? "live" : "watching";
+        }
+        effectiveTargetStatus = nextTargetStatus;
         await ctx.db.patch(target._id, {
           subscriberCount: target.subscriberCount + 1,
           ...(reopen
             ? {
-                status: reopenToLive ? ("live" as const) : ("watching" as const),
+                status: nextTargetStatus,
                 nextCheckAt: nowIso,
                 failCount: 0,
               }
@@ -424,7 +427,7 @@ export const createAlert = mutation({
             entityType: "monitor_target",
             entityId: collapseKey,
             fromState: "closed",
-            toState: reopenToLive ? "live" : "watching",
+            toState: nextTargetStatus,
             createdAt: nowIso,
           });
         }
@@ -692,54 +695,55 @@ async function enqueueForEvent(
   for (const want of subscribers) {
     const alertTypes = deliveredAlertTypesFor(want);
     const channels = channelsFor(want);
-    for (const alertType of alertTypes) {
-      for (const channel of channels) {
-        const key = dedupeKey({
-          userId: want.buyerId,
-          monitorTargetId,
-          availabilityEventId,
-          alertType,
-          channel,
-        });
-        const existing = await ctx.db
-          .query("notification_queue")
-          .withIndex("by_dedupe", (q) => q.eq("dedupeKey", key))
-          .unique();
-        if (existing) {
-          const canRequeue = options?.reattachedWantId === want._id;
-          if (canRequeue && (existing.status === "sent" || existing.status === "failed")) {
-            await ctx.db.patch(existing._id, {
-              status: "pending",
-              attempts: 0,
-              sentAt: undefined,
-              claimedAt: undefined,
-            });
-            await appendWatcherAuditLog(ctx, {
-              actorId: want.buyerId,
-              actorRole: "buyer",
-              action: "notification_requeued",
-              entityType: "notification",
-              entityId: key,
-              fromState: existing.status,
-              toState: "pending",
-              createdAt: nowIso,
-            });
-          }
-          continue;
+    const deliveries = alertTypes.flatMap((alertType) =>
+      channels.map((channel) => ({ alertType, channel })),
+    );
+    for (const { alertType, channel } of deliveries) {
+      const key = dedupeKey({
+        userId: want.buyerId,
+        monitorTargetId,
+        availabilityEventId,
+        alertType,
+        channel,
+      });
+      const existing = await ctx.db
+        .query("notification_queue")
+        .withIndex("by_dedupe", (q) => q.eq("dedupeKey", key))
+        .unique();
+      if (existing) {
+        const canRequeue = options?.reattachedWantId === want._id;
+        if (canRequeue && (existing.status === "sent" || existing.status === "failed")) {
+          await ctx.db.patch(existing._id, {
+            status: "pending",
+            attempts: 0,
+            sentAt: undefined,
+            claimedAt: undefined,
+          });
+          await appendWatcherAuditLog(ctx, {
+            actorId: want.buyerId,
+            actorRole: "buyer",
+            action: "notification_requeued",
+            entityType: "notification",
+            entityId: key,
+            fromState: existing.status,
+            toState: "pending",
+            createdAt: nowIso,
+          });
         }
-        await ctx.db.insert("notification_queue", {
-          userId: want.buyerId,
-          monitorTargetId,
-          availabilityEventId,
-          alertType,
-          channel,
-          status: "pending",
-          dedupeKey: key,
-          createdAt: nowIso,
-        });
-        await auditNotification(ctx, key, "notification_enqueued", "pending", nowIso);
-        inserted += 1;
+        continue;
       }
+      await ctx.db.insert("notification_queue", {
+        userId: want.buyerId,
+        monitorTargetId,
+        availabilityEventId,
+        alertType,
+        channel,
+        status: "pending",
+        dedupeKey: key,
+        createdAt: nowIso,
+      });
+      await auditNotification(ctx, key, "notification_enqueued", "pending", nowIso);
+      inserted += 1;
     }
   }
   return inserted;
