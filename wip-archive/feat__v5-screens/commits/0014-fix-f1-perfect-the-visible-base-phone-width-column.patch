@@ -1,0 +1,87 @@
+From bcf44804ff5daf08bda58c1db65b1918a464cee0 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 19:06:32 +0530
+Subject: [PATCH] =?UTF-8?q?fix(f1):=20perfect=20the=20visible=20base=20?=
+ =?UTF-8?q?=E2=80=94=20phone-width=20column,=20charcoal=20viewport,=20on-b?=
+ =?UTF-8?q?rand=20landing?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The T7 shell rebuild dropped the old max-w-md centering, so the shell + fixed
+nav/FAB stretched full-width on anything wider than a phone, and the viewport
+behind it showed the Tailwind violet, not v5 charcoal. Live-verified fixes (LOCK
+untouched, all in the .app-shell adaptation block):
+- .app-shell: max-width:448px + margin-inline:auto (full-width on phone, centered above)
+- .bnav/.fab: pinned to the centered column instead of the viewport
+- body: v5 charcoal --bg fills the viewport behind the column
+- index.astro: on-brand charcoal landing (Fraunces wordmark + ghost CTA) instead of the violet stub
+
+Verified at 375px and 760px: correct centering, no horizontal overflow, no console errors.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/pages/index.astro | 16 ++++++++++++----
+ src/styles/global.css | 10 ++++++++--
+ 2 files changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/src/pages/index.astro b/src/pages/index.astro
+index 3a704dd..d20d06a 100644
+--- a/src/pages/index.astro
++++ b/src/pages/index.astro
+@@ -3,9 +3,17 @@ import AppLayout from "../layouts/AppLayout.astro";
+ ---
+ 
+ <AppLayout title="Zwapit">
+-  <main data-route-id="/" class="mx-auto flex min-h-dvh max-w-md flex-col justify-center bg-background px-5 text-foreground">
+-    <h1 class="text-2xl font-semibold">Zwapit</h1>
+-    <p class="mt-2 text-sm text-muted-foreground">App entry placeholder.</p>
+-    <a class="mt-5 rounded-md bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm" href="/app/home">Open app</a>
++  <main data-route-id="/" class="app-shell" style="--acc:#8E7BC9">
++    <div class="app-content flex min-h-dvh flex-col justify-center gap-3">
++      <p class="text-[10.5px] font-bold uppercase tracking-[0.3em] text-[var(--bronze)]">
++        Protected tickets &amp; alerts
++      </p>
++      <h1 class="wordmark text-[42px] leading-none">Zwapit</h1>
++      <p class="max-w-[32ch] text-[13px] leading-relaxed text-[var(--dim)]">
++        Tell us what you want — we'll notify you the moment it's available, and protect
++        every payment.
++      </p>
++      <a class="btn btn-ghost mt-3 self-start" href="/app/home">Open app</a>
++    </div>
+   </main>
+ </AppLayout>
+diff --git a/src/styles/global.css b/src/styles/global.css
+index e0f3404..0e7b952 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -523,6 +523,9 @@
+    switch from position:absolute (inside the phone) to position:fixed (viewport),
+    honoring the notch via env(safe-area-inset-bottom). --acc is set per route. */
+ .app-shell{
++  max-width:448px;        /* phone-width column, centered (restores the old max-w-md) */
++  margin-inline:auto;
++  position:relative;
+   min-height:100vh; /* fallback for WebKit <15.4 / Chromium <108 (no dvh) */
+   min-height:100dvh;
+   background:
+@@ -531,11 +534,14 @@
+   color:var(--text);
+   font-family:var(--font-b);
+ }
+-.app-shell .bnav{position:fixed;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+-.app-shell .fab{position:fixed;bottom:calc(88px + env(safe-area-inset-bottom))}
++/* pin the fixed nav + FAB to the centered phone-width column, not the full viewport */
++.app-shell .bnav{position:fixed;left:calc(50% - min(50%, 224px));right:calc(50% - min(50%, 224px));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
++.app-shell .fab{position:fixed;left:auto;right:calc(50% - min(50%, 224px) + 16px);bottom:calc(88px + env(safe-area-inset-bottom))}
+ /* keep the nav clearance in lockstep with the fixed nav's safe-area padding */
+ .app-shell .spacer-nav{height:calc(124px + env(safe-area-inset-bottom))}
+ /* horizontal gutter for transitional (non-v5) screens; v5 screens self-pad */
+ .app-shell .app-content{padding-inline:20px}
+ /* visible keyboard focus ring on chrome, keyed to the per-route accent */
+ .app-shell a:focus-visible{outline:2px solid var(--acc, var(--violet));outline-offset:2px;border-radius:12px}
++/* v5 charcoal fills the whole viewport behind the centered phone-width column */
++body{background:var(--bg)}
+-- 
+2.51.0.windows.1
+

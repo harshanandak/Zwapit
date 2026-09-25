@@ -1,0 +1,31 @@
+From b5c204776c24160db1fe7f5591f28528e82b6574 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 17:54:12 +0530
+Subject: [PATCH] docs(f1): add docstring to navMap state() helper
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Address CodeRabbit docstring-coverage warning — the one hand-written helper
+that lacked a doc comment.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/lib/ui/navMap.ts | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/lib/ui/navMap.ts b/src/lib/ui/navMap.ts
+index 0edddab..201c3e4 100644
+--- a/src/lib/ui/navMap.ts
++++ b/src/lib/ui/navMap.ts
+@@ -69,6 +69,7 @@ function isUnder(path: string, base: string): boolean {
+   return path === base || path.startsWith(`${base}/`);
+ }
+ 
++/** Build a {@link NavState} result. */
+ function state(tab: TabKey | null, accent: string, showFab: boolean): NavState {
+   return { tab, accent, showFab };
+ }
+-- 
+2.51.0.windows.1
+

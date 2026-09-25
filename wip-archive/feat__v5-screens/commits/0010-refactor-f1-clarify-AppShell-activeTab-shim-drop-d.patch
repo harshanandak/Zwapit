@@ -1,0 +1,58 @@
+From 17cb6e4ffba884c14704f86e5857c790e2972a5a Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 16:45:21 +0530
+Subject: [PATCH] refactor(f1): clarify AppShell activeTab shim, drop dead
+ BottomNav prop
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Address code-quality review: AppShell.activeTab is a type-only shim (kept so
+astro check accepts un-migrated pages, not read at runtime) — comment now says
+so. BottomNav.activeTab had zero callers, removed.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/components/AppShell.astro  | 8 ++++----
+ src/components/BottomNav.astro | 6 ------
+ 2 files changed, 4 insertions(+), 10 deletions(-)
+
+diff --git a/src/components/AppShell.astro b/src/components/AppShell.astro
+index 058155a..516c678 100644
+--- a/src/components/AppShell.astro
++++ b/src/components/AppShell.astro
+@@ -15,10 +15,10 @@ interface Props {
+    */
+   hideHeader?: boolean;
+   /**
+-   * Legacy 4-tab hint ("home" | "sell" | "tickets" | "me"), accepted for
+-   * backward-compatibility with the existing pages but ignored — the active
+-   * tab and ambient accent are derived from `routeId`. Falls away as each page
+-   * migrates to the v5 screens (U1-U7).
++   * Legacy 4-tab hint from the old nav. NOT read at runtime — declared only so
++   * `astro check` accepts the existing pages that still pass `activeTab=...`.
++   * The active tab and ambient accent are derived from `routeId`. Drop once
++   * every page has migrated to the v5 screens (U1-U7).
+    */
+   activeTab?: string;
+ }
+diff --git a/src/components/BottomNav.astro b/src/components/BottomNav.astro
+index eb169f1..600e762 100644
+--- a/src/components/BottomNav.astro
++++ b/src/components/BottomNav.astro
+@@ -7,12 +7,6 @@ interface Props {
+   tab?: TabKey | null;
+   /** Show the "List a ticket" FAB (Sell is a FAB, not a tab). */
+   showFab?: boolean;
+-  /**
+-   * @deprecated Legacy 4-tab prop ("home" | "sell" | "tickets" | "me").
+-   * Accepted for backward-compatibility but ignored — AppShell drives `tab`
+-   * from the routeId. Remove once all callers pass `tab`.
+-   */
+-  activeTab?: string;
+ }
+ 
+ const { tab = null, showFab = false } = Astro.props;
+-- 
+2.51.0.windows.1
+

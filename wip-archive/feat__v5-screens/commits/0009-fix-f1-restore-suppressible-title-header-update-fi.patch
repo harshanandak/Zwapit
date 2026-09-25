@@ -1,0 +1,184 @@
+From 54e1201f7134f4d482dbcdc9b1c6713b5fe2fdc2 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 16:37:22 +0530
+Subject: [PATCH] fix(f1): restore suppressible title header + update
+ first-slice harness to v5 nav (T8)
+
+- AppShell: restore a v5 .pbar title header (T7 went header-less and dropped
+  every existing page's heading); add hideHeader so v5 screens opt out.
+- verify-first-visible-slice.mjs / route-coverage.mjs: assert the new 5-tab nav
+  labels, allow the 4 known-forward tab routes (built U1-U7), add src/lib/ui to
+  the first-slice allowlist. Old content + mock-flow assertions unchanged.
+
+Full suite: 159 pass / 0 fail; route coverage passes 15 routes. The pre-revamp
+acceptance harness is flagged for a Codex rewrite to the Alerts+Requests model.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ .../2026-06-16-f1-design-system/decisions.md  | 49 ++++++++++++++++++-
+ scripts/route-coverage.mjs                    |  2 +-
+ scripts/verify-first-visible-slice.mjs        | 15 +++++-
+ src/components/AppShell.astro                 | 17 ++++++-
+ 4 files changed, 77 insertions(+), 6 deletions(-)
+
+diff --git a/docs/work/2026-06-16-f1-design-system/decisions.md b/docs/work/2026-06-16-f1-design-system/decisions.md
+index 6c89acc..241cb84 100644
+--- a/docs/work/2026-06-16-f1-design-system/decisions.md
++++ b/docs/work/2026-06-16-f1-design-system/decisions.md
+@@ -15,4 +15,51 @@
+ - Existing 12 pages render *transitionally* (Tailwind content on the v5 charcoal shell)
+   until their wave PR (U1/U4/U5/U6/U7) redesigns them to v5 — expected, not a regression.
+ - `package.json` font deps are F1's only shared-file edit; coordinate if F2/Codex also
+-  needs to touch `package.json` (unlikely for schema work).
++  needs to touch `package.json` (unlikely for schema work). **Confirmed 2026-06-16: Codex is
++  not active on this — no coordination needed.**
++
++---
++
++## /dev session (2026-06-16)
++
++### Decision 1
++- **Task:** T1 — bundle fonts
++- **Gap:** tasks.md says T1 both adds the new fonts and removes `@fontsource/poppins`. But
++  `AppLayout.astro` still imports Poppins until T5, so removing it in T1 would break
++  `astro check`/build between T1 and T5.
++- **Score:** 1/14 (only dim 1 — touches T5 too; reversible, no schema/security/API).
++- **Route:** PROCEED.
++- **Choice:** T1 only **adds** Fraunces + Space Grotesk. The Poppins removal moves to **T5**,
++  atomic with the import swap, so every intermediate commit stays green.
++- **Status:** RESOLVED.
++
++### Decision 2 (BLOCKED — pending developer input)
++- **Task:** T8 — regression gate
++- **Gap:** The pre-revamp "first visible slice" acceptance harness
++  (`tests/acceptance/firstVisibleSlice.test.ts` →
++  `scripts/verify-first-visible-slice.mjs`, plus `scripts/route-coverage.mjs`)
++  asserts the OLD product: old nav labels (Home/**Sell**/**My Tickets**/**Me**),
++  the old route set (no `/app/search|requests|listings|profile`), and a frozen
++  file allowlist that excludes `src/lib/ui/`. F1's approved v5 nav trips all three:
++  - `verifyRouteCoverage`: new tab links "not part of the first-slice route contract".
++  - `verifyAcceptanceCriteria`: pages no longer contain "Sell/My Tickets/Me" labels.
++  - `verifyNoScopeDrift`: `src/lib/ui/navMap.ts` is outside `allowedFirstSlicePaths` (L77).
++- **Score:** ~6/14 (files beyond task=2, project-wide shared gate=2, contract doc=1,
++  behavior-in-design-but-contract-change-not=1). No mandatory override. → SPEC-REVIEWER/BLOCKED.
++- **Route:** BLOCKED — surface to developer. The harness is Codex-owned and encodes the
++  whole pre-revamp product; rewriting it to the Alerts+Requests model is a cross-cutting
++  Codex task, not F1 UI scope. F1 itself is green (astro check 0 errors, astro build all
++  15 routes, 27 navMap tests, byte-identical ports).
++- **Status:** RESOLVED 2026-06-16 — user authorized continuing (Codex unavailable).
++  - **Resolution:** (a) Restore a suppressible v5 title header in AppShell — T7 went
++    header-less, which silently dropped every existing page's heading (those pages relied
++    on AppShell's `<h1>{title}</h1>`). Real regression, now fixed; `hideHeader` lets v5
++    screens opt out. (b) Update the obsolete harness to the approved v5 nav contract:
++    new nav labels, allow the 4 known-forward tab routes (built in U1-U7), add `src/lib/ui`
++    to `allowedFirstSlicePaths`. No deep old-content/mock-flow assertions were weakened.
++  - **Flag for Codex:** the first-slice acceptance harness still encodes the pre-revamp
++    product and should be rewritten to the Alerts+Requests model in a dedicated pass.
++
++### Decision gate count: 2 (1 PROCEED, 1 BLOCKED). Plan-quality note: the BLOCKED gate is
++the design.md D7 forward-links decision colliding with a pre-existing first-slice guard that
++planning didn't reconcile — worth catching earlier next time.
+diff --git a/scripts/route-coverage.mjs b/scripts/route-coverage.mjs
+index 3e096cf..1f534de 100644
+--- a/scripts/route-coverage.mjs
++++ b/scripts/route-coverage.mjs
+@@ -54,7 +54,7 @@ for (const route of routes) {
+ const homeHtmlPath = routeToFile("/app/home");
+ if (existsSync(homeHtmlPath)) {
+   const homeHtml = readFileSync(homeHtmlPath, "utf8");
+-  for (const label of ["Home", "Sell", "My Tickets", "Me"]) {
++  for (const label of ["Home", "Search", "Requests", "Listings", "Profile"]) {
+     const labelPattern = new RegExp(`>\\s*${label.replace(" ", "\\s+")}\\s*<`);
+     if (!labelPattern.test(homeHtml)) {
+       failures.push(`Bottom nav missing ${label}`);
+diff --git a/scripts/verify-first-visible-slice.mjs b/scripts/verify-first-visible-slice.mjs
+index c8599b1..9db0556 100644
+--- a/scripts/verify-first-visible-slice.mjs
++++ b/scripts/verify-first-visible-slice.mjs
+@@ -37,6 +37,16 @@ const routes = [
+ 
+ const routeDistPaths = new Map(routes);
+ 
++// The v5 bottom nav links to canonical tab routes that ship in later waves
++// (U1-U7). They are intentionally not in the first-slice contract yet, so links
++// to them are known-forward navigation, not scope drift.
++const knownForwardRoutes = new Set([
++  "/app/search",
++  "/app/requests",
++  "/app/listings",
++  "/app/profile",
++]);
++
+ const allowedTask10Paths = new Set([
+   "scripts/verify-first-visible-slice.mjs",
+   "tests/acceptance/firstVisibleSlice.test.ts",
+@@ -74,7 +84,7 @@ const allowedFirstSlicePaths = [
+   /^tests\//,
+   /^src\/components\//,
+   /^src\/layouts\//,
+-  /^src\/lib\/(auth|convex|flow|mock|rules|state|types|validation)/,
++  /^src\/lib\/(auth|convex|flow|mock|rules|state|types|ui|validation)/,
+   /^src\/pages\/(admin|app|index\.astro)/,
+   /^src\/styles\//,
+ ];
+@@ -199,6 +209,7 @@ export function verifyRouteCoverage() {
+     const hrefs = [...html.matchAll(/\shref="([^"#?]+)(?:[#?][^"]*)?"/g)].map((match) => match[1]);
+     for (const href of hrefs) {
+       if (!href.startsWith("/")) continue;
++      if (knownForwardRoutes.has(href)) continue;
+       const builtTarget = routeHrefToBuiltFile(href);
+       if (!builtTarget) {
+         failures.push(`${route}: link ${href} is not part of the first-slice route contract`);
+@@ -222,7 +233,7 @@ export async function verifyAcceptanceCriteria() {
+ 
+   const appRoutes = ["/app/home", "/app/sell", "/app/tickets", "/app/me"];
+   for (const route of appRoutes) {
+-    mustContain(route, built.get(route) ?? "", ["Home", "Sell", "My Tickets", "Me"], failures);
++    mustContain(route, built.get(route) ?? "", ["Home", "Search", "Requests", "Listings", "Profile"], failures);
+   }
+ 
+   mustContain("/app/home", built.get("/app/home") ?? "", [
+diff --git a/src/components/AppShell.astro b/src/components/AppShell.astro
+index c1979f8..058155a 100644
+--- a/src/components/AppShell.astro
++++ b/src/components/AppShell.astro
+@@ -6,8 +6,14 @@ import { resolveNav } from "../lib/ui/navMap";
+ interface Props {
+   /** The `/app/...` route id; drives the ambient accent + active tab. */
+   routeId: string;
+-  /** Document title (shown in the browser tab). */
++  /** Document title; also rendered as the page heading unless `hideHeader`. */
+   title: string;
++  /**
++   * Hide the generic title header. The v5 screens render their own top bar
++   * (.home-top / .pbar / .hero) and pass `hideHeader`; the transitional existing
++   * pages rely on this header for their on-screen heading.
++   */
++  hideHeader?: boolean;
+   /**
+    * Legacy 4-tab hint ("home" | "sell" | "tickets" | "me"), accepted for
+    * backward-compatibility with the existing pages but ignored — the active
+@@ -17,12 +23,19 @@ interface Props {
+   activeTab?: string;
+ }
+ 
+-const { routeId, title } = Astro.props;
++const { routeId, title, hideHeader = false } = Astro.props;
+ const { tab, accent, showFab } = resolveNav(routeId);
+ ---
+ 
+ <AppLayout title={`${title} | Zwapit`}>
+   <div class="app-shell" data-route-id={routeId} style={`--acc:${accent}`}>
++    {
++      !hideHeader && (
++        <header class="pbar">
++          <h1>{title}</h1>
++        </header>
++      )
++    }
+     <slot />
+     <div class="spacer-nav"></div>
+     <BottomNav tab={tab} showFab={showFab} />
+-- 
+2.51.0.windows.1
+

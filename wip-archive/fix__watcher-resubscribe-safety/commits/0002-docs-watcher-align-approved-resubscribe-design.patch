@@ -1,0 +1,38 @@
+From 8168dd1027021195a007105ceeb60fb06fb11184 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 12:56:54 +0530
+Subject: [PATCH] docs(watcher): align approved resubscribe design
+
+---
+ docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md | 2 +-
+ docs/work/2026-08-30-watcher-resubscribe-safety/design.md    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md b/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md
+index b7e2036..0ae2e3e 100644
+--- a/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md
+@@ -15,7 +15,7 @@ same outbox row only after `sent` or terminal `failed`; preserve delivery histor
+ 
+ New keys use a `want_alert_v2~...~...` base-36 code-point encoding whose token and
+ tuple delimiters are disjoint. `createAlert` and fresh demo seeds share the helper;
+-the seed retains an explicit lookup for its known sanitize-only legacy key.
++the seed uses the same exact-occurrence fallback to preserve every legacy key format.
+ 
+ ## D4: no destructive duplicate cleanup
+ 
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/design.md b/docs/work/2026-08-30-watcher-resubscribe-safety/design.md
+index cb0a51b..4da9de7 100644
+--- a/docs/work/2026-08-30-watcher-resubscribe-safety/design.md
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/design.md
+@@ -1,6 +1,6 @@
+ # Watcher resubscribe safety design
+ 
+-Status: revised after cross-model review round 1
++Status: approved at 9/10 after cross-model review round 2
+ 
+ ## Problem
+ 
+-- 
+2.51.0.windows.1
+

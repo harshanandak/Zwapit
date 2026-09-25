@@ -1,0 +1,225 @@
+From e43ef7f6a9d194bf2bac29771c09fd05c657cfb5 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 13:43:06 +0530
+Subject: [PATCH] fix(watcher): audit and deliver live seed repairs (kernel
+ ffea45c9)
+
+---
+ convex/__tests__/seed.test.ts | 50 +++++++++++++++++++++++++----
+ convex/seed.ts                | 59 ++++++++++++++++++++++++++++++++---
+ convex/watcher.ts             | 11 ++++---
+ 3 files changed, 106 insertions(+), 14 deletions(-)
+
+diff --git a/convex/__tests__/seed.test.ts b/convex/__tests__/seed.test.ts
+index a0200f2..ec39d95 100644
+--- a/convex/__tests__/seed.test.ts
++++ b/convex/__tests__/seed.test.ts
+@@ -146,10 +146,10 @@ describe("seedDemoFixture — watcher demo slice", () => {
+     }
+   });
+ 
+-  test("re-running reattaches an exact detached legacy seed want", async () => {
++  test("re-running restores a detached legacy want's known-live payoff and audit trail", async () => {
+     const tt = t();
+     await tt.mutation(api.seed.seedDemoFixture, {});
+-    const originalWantId = await tt.run(async (ctx) => {
++    const seeded = await tt.run(async (ctx) => {
+       const want = (await ctx.db.query("wants").collect()).find(
+         (row) => row.catalogItemId === "catalog_movie_watcher_demo",
+       )!;
+@@ -162,8 +162,32 @@ describe("seedDemoFixture — watcher demo slice", () => {
+         monitorTargetId: undefined,
+         state: "expired",
+       });
+-      await ctx.db.patch(target._id, { subscriberCount: 0, status: "closed" });
+-      return want._id;
++      await ctx.db.patch(target._id, {
++        subscriberCount: 0,
++        status: "closed",
++        lastSnapshotHash: "known-live-snapshot",
++      });
++      const eventId = await ctx.db.insert("availability_events", {
++        monitorTargetId: target._id,
++        source: "bms",
++        detectedAt: "2026-08-30T08:00:00.000Z",
++        theatresJson: "[]",
++        bookingUrl: "https://in.bookmyshow.com/demo",
++        snapshotHash: "known-live-snapshot",
++      });
++      const notificationId = await ctx.db.insert("notification_queue", {
++        userId: want.buyerId,
++        monitorTargetId: target._id,
++        availabilityEventId: eventId,
++        alertType: "availability",
++        channel: "email",
++        status: "sent",
++        dedupeKey: `${want.buyerId}|${target._id}|${eventId}|availability|email`,
++        createdAt: "2026-08-30T08:00:00.000Z",
++        sentAt: "2026-08-30T08:01:00.000Z",
++        attempts: 1,
++      });
++      return { wantId: want._id, notificationId };
+     });
+ 
+     await tt.mutation(api.seed.seedDemoFixture, {});
+@@ -175,15 +199,29 @@ describe("seedDemoFixture — watcher demo slice", () => {
+       target: (await ctx.db.query("monitor_targets").collect()).find(
+         (row) => row.collapseKey === "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
+       )!,
++      notification: await ctx.db.get(seeded.notificationId),
++      audits: await ctx.db.query("audit_logs").collect(),
+     }));
+     expect(state.wants).toHaveLength(1);
+-    expect(state.wants[0]._id).toBe(originalWantId);
++    expect(state.wants[0]._id).toBe(seeded.wantId);
+     expect(state.wants[0].wantKey).toBe("want_alert_legacy_detached");
+     expect(state.wants[0].state).toBe("open");
+     expect(state.wants[0].monitorTargetId).toBe(state.target._id);
+     expect(state.wants[0].collapseKey).toBe(state.target.collapseKey);
+-    expect(state.target.status).toBe("watching");
++    expect(state.target.status).toBe("live");
+     expect(state.target.subscriberCount).toBe(1);
++    expect(state.notification?.status).toBe("pending");
++    expect(state.notification?.attempts).toBe(0);
++    expect(state.notification?.sentAt).toBeUndefined();
++    expect(state.audits.map((row) => row.action).sort()).toEqual([
++      "monitor_target_reopened",
++      "monitor_target_subscriber_count_changed",
++      "notification_requeued",
++      "want_rearmed",
++    ]);
++    expect(
++      state.audits.every((row) => row.actorId === "system" && row.actorRole === "system"),
++    ).toBe(true);
+   });
+ 
+   // events-phase2 T4: the events watcher relies on curated live_event catalog rows
+diff --git a/convex/seed.ts b/convex/seed.ts
+index 49dafe5..419159e 100644
+--- a/convex/seed.ts
++++ b/convex/seed.ts
+@@ -5,15 +5,16 @@
+ // Orders) can read/write through Convex without changing what the user sees.
+ //
+ // Idempotent by public demo keys: re-running `seedDemoFixture` never creates a
+-// duplicate user/listing/order/transfer task/issue/source rule. Audit logs are
+-// intentionally NOT seeded — they are append-only from the transition mutations.
++// duplicate user/listing/order/transfer task/issue/source rule. Initial fixture
++// rows do not synthesize historical audits; repair transitions append live audits.
+ 
+ import { mutation } from "./_generated/server";
+ import type { MutationCtx } from "./_generated/server";
+ import { v } from "convex/values";
+ import { createMockFixture } from "../src/lib/mock/fixtures";
+ import { buildAlertWantKey, collapseKeyForWant, computeCollapseKey } from "./watcher/parse";
+-import { monitorTargetByCollapseKey } from "./model";
++import { appendWatcherAuditLog, monitorTargetByCollapseKey } from "./model";
++import { enqueueForEvent } from "./watcher";
+ 
+ type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
+ 
+@@ -334,18 +335,68 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
+     });
+     await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
+   } else if (!existingWant.monitorTargetId) {
++    const reattachedAt = new Date().toISOString();
++    let nextTargetStatus = target.status;
++    if (target.status === "closed") {
++      nextTargetStatus = target.lastSnapshotHash ? "live" : "watching";
++    }
+     await ctx.db.patch(existingWant._id, {
+       state: "open",
+       expiresAt: WATCHER_DEMO.date,
+       monitorTargetId: target._id,
+       collapseKey,
+     });
++    await appendWatcherAuditLog(ctx, {
++      actorId: "system",
++      actorRole: "system",
++      action: "want_rearmed",
++      entityType: "want",
++      entityId: existingWant.wantKey,
++      fromState: existingWant.state,
++      toState: "open",
++      createdAt: reattachedAt,
++    });
+     await ctx.db.patch(target._id, {
+       subscriberCount: target.subscriberCount + 1,
+       ...(target.status === "closed"
+-        ? { status: "watching" as const, nextCheckAt: SEED_SYNCED_AT, failCount: 0 }
++        ? { status: nextTargetStatus, nextCheckAt: reattachedAt, failCount: 0 }
+         : {}),
+     });
++    await appendWatcherAuditLog(ctx, {
++      actorId: "system",
++      actorRole: "system",
++      action: "monitor_target_subscriber_count_changed",
++      entityType: "monitor_target",
++      entityId: collapseKey,
++      fromState: String(target.subscriberCount),
++      toState: String(target.subscriberCount + 1),
++      createdAt: reattachedAt,
++    });
++    if (target.status === "closed") {
++      await appendWatcherAuditLog(ctx, {
++        actorId: "system",
++        actorRole: "system",
++        action: "monitor_target_reopened",
++        entityType: "monitor_target",
++        entityId: collapseKey,
++        fromState: "closed",
++        toState: nextTargetStatus,
++        createdAt: reattachedAt,
++      });
++    }
++    if (nextTargetStatus === "live") {
++      const availabilityEvent = await ctx.db
++        .query("availability_events")
++        .withIndex("by_target", (q) => q.eq("monitorTargetId", target._id))
++        .order("desc")
++        .first();
++      if (availabilityEvent) {
++        await enqueueForEvent(ctx, availabilityEvent._id, reattachedAt, {
++          reattachedWantId: existingWant._id,
++          requeueActor: { actorId: "system", actorRole: "system" },
++        });
++      }
++    }
+   }
+   return inserted;
+ }
+diff --git a/convex/watcher.ts b/convex/watcher.ts
+index fa775cb..5fbe428 100644
+--- a/convex/watcher.ts
++++ b/convex/watcher.ts
+@@ -676,11 +676,14 @@ export const markEventAvailable = internalMutation({
+  * explicit reattachment may requeue terminal rows for that want only. Returns how
+  * many NEW rows were inserted (requeues are not counted).
+  */
+-async function enqueueForEvent(
++export async function enqueueForEvent(
+   ctx: MutationCtx,
+   availabilityEventId: Id<"availability_events"> | string,
+   nowIso: string,
+-  options?: { reattachedWantId?: Id<"wants"> },
++  options?: {
++    reattachedWantId?: Id<"wants">;
++    requeueActor?: { actorId: string; actorRole: "buyer" | "system" };
++  },
+ ): Promise<number> {
+   const event = await ctx.db.get(availabilityEventId as Id<"availability_events">);
+   if (!event) return 0;
+@@ -720,8 +723,8 @@ async function enqueueForEvent(
+             claimedAt: undefined,
+           });
+           await appendWatcherAuditLog(ctx, {
+-            actorId: want.buyerId,
+-            actorRole: "buyer",
++            actorId: options?.requeueActor?.actorId ?? want.buyerId,
++            actorRole: options?.requeueActor?.actorRole ?? "buyer",
+             action: "notification_requeued",
+             entityType: "notification",
+             entityId: key,
+-- 
+2.51.0.windows.1
+

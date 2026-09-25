@@ -1,0 +1,196 @@
+From add39449ba9afb1e12c60042b427da22d3e7674c Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 19:18:23 +0530
+Subject: [PATCH] feat(u1): rebuild Home to the v5 reference (official +
+ community rails)
+
+Port the locked v5 Home frame: own home-top (city + alerts bell, no generic
+header via hideHeader), hero, Set-an-alert CTA, protected-payment trust band,
+Official/Community segment + genre chips, Official Notify-me rail (demo content
+until the catalog backend lands), and a Community rail wired to the real mock
+listing (links to the detail page, keeping the buy flow live).
+
+Acceptance harness /app/home assertions updated to the v5 content.
+Verified live: all components present, real listing wired, no overflow; astro
+check 0 errors, 159 tests pass.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ scripts/verify-first-visible-slice.mjs |   4 +-
+ src/pages/app/home.astro               | 131 ++++++++++++++++---------
+ 2 files changed, 85 insertions(+), 50 deletions(-)
+
+diff --git a/scripts/verify-first-visible-slice.mjs b/scripts/verify-first-visible-slice.mjs
+index 9db0556..f97ae13 100644
+--- a/scripts/verify-first-visible-slice.mjs
++++ b/scripts/verify-first-visible-slice.mjs
+@@ -237,11 +237,13 @@ export async function verifyAcceptanceCriteria() {
+   }
+ 
+   mustContain("/app/home", built.get("/app/home") ?? "", [
++    "We'll notify you when it's available.",
++    "Set an alert",
++    "Community listings",
+     "Arijit Singh Live - Silver Pass",
+     "Bengaluru Arena",
+     "Official Transfer",
+     "Protected payment",
+-    "Buy with Protection",
+   ], failures);
+ 
+   mustContain("/app/listings/:listingId", built.get("/app/listings/:listingId") ?? "", [
+diff --git a/src/pages/app/home.astro b/src/pages/app/home.astro
+index 7778000..20d743d 100644
+--- a/src/pages/app/home.astro
++++ b/src/pages/app/home.astro
+@@ -1,65 +1,98 @@
+ ---
+ import AppShell from "../../components/AppShell.astro";
+-import AuthActionGate from "../../components/AuthActionGate.astro";
+-import ListingCard from "../../components/buyer/ListingCard.astro";
+-import { createCurrentAuthState, getAuthActionState } from "../../lib/auth/authAdapter";
++import Icon from "../../components/Icon.astro";
++import { formatDateTime, formatInr, transferModeLabel } from "../../components/buyer/format";
+ import { loadListingFlowView } from "../../lib/convex/dataAdapter";
+ 
+ const { listing } = await loadListingFlowView();
+-const authState = createCurrentAuthState();
+-const sellAction = getAuthActionState("sell", "/app/sell", authState, { requirePhoneVerified: true });
+-
+-// First slice ships one fixture listing. Blocked / draft / under-review listings
+-// are hidden from the marketplace; live and waitlist-only listings are shown.
+-const catalogue = [listing];
+-const visible = catalogue.filter(
++// Community resale rail = live/waitlist listings from the mock data adapter.
++const community = [listing].filter(
+   (item) => item.state === "live" || item.state === "waitlist_only",
+ );
+ ---
+ 
+-<AppShell routeId="/app/home" title="Home" activeTab="home">
+-  <div class="space-y-4">
++<AppShell routeId="/app/home" title="Home" hideHeader>
++  <div class="home-top">
++    <span class="city gl" style="gap:7px"><Icon name="pin" />Bengaluru<Icon name="chevd" size="s" /></span>
++    <a class="city gl" href="/app/requests" aria-label="Your alerts"><Icon name="bell" /></a>
++  </div>
++
++  <div class="hero-copy">
++    <h2>We'll notify you when it's available.</h2>
++    <p>Track official tickets and community resale in one place.</p>
++  </div>
++
++  <div class="req-cta">
++    <span class="bdg"><Icon name="bell" size="l" /></span>
++    <div><b>Set an alert</b><span>Pick a show, a budget, the alerts you want.</span></div>
++    <a class="go" href="/app/requests">Create a request</a>
++  </div>
++
++  <div class="trust-band">
++    <span class="bdg"><Icon name="shield" size="l" /></span>
+     <div>
+-      <h2 class="text-lg font-semibold text-foreground">Tickets you can buy safely</h2>
+-      <p class="mt-1 text-sm text-muted-foreground">
+-        Every listing uses protected payment — your money is held until the transfer is done.
+-      </p>
++      <b>Protected payment on every purchase</b>
++      <span>Your money is held safely until the transfer is confirmed.</span>
+     </div>
++  </div>
+ 
+-    <div
+-      id="home-empty-state"
+-      class={visible.length === 0 ? "rounded-xl border border-dashed border-border bg-card p-6 text-center" : "hidden rounded-xl border border-dashed border-border bg-card p-6 text-center"}
+-    >
+-      <p class="text-sm font-medium text-foreground">No tickets available yet</p>
+-      <p class="mt-1 text-xs text-muted-foreground">Check back soon, or list one of your own.</p>
+-      <AuthActionGate
+-        state={sellAction}
+-        label="Upload to Sell"
+-        class="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
+-      />
+-    </div>
++  <div class="seg gl" style="margin-top:18px">
++    <button class="on">Official tickets</button>
++    <button>Community listings</button>
++  </div>
+ 
+-    <div id="home-listing-card" class={visible.length === 0 ? "hidden space-y-3" : "space-y-3"}>
+-      {visible.map((item) => (
+-        <ListingCard listing={item} />
+-      ))}
+-    </div>
++  <div class="gchips">
++    <a class="gchip on"><Icon name="film" />Movies</a>
++    <a class="gchip"><Icon name="music" />Events</a>
++    <a class="gchip"><Icon name="bus" />Bus</a>
+   </div>
+-</AppShell>
+ 
+-<script>
+-  import { loadListingFlowView } from "../../lib/convex/dataAdapter";
++  {/* Official rail — catalog + Notify-me wiring lands with the catalog backend; demo content for now. */}
++  <div class="carousel">
++    <span class="poster-card solid">
++      <div class="poster p1"><div class="art"></div><div class="glyph">D</div><span class="when">NOT YET OPEN</span></div>
++      <div class="body">
++        <h4>Dune: Part Three</h4>
++        <div class="venue">PVR Orion · opens for Sat 21 Jun</div>
++        <div class="meta"><span class="chip wait"><Icon name="people" />You + 124 waiting</span></div>
++        <div class="pricerow">
++          <div class="venue" style="margin:0">Booking opens soon</div>
++          <span class="notify-btn on"><Icon name="bell" />Alert on</span>
++        </div>
++      </div>
++    </span>
++    <span class="poster-card solid">
++      <div class="poster p4"><div class="art"></div><div class="glyph">C</div><span class="when">DROPS FRI</span></div>
++      <div class="body">
++        <h4>Coldplay — Music of the Spheres</h4>
++        <div class="venue">Official sale not open yet</div>
++        <div class="meta"><span class="chip wait"><Icon name="people" />312 waiting</span></div>
++        <div class="pricerow">
++          <div class="venue" style="margin:0">Notify me when live</div>
++          <span class="notify-btn"><Icon name="bell" />Notify me</span>
++        </div>
++      </div>
++    </span>
++  </div>
+ 
+-  void loadListingFlowView()
+-    .then(({ listing }) => {
+-      const listingCard = document.getElementById("home-listing-card");
+-      const emptyState = document.getElementById("home-empty-state");
+-      const shouldShow = listing.state === "live" || listing.state === "waitlist_only";
+-      const hasRenderedCard = (listingCard?.children.length ?? 0) > 0;
+-      listingCard?.classList.toggle("hidden", !shouldShow || !hasRenderedCard);
+-      emptyState?.classList.toggle("hidden", shouldShow && hasRenderedCard);
+-    })
+-    .catch(() => {
+-      // Keep the static fallback state.
+-    });
+-</script>
++  <div class="divider">Community listings</div>
++  {
++    community.map((item, i) => (
++      <a class="rowcard solid" href={`/app/listings/${item.id}`}>
++        <span class={`mini m${(i % 3) + 1}`}>{item.title.charAt(0)}</span>
++        <div class="info">
++          <h5>{item.title}</h5>
++          <div class="sub">{item.venueOrRoute} · {formatDateTime(item.eventOrTripStartAt)}</div>
++          <div class="meta">
++            <span class="chip mode">{transferModeLabel(item.transferMode)}</span>
++            <span class="chip protect"><Icon name="shield" />Protected</span>
++          </div>
++        </div>
++        <div class="right">
++          <span class="seller-tick"><Icon name="check" />Verified</span>
++          <span class="price price-d">{formatInr(item.listingPrice)}</span>
++        </div>
++      </a>
++    ))
++  }
++</AppShell>
+-- 
+2.51.0.windows.1
+

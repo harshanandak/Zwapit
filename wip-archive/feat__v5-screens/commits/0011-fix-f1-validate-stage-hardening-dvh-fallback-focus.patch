@@ -1,0 +1,95 @@
+From 1fdc0be0189504ae90f5da78359ad236352ec97c Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 17:05:44 +0530
+Subject: [PATCH] =?UTF-8?q?fix(f1):=20validate-stage=20hardening=20?=
+ =?UTF-8?q?=E2=80=94=20dvh=20fallback,=20focus=20ring,=20content=20gutter,?=
+ =?UTF-8?q?=20safe-area=20spacer?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adversarial multi-lens validation surfaced 4 minor F1-introduced issues, all
+fixed in the .app-shell adaptation block / AppShell (LOCKED verbatim region
+untouched):
+- min-height:100vh fallback before 100dvh (old WebView self-heal)
+- :focus-visible accent ring on nav tabs + Sell FAB (dark-theme keyboard a11y)
+- .app-content horizontal gutter for transitional pages (v5 screens self-pad)
+- .spacer-nav tracks env(safe-area-inset-bottom) so content clears the fixed nav
+
+All CI gates green: astro check, build, 159 tests, acceptance, smoke, audit.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ .../2026-06-16-f1-design-system/decisions.md  | 20 +++++++++++++++++++
+ src/components/AppShell.astro                 |  4 +++-
+ src/styles/global.css                         |  7 +++++++
+ 3 files changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/docs/work/2026-06-16-f1-design-system/decisions.md b/docs/work/2026-06-16-f1-design-system/decisions.md
+index 241cb84..0a19c4f 100644
+--- a/docs/work/2026-06-16-f1-design-system/decisions.md
++++ b/docs/work/2026-06-16-f1-design-system/decisions.md
+@@ -63,3 +63,23 @@
+ ### Decision gate count: 2 (1 PROCEED, 1 BLOCKED). Plan-quality note: the BLOCKED gate is
+ the design.md D7 forward-links decision colliding with a pre-existing first-slice guard that
+ planning didn't reconcile — worth catching earlier next time.
++
++---
++
++## /validate (2026-06-16)
++
++All CI gates reproduced locally + green: type-check, convex tsc, build (15 routes),
++route-coverage, 159 tests, acceptance, buyer/seller smoke, `bun audit` (no vulnerabilities).
++
++Adversarial multi-lens review (6 lenses × verify, 16 agents) → 7 confirmed real, 4
++F1-actionable (all minor, all fixed in the adaptation block / AppShell — LOCK untouched):
++1. `.app-shell` `100dvh` → added `100vh` fallback (iOS <15.4 / Chromium <108 self-heal).
++2. Keyboard a11y → added `:focus-visible` accent ring on `.app-shell a` (nav tabs + FAB).
++3. Edge-to-edge regression → restored a content gutter via `.app-content` (transitional
++   pages only; v5 screens with `hideHeader` self-pad).
++4. `.spacer-nav` vs notch → `height:calc(124px + env(safe-area-inset-bottom))` so the
++   clearance tracks the fixed nav's safe-area padding.
++
++Deferred (not F1-actionable): `--faint` contrast on `--bg` (inside the LOCKED verbatim
++palette), `color-mix` two-layer-shorthand robustness (moot — the locked design already
++depends on color-mix/oklch broadly), and a docs-only focus-state nit.
+diff --git a/src/components/AppShell.astro b/src/components/AppShell.astro
+index 516c678..67fe8fe 100644
+--- a/src/components/AppShell.astro
++++ b/src/components/AppShell.astro
+@@ -36,7 +36,9 @@ const { tab, accent, showFab } = resolveNav(routeId);
+         </header>
+       )
+     }
+-    <slot />
++    <div class:list={[{ "app-content": !hideHeader }]}>
++      <slot />
++    </div>
+     <div class="spacer-nav"></div>
+     <BottomNav tab={tab} showFab={showFab} />
+   </div>
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 776503f..e0f3404 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -523,6 +523,7 @@
+    switch from position:absolute (inside the phone) to position:fixed (viewport),
+    honoring the notch via env(safe-area-inset-bottom). --acc is set per route. */
+ .app-shell{
++  min-height:100vh; /* fallback for WebKit <15.4 / Chromium <108 (no dvh) */
+   min-height:100dvh;
+   background:
+     radial-gradient(420px 260px at 50% -6%, color-mix(in srgb, var(--acc, var(--violet)) 9%, transparent), transparent 70%),
+@@ -532,3 +533,9 @@
+ }
+ .app-shell .bnav{position:fixed;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+ .app-shell .fab{position:fixed;bottom:calc(88px + env(safe-area-inset-bottom))}
++/* keep the nav clearance in lockstep with the fixed nav's safe-area padding */
++.app-shell .spacer-nav{height:calc(124px + env(safe-area-inset-bottom))}
++/* horizontal gutter for transitional (non-v5) screens; v5 screens self-pad */
++.app-shell .app-content{padding-inline:20px}
++/* visible keyboard focus ring on chrome, keyed to the per-route accent */
++.app-shell a:focus-visible{outline:2px solid var(--acc, var(--violet));outline-offset:2px;border-radius:12px}
+-- 
+2.51.0.windows.1
+

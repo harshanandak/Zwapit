@@ -1,0 +1,296 @@
+From eb96f7b35a46498c2908d1bf47e45f36e3a4fdd0 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 16:04:20 +0530
+Subject: [PATCH] feat(f1): add routeId -> nav/accent resolver with tests (T3)
+
+TABS (5 bottom-nav tabs) + resolveNav(routeId) -> {tab, accent, showFab}.
+Pure module, 27 unit tests covering landings, details, flows, legacy folds,
+unknown default, and all 12 existing routeIds.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ src/lib/ui/__tests__/navMap.test.ts | 156 ++++++++++++++++++++++++++++
+ src/lib/ui/navMap.ts                | 108 +++++++++++++++++++
+ 2 files changed, 264 insertions(+)
+ create mode 100644 src/lib/ui/__tests__/navMap.test.ts
+ create mode 100644 src/lib/ui/navMap.ts
+
+diff --git a/src/lib/ui/__tests__/navMap.test.ts b/src/lib/ui/__tests__/navMap.test.ts
+new file mode 100644
+index 0000000..92d1769
+--- /dev/null
++++ b/src/lib/ui/__tests__/navMap.test.ts
+@@ -0,0 +1,156 @@
++import { describe, expect, test } from "bun:test";
++
++import { ACCENTS, resolveNav, TABS } from "../navMap";
++
++describe("TABS", () => {
++  test("defines exactly the 5 bottom-nav tabs in order", () => {
++    expect(TABS.map((t) => t.key)).toEqual([
++      "home",
++      "search",
++      "requests",
++      "listings",
++      "profile",
++    ]);
++  });
++
++  test("every tab has a canonical /app href and a sprite icon name", () => {
++    for (const tab of TABS) {
++      expect(tab.href.startsWith("/app/")).toBe(true);
++      expect(tab.icon.length).toBeGreaterThan(0);
++      expect(tab.label.length).toBeGreaterThan(0);
++    }
++  });
++
++  test("accents match the locked per-screen palette", () => {
++    expect(ACCENTS).toEqual({
++      home: "#8E7BC9", // violet
++      search: "#7FA3C4", // steel
++      requests: "#C98B5F", // bronze
++      listings: "#F23D7F", // rose
++      profile: "#D9A84E", // gold
++    });
++  });
++});
++
++describe("resolveNav — happy path (tab landings)", () => {
++  test("/app/home → home tab, violet, FAB shown", () => {
++    expect(resolveNav("/app/home")).toEqual({
++      tab: "home",
++      accent: "#8E7BC9",
++      showFab: true,
++    });
++  });
++
++  test("/app/listings → listings tab, rose, FAB shown", () => {
++    expect(resolveNav("/app/listings")).toEqual({
++      tab: "listings",
++      accent: "#F23D7F",
++      showFab: true,
++    });
++  });
++
++  test("/app/search and /app/requests light their tabs with FAB", () => {
++    expect(resolveNav("/app/search")).toEqual({
++      tab: "search",
++      accent: "#7FA3C4",
++      showFab: true,
++    });
++    expect(resolveNav("/app/requests")).toEqual({
++      tab: "requests",
++      accent: "#C98B5F",
++      showFab: true,
++    });
++  });
++
++  test("/app/profile lights the profile tab but hides the FAB", () => {
++    expect(resolveNav("/app/profile")).toEqual({
++      tab: "profile",
++      accent: "#D9A84E",
++      showFab: false,
++    });
++  });
++});
++
++describe("resolveNav — unknown / default", () => {
++  test("unknown route falls back to no tab, violet default, no FAB, no throw", () => {
++    expect(resolveNav("/app/does-not-exist")).toEqual({
++      tab: null,
++      accent: "#8E7BC9",
++      showFab: false,
++    });
++  });
++});
++
++describe("resolveNav — dynamic / detail / flow routes", () => {
++  test("listing detail keeps Listings active but hides the FAB", () => {
++    expect(resolveNav("/app/listings/abc123")).toEqual({
++      tab: "listings",
++      accent: "#F23D7F",
++      showFab: false,
++    });
++  });
++
++  test("checkout is a money flow: no tab, rose, no FAB", () => {
++    expect(resolveNav("/app/checkout/abc123")).toEqual({
++      tab: null,
++      accent: "#F23D7F",
++      showFab: false,
++    });
++  });
++
++  test("sell flow: no active tab (Sell is the FAB), steel, no FAB", () => {
++    expect(resolveNav("/app/sell")).toEqual({
++      tab: null,
++      accent: "#7FA3C4",
++      showFab: false,
++    });
++    expect(resolveNav("/app/sell/price")).toEqual({
++      tab: null,
++      accent: "#7FA3C4",
++      showFab: false,
++    });
++  });
++});
++
++describe("resolveNav — legacy routes fold into Profile", () => {
++  test.each(["/app/me", "/app/tickets", "/app/orders/o1"])(
++    "%s → profile tab, gold, no FAB",
++    (routeId) => {
++      expect(resolveNav(routeId)).toEqual({
++        tab: "profile",
++        accent: "#D9A84E",
++        showFab: false,
++      });
++    },
++  );
++});
++
++describe("resolveNav — every existing route resolves safely", () => {
++  // The 12 routeIds the existing pages pass to AppShell (blast-radius search).
++  const EXISTING_ROUTES = [
++    "/app/checkout/:listingId",
++    "/app/home",
++    "/app/listings/:listingId",
++    "/app/me",
++    "/app/orders/:orderId",
++    "/app/sell",
++    "/app/sell/confirm",
++    "/app/sell/orders",
++    "/app/sell/price",
++    "/app/sell/promise",
++    "/app/sell/upload",
++    "/app/tickets",
++  ];
++
++  test.each(EXISTING_ROUTES)("%s resolves to a hex accent without throwing", (routeId) => {
++    const nav = resolveNav(routeId);
++    expect(nav.accent).toMatch(/^#[0-9A-Fa-f]{6}$/);
++    expect(typeof nav.showFab).toBe("boolean");
++  });
++});
++
++describe("resolveNav — trailing slash is tolerated", () => {
++  test("/app/home/ resolves like /app/home", () => {
++    expect(resolveNav("/app/home/")).toEqual(resolveNav("/app/home"));
++  });
++});
+diff --git a/src/lib/ui/navMap.ts b/src/lib/ui/navMap.ts
+new file mode 100644
+index 0000000..0edddab
+--- /dev/null
++++ b/src/lib/ui/navMap.ts
+@@ -0,0 +1,108 @@
++/**
++ * Route → navigation/ambient resolver for the v5 app shell.
++ *
++ * The shell derives BOTH the active bottom-nav tab and the per-route ambient
++ * accent (`--acc`) from the current `routeId`, so screens don't have to declare
++ * an `activeTab` prop (legacy pages stay untouched — see design.md §B).
++ *
++ * Pure module: no Astro/DOM imports, so it is unit-testable with `bun test`.
++ * Source of truth for the palette + tab set: design.md §5/§7 and the locked
++ * v5 preview. Do not invent accents outside this map.
++ */
++
++export type TabKey = "home" | "search" | "requests" | "listings" | "profile";
++
++export interface NavTab {
++  /** Stable identity used to mark the active tab. */
++  key: TabKey;
++  /** User-facing label rendered under the icon. */
++  label: string;
++  /** Canonical destination route. */
++  href: string;
++  /** Icon sprite id suffix — rendered as `<use href="#i-${icon}">`. */
++  icon: string;
++}
++
++/** The five bottom-nav tabs, in display order. Selling is a FAB, not a tab. */
++export const TABS: readonly NavTab[] = [
++  { key: "home", label: "Home", href: "/app/home", icon: "home" },
++  { key: "search", label: "Search", href: "/app/search", icon: "search" },
++  { key: "requests", label: "Requests", href: "/app/requests", icon: "bell" },
++  { key: "listings", label: "Listings", href: "/app/listings", icon: "ticket" },
++  { key: "profile", label: "Profile", href: "/app/profile", icon: "user" },
++];
++
++/** Per-screen ambient accent (design.md §5). */
++export const ACCENTS: Record<TabKey, string> = {
++  home: "#8E7BC9", // violet
++  search: "#7FA3C4", // steel
++  requests: "#C98B5F", // bronze
++  listings: "#F23D7F", // rose
++  profile: "#D9A84E", // gold
++};
++
++/** Accent for an unknown route — home's violet. */
++const DEFAULT_ACCENT = ACCENTS.home;
++
++/** Tabs that surface the "List a ticket" FAB on their landing screen. */
++const FAB_TABS: readonly TabKey[] = ["home", "search", "requests", "listings"];
++
++export interface NavState {
++  /** Active tab to highlight, or `null` for flows/details with no tab. */
++  tab: TabKey | null;
++  /** Ambient accent hex for `--acc`. */
++  accent: string;
++  /** Whether to show the Sell FAB on this screen. */
++  showFab: boolean;
++}
++
++/** Strip a trailing slash (but keep the root) and guarantee a leading slash. */
++function normalize(routeId: string): string {
++  let path = routeId.trim();
++  if (!path.startsWith("/")) path = `/${path}`;
++  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
++  return path;
++}
++
++/** True when `path` is exactly `base` or a sub-path under `base`. */
++function isUnder(path: string, base: string): boolean {
++  return path === base || path.startsWith(`${base}/`);
++}
++
++function state(tab: TabKey | null, accent: string, showFab: boolean): NavState {
++  return { tab, accent, showFab };
++}
++
++/**
++ * Resolve a `routeId` (the `/app/...` path, possibly with `:param` placeholders)
++ * to its active tab, ambient accent, and FAB visibility.
++ */
++export function resolveNav(routeId: string): NavState {
++  const path = normalize(routeId);
++
++  // 1. Money / sell flows: no active tab.
++  if (isUnder(path, "/app/checkout")) return state(null, ACCENTS.listings, false); // rose
++  if (isUnder(path, "/app/sell")) return state(null, ACCENTS.search, false); // steel
++
++  // 2. Legacy routes fold into the Profile tab (superseded in U7).
++  if (path === "/app/me" || path === "/app/tickets" || isUnder(path, "/app/orders")) {
++    return state("profile", ACCENTS.profile, false);
++  }
++
++  // 3. Canonical tab sections: exact landing shows the FAB; a drilled-in
++  //    sub-path keeps the tab active but hides it.
++  for (const tab of TABS) {
++    if (path === tab.href) {
++      return state(tab.key, ACCENTS[tab.key], FAB_TABS.includes(tab.key));
++    }
++    if (path.startsWith(`${tab.href}/`)) {
++      return state(tab.key, ACCENTS[tab.key], false);
++    }
++  }
++
++  // 4. The /app root behaves as Home.
++  if (path === "/app") return state("home", ACCENTS.home, true);
++
++  // 5. Unknown route — graceful default, no throw.
++  return state(null, DEFAULT_ACCENT, false);
++}
+-- 
+2.51.0.windows.1
+

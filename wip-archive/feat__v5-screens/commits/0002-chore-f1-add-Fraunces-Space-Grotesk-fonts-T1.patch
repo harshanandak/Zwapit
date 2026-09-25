@@ -1,0 +1,55 @@
+From fe4bca614e26acb2ae6b9fd33a05155f4b5ad150 Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Tue, 16 Jun 2026 15:52:15 +0530
+Subject: [PATCH] chore(f1): add Fraunces + Space Grotesk fonts (T1)
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+---
+ bun.lock     | 6 ++++++
+ package.json | 2 ++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/bun.lock b/bun.lock
+index b240560..b099929 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -9,7 +9,9 @@
+         "@capacitor/android": "7.6.6",
+         "@capacitor/core": "7.6.6",
+         "@capacitor/ios": "7.6.6",
++        "@fontsource/fraunces": "^5.2.9",
+         "@fontsource/poppins": "^5.2.7",
++        "@fontsource/space-grotesk": "^5.2.10",
+         "@tailwindcss/postcss": "^4.1.17",
+         "astro": "^6.3.1",
+         "convex": "^1.39.1",
+@@ -197,8 +199,12 @@
+ 
+     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.1", "", { "os": "win32", "cpu": "x64" }, "sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A=="],
+ 
++    "@fontsource/fraunces": ["@fontsource/fraunces@5.2.9", "", {}, "sha512-XDzuddBtoC7BZgZdBn6b7hsFZY2+V1hgN7yca5fBTKuHjb/lOd45a0Ji8dTUgFhPoL7RdGupo+bC2BFSt6UH8Q=="],
++
+     "@fontsource/poppins": ["@fontsource/poppins@5.2.7", "", {}, "sha512-6uQyPmseo4FgI97WIhA4yWRlNaoLk4vSDK/PyRwdqqZb5zAEuc+Kunt8JTMcsHYUEGYBtN15SNkMajMdqUSUmg=="],
+ 
++    "@fontsource/space-grotesk": ["@fontsource/space-grotesk@5.2.10", "", {}, "sha512-XNXEbT74OIITPqw2H6HXwPDp85fy43uxfBwFR5PU+9sLnjuLj12KlhVM9nZVN6q6dlKjkuN8JisW/OBxwxgUew=="],
++
+     "@img/colour": ["@img/colour@1.1.0", "", {}, "sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ=="],
+ 
+     "@img/sharp-darwin-arm64": ["@img/sharp-darwin-arm64@0.34.5", "", { "optionalDependencies": { "@img/sharp-libvips-darwin-arm64": "1.2.4" }, "os": "darwin", "cpu": "arm64" }, "sha512-imtQ3WMJXbMY4fxb/Ndp6HBTNVtWCUI0WdobyheGf5+ad6xX8VIDO8u2xE4qc/fr08CKG/7dDseFtn6M6g/r3w=="],
+diff --git a/package.json b/package.json
+index c624b75..8b46a7a 100644
+--- a/package.json
++++ b/package.json
+@@ -24,7 +24,9 @@
+     "@capacitor/android": "7.6.6",
+     "@capacitor/core": "7.6.6",
+     "@capacitor/ios": "7.6.6",
++    "@fontsource/fraunces": "^5.2.9",
+     "@fontsource/poppins": "^5.2.7",
++    "@fontsource/space-grotesk": "^5.2.10",
+     "@tailwindcss/postcss": "^4.1.17",
+     "astro": "^6.3.1",
+     "convex": "^1.39.1",
+-- 
+2.51.0.windows.1
+

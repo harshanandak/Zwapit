@@ -1,0 +1,1115 @@
+From 71243864eacaa3fe960fc0c6e445bd9920f216dc Mon Sep 17 00:00:00 2001
+From: Harsha Nanda <harshanandak@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 12:55:29 +0530
+Subject: [PATCH] fix(watcher): make alert reattachment collision-safe (kernel
+ ffea45c9)
+
+---
+ convex/__tests__/parse.test.ts                |  31 ++
+ convex/__tests__/seed.test.ts                 |  45 +++
+ convex/__tests__/watcher.test.ts              | 307 +++++++++++++++---
+ convex/seed.ts                                |  24 +-
+ convex/watcher.ts                             |  81 +++--
+ convex/watcher/parse.ts                       |  23 ++
+ .../decisions.md                              |  25 ++
+ .../design.md                                 | 115 +++++++
+ .../evaluator-report.md                       |  54 +++
+ .../evidence.md                               |  51 +++
+ .../research.md                               |  76 +++++
+ .../tasks.md                                  |  25 ++
+ 12 files changed, 761 insertions(+), 96 deletions(-)
+ create mode 100644 docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md
+ create mode 100644 docs/work/2026-08-30-watcher-resubscribe-safety/design.md
+ create mode 100644 docs/work/2026-08-30-watcher-resubscribe-safety/evaluator-report.md
+ create mode 100644 docs/work/2026-08-30-watcher-resubscribe-safety/evidence.md
+ create mode 100644 docs/work/2026-08-30-watcher-resubscribe-safety/research.md
+ create mode 100644 docs/work/2026-08-30-watcher-resubscribe-safety/tasks.md
+
+diff --git a/convex/__tests__/parse.test.ts b/convex/__tests__/parse.test.ts
+index f8c2d78..2933c6a 100644
+--- a/convex/__tests__/parse.test.ts
++++ b/convex/__tests__/parse.test.ts
+@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
+ 
+ import {
+   AVAIL_STATUS_MAP,
++  buildAlertWantKey,
++  collapseKeyForWant,
+   computeCollapseKey,
+   eventShowMatchesTargetDate,
+   isPastAlertDate,
+@@ -175,6 +177,35 @@ describe("computeCollapseKey", () => {
+   });
+ });
+ 
++describe("buildAlertWantKey", () => {
++  test("losslessly separates astral occurrence values and is disjoint from legacy keys", () => {
++    const buyerId = "app_buyer_a";
++    const first = buildAlertWantKey(buyerId, "catalog_movie_1|Delhi😀|2026-06-25|");
++    const second = buildAlertWantKey(buyerId, "catalog_movie_1|Delhi😁|2026-06-25|");
++
++    expect(first).not.toBe(second);
++    expect(first).toStartWith("want_alert_v2~");
++    expect(first).toContain("~");
++    expect(first).not.toBe("want_alert_app_buyer_a_catalog_movie_1_Delhi___2026_06_25_");
++
++    const loneHigh = buildAlertWantKey(buyerId, String.fromCharCode(0xd83d));
++    const loneLow = buildAlertWantKey(buyerId, String.fromCharCode(0xde00));
++    expect(loneHigh).not.toBe(loneLow);
++  });
++
++  test("reconstructs normalized legacy watch fields and rejects non-watcher rows", () => {
++    expect(
++      collapseKeyForWant({
++        catalogItemId: "catalog_movie_1",
++        watchCity: " mumbai ",
++        watchDate: " 2026-06-25 ",
++        watchFormat: " 2D ",
++      }),
++    ).toBe("catalog_movie_1|mumbai|2026-06-25|2D");
++    expect(collapseKeyForWant({ catalogItemId: "catalog_movie_1" })).toBeNull();
++  });
++});
++
+ describe("snapshotHash", () => {
+   const a: NormalizedShow = {
+     source: "bms",
+diff --git a/convex/__tests__/seed.test.ts b/convex/__tests__/seed.test.ts
+index 32ec6d2..eb0cec8 100644
+--- a/convex/__tests__/seed.test.ts
++++ b/convex/__tests__/seed.test.ts
+@@ -67,6 +67,10 @@ describe("seedDemoFixture — watcher demo slice", () => {
+     expect(want?.watchCity).toBe("mumbai");
+     expect(want?.watchDate).toBe("2026-12-19");
+     expect(want?.watchFormat).toBe("IMAX 3D");
++    expect(want?.wantKey).toStartWith("want_alert_v2~");
++    expect(want?.collapseKey).toBe(
++      "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
++    );
+   });
+ 
+   test("re-running seedDemoFixture does NOT duplicate the target or inflate subscriberCount", async () => {
+@@ -101,6 +105,47 @@ describe("seedDemoFixture — watcher demo slice", () => {
+     expect(wants).toHaveLength(1);
+   });
+ 
++  test("re-running preserves an exact legacy seed want regardless of its old key format", async () => {
++    for (const legacy of [
++      { key: "want_alert_legacy_hashed", keepCollapseKey: true },
++      { key: "want_alert_legacy_sanitized", keepCollapseKey: false },
++    ]) {
++      const tt = t();
++      await tt.mutation(api.seed.seedDemoFixture, {});
++      await tt.run(async (ctx) => {
++        const want = (await ctx.db.query("wants").collect()).find(
++          (row) => row.catalogItemId === "catalog_movie_watcher_demo",
++        )!;
++        await ctx.db.patch(want._id, {
++          wantKey: legacy.key,
++          ...(legacy.keepCollapseKey ? {} : { collapseKey: undefined }),
++        });
++      });
++
++      await tt.mutation(api.seed.seedDemoFixture, {});
++
++      const state = await tt.run(async (ctx) => ({
++        wants: (await ctx.db.query("wants").collect()).filter(
++          (row) => row.catalogItemId === "catalog_movie_watcher_demo",
++        ),
++        target: (
++          await ctx.db
++            .query("monitor_targets")
++            .withIndex("by_collapse_key", (q) =>
++              q.eq(
++                "collapseKey",
++                "catalog_movie_watcher_demo|mumbai|2026-12-19|IMAX 3D",
++              ),
++            )
++            .unique()
++        )!,
++      }));
++      expect(state.wants).toHaveLength(1);
++      expect(state.wants[0].wantKey).toBe(legacy.key);
++      expect(state.target.subscriberCount).toBe(1);
++    }
++  });
++
+   // events-phase2 T4: the events watcher relies on curated live_event catalog rows
+   // (no BMS/District codes → createAlert yields a curated, sources:[] target). Lock
+   // that contract so a later edit (e.g. adding source codes) can't silently break
+diff --git a/convex/__tests__/watcher.test.ts b/convex/__tests__/watcher.test.ts
+index 8c99363..af72529 100644
+--- a/convex/__tests__/watcher.test.ts
++++ b/convex/__tests__/watcher.test.ts
+@@ -1730,60 +1730,156 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
+     expect(target.subscriberCount).toBe(1);
+   });
+ 
+-  test("lossy key collision does NOT cross-attach between distinct occurrences", async () => {
++  test("astral city values on the same catalog occurrence get distinct public keys", async () => {
+     const tt = t();
+     await seedUser(tt, APP_A, BUYER_A.subject);
+-    // Two catalog items whose cities differ only by -/_ so the SANITIZED
+-    // candidate keys collide while collapse keys stay distinct.
++    await seedMovie(tt);
++
++    const first = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
++      catalogItemId: "catalog_movie_1",
++      city: "Delhi😀",
++      date: WATCH_DATE,
++    });
++    const second = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
++      catalogItemId: "catalog_movie_1",
++      city: "Delhi😁",
++      date: WATCH_DATE,
++    });
++
++    expect(first.wantKey).not.toBe(second.wantKey);
++    await expect(
++      tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey: first.wantKey }),
++    ).resolves.toMatchObject({ status: "watching" });
++    await expect(
++      tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey: second.wantKey }),
++    ).resolves.toMatchObject({ status: "watching" });
++
++    const state = await tt.run(async (ctx) => ({
++      rows: await ctx.db.query("wants").collect(),
++      targets: await ctx.db.query("monitor_targets").collect(),
++    }));
++    expect(state.rows).toHaveLength(2);
++    expect(new Set(state.rows.map((row) => row.wantKey)).size).toBe(2);
++    expect(state.targets.map((target) => target.city).sort()).toEqual(
++      ["Delhi😀", "Delhi😁"].sort(),
++    );
++  });
++
++  async function assertDetachedLegacyWantRearms(keepCollapseKey: boolean): Promise<void> {
++    const tt = t();
++    await seedUser(tt, APP_A, BUYER_A.subject);
++    await seedMovie(tt);
++    const args = {
++      catalogItemId: "catalog_movie_1",
++      city: "mumbai",
++      date: WATCH_DATE,
++      format: "2D",
++    };
++    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+     await tt.run(async (ctx) => {
+-      await ctx.db.insert("catalog_items", {
+-        catalogKey: "catalog_movie_dup_a",
+-        kind: "movie",
+-        externalSource: "manual",
+-        title: "Dup A",
+-        city: "mumbai-east",
+-        bmsEventCode: "ETDUP00001",
+-        bmsRegionCode: "MUMBAI",
+-        isActive: true,
+-        lastSyncedAt: NOW,
+-      });
+-      await ctx.db.insert("catalog_items", {
+-        catalogKey: "catalog_movie_dup_b",
+-        kind: "movie",
+-        externalSource: "manual",
+-        title: "Dup B",
+-        city: "mumbai_east",
+-        bmsEventCode: "ETDUP00002",
+-        bmsRegionCode: "MUMBAI",
+-        isActive: true,
+-        lastSyncedAt: NOW,
++      const want = (await ctx.db.query("wants").collect())[0];
++      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z" });
++    });
++    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
++    const legacyKey = keepCollapseKey
++      ? "want_alert_legacy_current_hash"
++      : "want_alert_legacy_pre_hash";
++    await tt.run(async (ctx) => {
++      const want = (await ctx.db.query("wants").collect())[0];
++      await ctx.db.patch(want._id, {
++        wantKey: legacyKey,
++        ...(keepCollapseKey ? {} : { collapseKey: undefined }),
+       });
+     });
+ 
++    const rearmed = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
++    const state = await tt.run(async (ctx) => ({
++      wants: await ctx.db.query("wants").collect(),
++      target: (await ctx.db.query("monitor_targets").collect())[0],
++    }));
++    expect(rearmed.wantKey).toBe(legacyKey);
++    expect(state.wants).toHaveLength(1);
++    expect(state.wants[0].state).toBe("open");
++    expect(state.wants[0].monitorTargetId).toBe(state.target._id);
++    expect(state.target.subscriberCount).toBe(1);
++    await expect(
++      tt.withIdentity(BUYER_A).query(api.watcher.getAlertPayoff, { wantKey: legacyKey }),
++    ).resolves.toMatchObject({ status: state.target.status });
++  }
++
++  test("detached current-hash want is found by its exact persisted collapse key", async () => {
++    await assertDetachedLegacyWantRearms(true);
++  });
++
++  test("detached pre-hash want reconstructs its exact occurrence from watch fields", async () => {
++    await assertDetachedLegacyWantRearms(false);
++  });
++
++  test("legacy fallback does not reuse a detached want for another occurrence", async () => {
++    const tt = t();
++    await seedUser(tt, APP_A, BUYER_A.subject);
++    await seedMovie(tt);
+     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+-      catalogItemId: "catalog_movie_dup_a",
+-      city: "mumbai-east",
++      catalogItemId: "catalog_movie_1",
++      city: "pune",
+       date: WATCH_DATE,
++      format: "2D",
+     });
+-    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
+-      catalogItemId: "catalog_movie_dup_b",
+-      city: "mumbai_east",
++    await tt.run(async (ctx) => {
++      const want = (await ctx.db.query("wants").collect())[0];
++      await ctx.db.patch(want._id, {
++        wantKey: "want_alert_legacy_other_occurrence",
++        collapseKey: undefined,
++        expiresAt: "2020-01-01T00:00:00.000Z",
++      });
++    });
++    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
++
++    const created = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
++      catalogItemId: "catalog_movie_1",
++      city: "mumbai",
+       date: WATCH_DATE,
++      format: "2D",
+     });
++    const wants = await tt.run((ctx) => ctx.db.query("wants").collect());
++    expect(wants).toHaveLength(2);
++    expect(created.wantKey).not.toBe("want_alert_legacy_other_occurrence");
++    expect(wants.find((want) => want.wantKey === "want_alert_legacy_other_occurrence")?.state).toBe(
++      "expired",
++    );
++  });
+ 
+-    const wants = await tt.run(async (ctx) => ({
+-      rows: await ctx.db.query("wants").collect(),
+-      targets: await ctx.db.query("monitor_targets").collect(),
+-    }));
+-    expect(wants.rows).toHaveLength(2); // distinct occurrences stay distinct
+-    const attachedA = wants.rows.find((w) => w.catalogItemId === "catalog_movie_dup_a")!;
+-    const attachedB = wants.rows.find((w) => w.catalogItemId === "catalog_movie_dup_b")!;
+-    expect(attachedA.monitorTargetId).not.toBe(attachedB.monitorTargetId ?? attachedA.monitorTargetId);
+-    expect(wants.targets).toHaveLength(2);
++  test("legacy fallback never reuses a non-watcher request", async () => {
++    const tt = t();
++    await seedUser(tt, APP_A, BUYER_A.subject);
++    await seedMovie(tt);
++    await tt.run((ctx) =>
++      ctx.db.insert("wants", {
++        wantKey: "want_demand_only",
++        buyerId: APP_A,
++        catalogItemId: "catalog_movie_1",
++        category: "movie_ticket",
++        quantity: 1,
++        maxPricePerUnit: 500,
++        state: "open",
++        expiresAt: WATCH_DATE,
++        createdAt: NOW,
++      }),
++    );
++
++    const created = await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, {
++      catalogItemId: "catalog_movie_1",
++      city: "mumbai",
++      date: WATCH_DATE,
++      format: "2D",
++    });
++    const wants = await tt.run((ctx) => ctx.db.query("wants").collect());
++    expect(wants).toHaveLength(2);
++    expect(created.wantKey).not.toBe("want_demand_only");
+   });
+ });
+ 
+-  test("a closed target with a known payoff reopens LIVE and notifies the reattached buyer", async () => {
++  test("a closed known-live target requeues terminal rows without disturbing active delivery", async () => {
+     const tt = t();
+     await seedUser(tt, APP_A, BUYER_A.subject);
+     await seedMovie(tt);
+@@ -1792,30 +1888,135 @@ describe("createAlert — reattach edge cases (kernel 47f4dfb8 review)", () => {
+       city: "mumbai",
+       date: WATCH_DATE,
+       format: "2D",
+-      channels: ["email" as const],
++      alertTypes: ["availability" as const, "last_minute" as const],
++      channels: ["email" as const, "web_push" as const],
+     };
+ 
+     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+-    // Simulate a full lifecycle: live detection, then last-subscriber expiry closes it.
+     __setFetcher(fetcherReturning(openBmsJson()));
+     await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
+-    const liveTarget = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+-    expect(liveTarget.status).toBe("live");
+-    // Time-shift the want into the expiry window before closing.
+-    await tt.run(async (ctx) => {
++    const seeded = await tt.run(async (ctx) => {
+       const want = (await ctx.db.query("wants").collect())[0];
+-      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" });
+-    });    await tt.run(async (ctx) => { const want = (await ctx.db.query("wants").collect())[0]; await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z", watchDate: "2020-01-01" }); });    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });    const closed = await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0]);
+-    expect(closed.status).toBe("closed");
++      const rows = (await ctx.db.query("notification_queue").collect()).sort((a, b) =>
++        a.dedupeKey.localeCompare(b.dedupeKey),
++      );
++      expect(rows).toHaveLength(4);
++      await ctx.db.patch(rows[0]._id, {
++        status: "sent",
++        attempts: 2,
++        sentAt: POLL_NOW,
++        claimedAt: POLL_NOW,
++      });
++      await ctx.db.patch(rows[1]._id, {
++        status: "failed",
++        attempts: 3,
++        claimedAt: POLL_NOW,
++      });
++      await ctx.db.patch(rows[2]._id, { status: "pending", attempts: 1 });
++      await ctx.db.patch(rows[3]._id, {
++        status: "sending",
++        attempts: 1,
++        claimedAt: POLL_NOW,
++      });
++      await ctx.db.patch(want._id, { expiresAt: "2020-01-01T00:00:00.000Z" });
++      const event = (await ctx.db.query("availability_events").first())!;
++      return {
++        ids: rows.map((row) => row._id),
++        eventId: event._id,
++      };
++    });
++    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
++    expect(
++      await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0].status),
++    ).toBe("closed");
+ 
+-    // Reattach: snapshot hash survives, so reopen must restore LIVE + deliver.
+     await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
+-    const { target, notifs } = await tt.run(async (ctx) => ({
++    const state = await tt.run(async (ctx) => ({
+       target: (await ctx.db.query("monitor_targets").collect())[0],
+-      notifs: await ctx.db.query("notification_queue").collect(),
++      rows: await Promise.all(seeded.ids.map((id) => ctx.db.get(id))),
++      audits: (await ctx.db.query("audit_logs").collect()).filter(
++        (row) => row.action === "notification_requeued",
++      ),
+     }));
+-    expect(target.status).toBe("live");
+-    expect(notifs.length).toBeGreaterThan(0); // payoff delivered, not stranded
++    expect(state.target.status).toBe("live");
++    expect(state.rows.map((row) => row?.status)).toEqual([
++      "pending",
++      "pending",
++      "pending",
++      "sending",
++    ]);
++    expect(state.rows[0]).toMatchObject({ attempts: 0 });
++    expect(state.rows[0]?.sentAt).toBeUndefined();
++    expect(state.rows[0]?.claimedAt).toBeUndefined();
++    expect(state.rows[1]).toMatchObject({ attempts: 0 });
++    expect(state.rows[1]?.claimedAt).toBeUndefined();
++    expect(state.rows[2]).toMatchObject({ attempts: 1 });
++    expect(state.rows[3]).toMatchObject({ attempts: 1, claimedAt: POLL_NOW });
++    expect(state.audits).toHaveLength(2);
++    expect(state.audits.every((row) => row.actorId === APP_A && row.actorRole === "buyer")).toBe(
++      true,
++    );
++
++    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
++    const auditCount = await tt.run(async (ctx) =>
++      (await ctx.db.query("audit_logs").collect()).filter(
++        (row) => row.action === "notification_requeued",
++      ).length,
++    );
++    expect(auditCount).toBe(2);
++
++    await tt.run((ctx) => ctx.db.patch(seeded.ids[0], { status: "sent" }));
++    await tt.mutation(internal.watcher.enqueueNotifications, {
++      availabilityEventId: seeded.eventId,
++      nowIso: POLL_NOW,
++    });
++    expect(await tt.run(async (ctx) => (await ctx.db.get(seeded.ids[0]))?.status)).toBe("sent");
++  });
++
++  test("reattaching while another buyer keeps the target live requeues only that buyer", async () => {
++    const tt = t();
++    await seedUser(tt, APP_A, BUYER_A.subject);
++    await seedUser(tt, APP_B, BUYER_B.subject);
++    await seedMovie(tt);
++    const args = {
++      catalogItemId: "catalog_movie_1",
++      city: "mumbai",
++      date: WATCH_DATE,
++      format: "2D",
++    };
++    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
++    await tt.withIdentity(BUYER_B).mutation(api.watcher.createAlert, args);
++    __setFetcher(fetcherReturning(openBmsJson()));
++    await tt.action(internal.watcher.pollDueTargets, { now: POLL_NOW });
++    const ids = await tt.run(async (ctx) => {
++      const wants = await ctx.db.query("wants").collect();
++      const rows = await ctx.db.query("notification_queue").collect();
++      const wantA = wants.find((row) => row.buyerId === APP_A)!;
++      const rowA = rows.find((row) => row.userId === APP_A)!;
++      const rowB = rows.find((row) => row.userId === APP_B)!;
++      await ctx.db.patch(rowA._id, { status: "sent", sentAt: POLL_NOW, attempts: 1 });
++      await ctx.db.patch(rowB._id, { status: "sent", sentAt: POLL_NOW, attempts: 1 });
++      await ctx.db.patch(wantA._id, { expiresAt: "2020-01-01T00:00:00.000Z" });
++      return { rowA: rowA._id, rowB: rowB._id };
++    });
++    await tt.action(internal.watcher.expireWants, { now: POLL_NOW });
++    expect(
++      await tt.run(async (ctx) => (await ctx.db.query("monitor_targets").collect())[0].status),
++    ).toBe("live");
++
++    await tt.withIdentity(BUYER_A).mutation(api.watcher.createAlert, args);
++    const state = await tt.run(async (ctx) => ({
++      rowA: await ctx.db.get(ids.rowA),
++      rowB: await ctx.db.get(ids.rowB),
++      audits: (await ctx.db.query("audit_logs").collect()).filter(
++        (row) => row.action === "notification_requeued",
++      ),
++    }));
++    expect(state.rowA).toMatchObject({ status: "pending", attempts: 0 });
++    expect(state.rowA?.sentAt).toBeUndefined();
++    expect(state.rowB).toMatchObject({ status: "sent", attempts: 1 });
++    expect(state.audits).toHaveLength(1);
++    expect(state.audits[0]).toMatchObject({ actorId: APP_A, actorRole: "buyer" });
+   });
+ 
+   test("createAlert rejects a PAST watch date at the mutation surface (gh#41 sibling)", async () => {
+diff --git a/convex/seed.ts b/convex/seed.ts
+index 475eb13..368e8d3 100644
+--- a/convex/seed.ts
++++ b/convex/seed.ts
+@@ -12,7 +12,7 @@ import { mutation } from "./_generated/server";
+ import type { MutationCtx } from "./_generated/server";
+ import { v } from "convex/values";
+ import { createMockFixture } from "../src/lib/mock/fixtures";
+-import { computeCollapseKey } from "./watcher/parse";
++import { buildAlertWantKey, collapseKeyForWant, computeCollapseKey } from "./watcher/parse";
+ import { monitorTargetByCollapseKey } from "./model";
+ 
+ type FixtureListing = ReturnType<typeof createMockFixture>["listing"];
+@@ -297,16 +297,21 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
+     target = (await ctx.db.get(targetId))!;
+   }
+ 
+-  // 3. One linked alert (`wants` row), find-or-create on wantKey. Increment the
+-  // shared subscriberCount ONLY when the want is first inserted.
+-  const wantKey = `want_alert_${WATCHER_DEMO.buyerId}_${collapseKey}`.replace(
+-    /[^a-zA-Z0-9_]/g,
+-    "_",
+-  );
+-  const existingWant = await ctx.db
++  // 3. One linked alert (`wants` row). Exact occurrence fallback preserves
++  // idempotency for demo rows created under older public-key formats.
++  const wantKey = buildAlertWantKey(WATCHER_DEMO.buyerId, collapseKey);
++  let existingWant = await ctx.db
+     .query("wants")
+     .withIndex("by_key", (q) => q.eq("wantKey", wantKey))
+-    .unique();
++    .first();
++  if (!existingWant) {
++    const buyerWants = await ctx.db
++      .query("wants")
++      .withIndex("by_buyer", (q) => q.eq("buyerId", WATCHER_DEMO.buyerId))
++      .order("asc")
++      .collect();
++    existingWant = buyerWants.find((want) => collapseKeyForWant(want) === collapseKey) ?? null;
++  }
+   if (!existingWant) {
+     inserted = true;
+     await ctx.db.insert("wants", {
+@@ -325,6 +330,7 @@ async function seedWatcherDemo(ctx: MutationCtx): Promise<boolean> {
+       alertTypes: ["availability"],
+       channels: ["email"],
+       monitorTargetId: target._id,
++      collapseKey,
+     });
+     await ctx.db.patch(target._id, { subscriberCount: target.subscriberCount + 1 });
+   }
+diff --git a/convex/watcher.ts b/convex/watcher.ts
+index 0d0c63c..8faa07d 100644
+--- a/convex/watcher.ts
++++ b/convex/watcher.ts
+@@ -46,6 +46,8 @@ import {
+   defaultParallelFetch,
+ } from "./watcher/adapters";
+ import {
++  buildAlertWantKey,
++  collapseKeyForWant,
+   computeCollapseKey,
+   eventShowMatchesTargetDate,
+   extractSaleOpensAt,
+@@ -332,37 +334,32 @@ export const createAlert = mutation({
+     const category = KIND_TO_CATEGORY[catalogItem.kind];
+ 
+     // ---- find-or-create THIS buyer's want for the target (dedupe per buyer) ----
+-    // The deterministic key can collide with an EXPIRED row of the same
+-    // buyer+occurrence (resubscribe-after-expiry): subscribersForTarget misses
+-    // it because expiry cleared monitorTargetId, so also look up by_key and
+-    // REATTACH instead of inserting a duplicate-key second row (kernel
+-    // 47f4dfb8). Convex has no unique constraint — by_key is lookup-only.
+-    // Public key embeds a hash of the RAW collapse key: sanitization alone is
+-    // lossy (mumbai-east / mumbai_east collide), and two distinct occurrences
+-    // must never share one public key (Codex P1 Z8rW).
+-    let keyHash = 0;
+-    for (const ch of collapseKey) keyHash = (keyHash * 31 + ch.charCodeAt(0)) >>> 0;
+-    const wantCandidateKey =
+-      `want_alert_${buyerId}_${collapseKey}`.replace(/[^a-zA-Z0-9_]/g, "_") +
+-      "_" +
+-      keyHash.toString(36);
++    // The v2 key losslessly encodes the exact buyer/occurrence tuple. Old keys
++    // remain valid and are recovered by exact occurrence below.
++    const wantCandidateKey = buildAlertWantKey(buyerId, collapseKey);
+     const subscribers = await subscribersForTarget(ctx, targetId);
+     const byKeyRows = await ctx.db
+       .query("wants")
+       .withIndex("by_key", (q) => q.eq("wantKey", wantCandidateKey))
+       .collect();
+-    // Legacy rows (pre-collapseKey) match on key alone — their key was derived
+-    // from this same occurrence's inputs at creation (Codex P1 backfill note);
+-    // new rows must match exactly.
+-    const existingForBuyer =
++    let existingForBuyer: Doc<"wants"> | undefined =
+       subscribers.find((w) => w.buyerId === buyerId) ??
+       byKeyRows.find(
+-        (w) => w.buyerId === buyerId && (w.collapseKey ?? collapseKey) === collapseKey,
++        (w) => w.buyerId === buyerId && collapseKeyForWant(w) === collapseKey,
+       );
++    if (!existingForBuyer) {
++      const buyerWants = await ctx.db
++        .query("wants")
++        .withIndex("by_buyer", (q) => q.eq("buyerId", buyerId))
++        .order("asc")
++        .collect();
++      existingForBuyer = buyerWants.find((want) => collapseKeyForWant(want) === collapseKey);
++    }
+ 
+     let wantKey: string;
+-    let isNewSubscriber = false;
+     let newlyAttached = false;
++    let reattachedWantId: Id<"wants"> | undefined;
++    let effectiveTargetStatus = target.status;
+     if (existingForBuyer) {
+       const wasAttachedToThisTarget = existingForBuyer.monitorTargetId === targetId;
+       await ctx.db.patch(existingForBuyer._id, {
+@@ -395,9 +392,10 @@ export const createAlert = mutation({
+         // restore live directly and let the late-subscriber enqueue deliver
+         // the known payoff.
+         newlyAttached = true;
+-        const wasLiveBefore = target.status === "live";
++        reattachedWantId = existingForBuyer._id;
+         const reopen = target.status === "closed";
+         const reopenToLive = reopen && Boolean(target.lastSnapshotHash);
++        effectiveTargetStatus = reopenToLive ? "live" : reopen ? "watching" : target.status;
+         await ctx.db.patch(target._id, {
+           subscriberCount: target.subscriberCount + 1,
+           ...(reopen
+@@ -430,16 +428,8 @@ export const createAlert = mutation({
+             createdAt: nowIso,
+           });
+         }
+-        if (reopenToLive && !wasLiveBefore) {
+-          // Restore the live payoff for the reattached buyer immediately.
+-          const lastEvent = await latestAvailabilityEvent(ctx, target._id ?? targetId);
+-          if (lastEvent) {
+-            await enqueueForEvent(ctx, lastEvent._id, nowIso);
+-          }
+-        }
+       }
+     } else {
+-      isNewSubscriber = true;
+       newlyAttached = true;
+       wantKey = wantCandidateKey;
+       await ctx.db.insert("wants", {
+@@ -485,10 +475,10 @@ export const createAlert = mutation({
+     }
+ 
+     // Late subscriber on an already-live target → notify immediately from last event.
+-    if (newlyAttached && target.status === "live") {
++    if (newlyAttached && effectiveTargetStatus === "live") {
+       const lastEvent = await latestAvailabilityEvent(ctx, targetId);
+       if (lastEvent) {
+-        await enqueueForEvent(ctx, lastEvent._id, nowIso);
++        await enqueueForEvent(ctx, lastEvent._id, nowIso, { reattachedWantId });
+       }
+     }
+ 
+@@ -679,13 +669,15 @@ export const markEventAvailable = internalMutation({
+ /**
+  * Shared enqueue core (used by enqueueNotifications + the createAlert late-subscriber
+  * path). For a live availability_event, fan out one pending notification_queue row
+- * per subscriber × channel × DELIVERED alertType, idempotent on dedupeKey. Returns
+- * how many NEW rows were inserted.
++ * per subscriber × channel × DELIVERED alertType, idempotent on dedupeKey. An
++ * explicit reattachment may requeue terminal rows for that want only. Returns how
++ * many NEW rows were inserted (requeues are not counted).
+  */
+ async function enqueueForEvent(
+   ctx: MutationCtx,
+   availabilityEventId: Id<"availability_events"> | string,
+   nowIso: string,
++  options?: { reattachedWantId?: Id<"wants"> },
+ ): Promise<number> {
+   const event = await ctx.db.get(availabilityEventId as Id<"availability_events">);
+   if (!event) return 0;
+@@ -713,7 +705,28 @@ async function enqueueForEvent(
+           .query("notification_queue")
+           .withIndex("by_dedupe", (q) => q.eq("dedupeKey", key))
+           .unique();
+-        if (existing) continue;
++        if (existing) {
++          const canRequeue = options?.reattachedWantId === want._id;
++          if (canRequeue && (existing.status === "sent" || existing.status === "failed")) {
++            await ctx.db.patch(existing._id, {
++              status: "pending",
++              attempts: 0,
++              sentAt: undefined,
++              claimedAt: undefined,
++            });
++            await appendWatcherAuditLog(ctx, {
++              actorId: want.buyerId,
++              actorRole: "buyer",
++              action: "notification_requeued",
++              entityType: "notification",
++              entityId: key,
++              fromState: existing.status,
++              toState: "pending",
++              createdAt: nowIso,
++            });
++          }
++          continue;
++        }
+         await ctx.db.insert("notification_queue", {
+           userId: want.buyerId,
+           monitorTargetId,
+diff --git a/convex/watcher/parse.ts b/convex/watcher/parse.ts
+index 13dea06..b370cc4 100644
+--- a/convex/watcher/parse.ts
++++ b/convex/watcher/parse.ts
+@@ -556,6 +556,29 @@ export function computeCollapseKey(input: {
+   return [input.catalogItemId, input.city, input.date, input.format ?? ""].join("|");
+ }
+ 
++/** Collision-free public id for a buyer's exact watcher occurrence. */
++export function buildAlertWantKey(buyerId: string, collapseKey: string): string {
++  const encode = (value: string) =>
++    Array.from(value, (character) => character.codePointAt(0)!.toString(36)).join("-");
++  return `want_alert_v2~${encode(buyerId)}~${encode(collapseKey)}`;
++}
++
++/** Exact watcher occurrence for a stored want, including pre-collapseKey rows. */
++export function collapseKeyForWant(input: {
++  catalogItemId: string;
++  collapseKey?: string;
++  watchCity?: string;
++  watchDate?: string;
++  watchFormat?: string;
++}): string | null {
++  if (input.collapseKey) return input.collapseKey;
++  const city = input.watchCity?.trim();
++  const date = input.watchDate?.trim();
++  if (!city || !date) return null;
++  const format = input.watchFormat?.trim() || undefined;
++  return computeCollapseKey({ catalogItemId: input.catalogItemId, city, date, format });
++}
++
+ const OFFICIAL_BOOKING_HOSTS = ["bookmyshow.com", "district.in"];
+ 
+ /**
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md b/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md
+new file mode 100644
+index 0000000..b7e2036
+--- /dev/null
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/decisions.md
+@@ -0,0 +1,25 @@
++# Watcher resubscribe safety decisions
++
++## D1: preserve old keys
++
++Existing `wantKey` values remain untouched. New key generation changes only inserts;
++legacy rows are found by exact occurrence data and rearmed in place.
++
++## D2: requeue terminal outbox rows
++
++An explicit detached-to-attached transition is a new delivery request. Reuse the
++same outbox row only after `sent` or terminal `failed`; preserve delivery history in
++`audit_logs`. Active `pending`/`sending` work remains idempotent.
++
++## D3: version and share the key generator
++
++New keys use a `want_alert_v2~...~...` base-36 code-point encoding whose token and
++tuple delimiters are disjoint. `createAlert` and fresh demo seeds share the helper;
++the seed retains an explicit lookup for its known sanitize-only legacy key.
++
++## D4: no destructive duplicate cleanup
++
++Compatibility lookup preserves old keys and reuses the earliest exact match. It does
++not delete or merge multiple existing matches. Zwapit is pre-user; if deployed data
++verification later finds duplicates, that becomes an explicit migration with its own
++reverse path.
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/design.md b/docs/work/2026-08-30-watcher-resubscribe-safety/design.md
+new file mode 100644
+index 0000000..cb0a51b
+--- /dev/null
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/design.md
+@@ -0,0 +1,115 @@
++# Watcher resubscribe safety design
++
++Status: revised after cross-model review round 1
++
++## Problem
++
++The alert payoff can fail in three linked ways after detachment: two accepted Unicode
++occurrences can receive the same public key, an older exact request can be missed and
++duplicated, and a restored known-live request can be blocked by the notification
++outbox's original fire-once dedupe row.
++
++## Design
++
++### 1. Exact public key for new wants
++
++Add one pure `buildAlertWantKey` helper in `convex/watcher/parse.ts`. It emits:
++
++`want_alert_v2~<buyer code points in base36 joined by ->~<collapse-key code points in base36 joined by ->`
++
++Each component is computed as
++`Array.from(value, char => char.codePointAt(0)!.toString(36)).join("-")`; using
++`charCodeAt(0)` is forbidden because it recreates the astral collision. Base-36
++tokens contain only `0-9a-z`; `-` preserves code-point boundaries and `~`
++preserves tuple boundaries. The mapping is injective for the full JavaScript string,
++including astral characters and lone surrogates, and has no finite hash. The `~`
++format marker also makes every v2 key disjoint from legacy sanitized keys. Existing
++rows keep their key.
++
++`createAlert` and fresh demo seed inserts use this helper. `seed.ts` first checks the
++new key, then uses the same by-buyer exact-occurrence fallback as `createAlert`, so
++rerunning against any old attached or detached seed format does not duplicate it;
++fresh rows also persist `collapseKey`.
++
++### 2. Exact legacy lookup
++
++Keep the fast attached-target and current-key lookups. If both miss, query the
++existing `wants.by_buyer` index in creation order. This compatibility scan covers
++detached rows made under both the current hash key and older pre-hash key. A row
++matches only when:
++
++- its persisted `collapseKey` equals the requested exact key; or
++- it predates that field and recomputing with `computeCollapseKey` from
++  `catalogItemId`, trimmed `watchCity`, trimmed `watchDate`, and trimmed optional
++  `watchFormat` equals the requested exact key. Missing format retains the required
++  empty trailing collapse-key segment.
++
++The earliest exact row is rearmed in place and keeps its original public key.
++Rows with absent or empty `watchCity`/`watchDate` are skipped before reconstruction,
++so non-watcher requests cannot match. The scan runs only
++after both fast paths miss. This slice does not delete or merge multiple pre-existing
++exact matches; finding those in deployed data requires a separate migration rather
++than a destructive guess in `createAlert`.
++
++### 3. Explicit live-payoff requeue
++
++Track the target's effective post-attach status and remove the separate inner
++closed-to-live enqueue. Both closed-to-live and already-live cases then use one
++post-attach `enqueueForEvent` call. Pass an optional reattached-want id only when an
++existing detached row becomes attached; brand-new and already-attached calls do not
++receive requeue authority.
++
++Ordinary event fan-out remains unchanged. For every currently selected
++alert-type/channel dedupe row of the authorized reattached want only (dropped
++preferences are not re-notified):
++
++- no existing row: insert the normal pending row;
++- `pending` or `sending`: no-op because a delivery is already active;
++- `sent` or `failed`: patch the same outbox row to `pending`, clear
++  `sentAt`/`claimedAt`, reset `attempts` to zero, and audit
++  `notification_requeued` from the terminal state to `pending` with
++  `actorId = buyerId` and `actorRole = buyer`.
++
++Repeated idempotent `createAlert` calls while already attached cannot requeue.
++Because the outbox row stores current delivery state while `audit_logs` is the
++append-only history, reusing the row does not erase the prior transition record.
++
++## State paths
++
++Forward: detached `expired` want -> `open`; closed target -> `watching` or `live`;
++terminal notification -> `pending` when known availability exists.
++
++Reverse: the existing expiry sweep returns the want to `expired` and detaches it;
++the existing dispatcher returns a requeued notification to `sent`, retryable
++`pending`, or terminal `failed`. No new state is introduced.
++
++## Security and integrity
++
++- OWASP A01: authentication and internal app-user identity remain unchanged.
++- OWASP A04/A08: exact matching prevents cross-occurrence reassignment and ambiguous
++  public-key reads.
++- OWASP A09: the explicit notification requeue receives an audit transition.
++- No secret, provider call, booking operation, payment, or user-supplied URL is added.
++
++## Acceptance criteria
++
++1. Same buyer/catalog/date alerts for `Delhi😀` and `Delhi😁` produce distinct keys,
++   wants, and monitor targets; each `getAlertPayoff` lookup returns its own occurrence.
++2. Detached old-format wants both with and without `collapseKey` are rearmed in place
++   from exact occurrence data, preserving their public key and one-row cardinality;
++   a non-watcher request cannot match.
++3. Reattaching to known-live availability requeues prior `sent` and `failed`
++   notification rows to `pending`, resets attempt/claim/send fields, and appends one
++   buyer-attributed audit transition per affected alert-type/channel row.
++4. Existing pending/sending rows, repeated already-attached calls, and ordinary event
++   fan-out do not duplicate or reset delivery.
++5. Fresh seeds use the v2 helper and persist `collapseKey`; rerunning over a legacy
++   sanitize-only or current-hash seed remains one want and one subscriber.
++6. Targeted watcher/seed/parse tests, both TypeScript checks, Astro check, route check, build,
++   full tests, Cloudflare dry run, and local CodeRabbit review pass.
++
++## Non-goals
++
++- No change to collapse-key dimensions, watcher polling, expiry policy, channels,
++  actual sender delivery, frontend copy, schema, or deployed data. No destructive
++  cleanup of already-corrupted duplicates is attempted without live evidence.
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/evaluator-report.md b/docs/work/2026-08-30-watcher-resubscribe-safety/evaluator-report.md
+new file mode 100644
+index 0000000..6d693e4
+--- /dev/null
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/evaluator-report.md
+@@ -0,0 +1,54 @@
++# Plan evaluator report
++
++## Round 1
++
++| Reviewer | Route | Score |
++|---|---|---:|
++| Muse Spark 1.2 Contributor | OpenCode Go | 6/10 |
++| DeepSeek V4 Pro | OpenCode Go | 7/10 |
++| GLM 5.3 | OpenCode Go | 8/10 |
++
++### Consensus corrections accepted
++
++- Specify a provably injective, version-disjoint key format rather than saying
++  "lossless encoding" abstractly.
++- Cover detached rows with both current-hash keys and pre-hash/no-collapseKey data.
++- Route closed-to-live and already-live reattachment through one enqueue decision.
++- Requeue every terminal alert-type/channel row, leave active rows untouched, and
++  attribute each audit transition to the buyer.
++- Move `seed.ts` onto the shared generator while preserving its known old-key rerun.
++- Strengthen the existing false-positive notification test and isolate the astral
++  collision with the same buyer/catalog/date.
++
++### Suggestions not adopted
++
++- No silent deletion or merge of already-duplicated wants. There is no verified live
++  duplicate data and destructive repair needs a separate migration/reverse path.
++- No new schema index. Legacy rows without `collapseKey` still require compatibility
++  reconstruction, and the indexed buyer scan runs only after fast paths miss.
++- No sender invocation assertion for this outbox-state bug. Sender behavior already
++  has dedicated tests; this slice proves the fresh pending delivery and its audit.
++
++Status: revised plan awaiting round 2 score.
++
++## Round 2
++
++| Reviewer | Route | Score |
++|---|---|---:|
++| Muse Spark 1.2 Contributor | OpenCode Go | 9/10 |
++| GLM 5.3 | OpenCode Go | 9/10 |
++| DeepSeek V4 Pro | OpenCode Go | incomplete (completion-contract label missing) |
++
++### Final tightenings accepted
++
++- Pin the implementation to `codePointAt` iteration and explicitly skip legacy rows
++  without watcher fields.
++- Make seed compatibility exact-occurrence based, covering every prior key format
++  instead of enumerating only the known sanitize-only key.
++- Test terminal redelivery when another subscriber keeps the target live as well as
++  the closed-to-live restoration path.
++
++Gate: reached. Two independent reviewers score the integrated design 9/10 with no
++remaining architecture, compatibility, concurrency, audit, or scope blocker.
++DeepSeek completed its analysis but the durable receipt rejected the response because
++it omitted the exact `Required amendments:` label; its round-1 review remains included.
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/evidence.md b/docs/work/2026-08-30-watcher-resubscribe-safety/evidence.md
+new file mode 100644
+index 0000000..f2d1522
+--- /dev/null
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/evidence.md
+@@ -0,0 +1,51 @@
++# Watcher resubscribe safety evidence
++
++## Baseline
++
++`bun test convex/__tests__/watcher.test.ts`: 52 pass, 0 fail before changes.
++
++## RED
++
++- `bun test convex/__tests__/parse.test.ts`: failed because `buildAlertWantKey` did
++  not exist.
++- `bun test convex/__tests__/seed.test.ts`: fresh key was sanitize-only and rerunning
++  after an old-format key produced two wants.
++- `bun test convex/__tests__/watcher.test.ts`: 51 pass, 5 fail. The same-buyer,
++  same-catalog/date `Delhi😀` and `Delhi😁` requests returned the identical key;
++  current-hash and pre-hash detached wants returned replacement keys; sent/failed
++  rows stayed terminal in both closed-to-live and still-live reattachment.
++
++Evidence rung: 4 (executed reproduction).
++
++## GREEN
++
++- `bun test convex/__tests__/watcher.test.ts convex/__tests__/seed.test.ts convex/__tests__/parse.test.ts`:
++  113 pass, 0 fail, 406 assertions.
++- `bunx tsc --noEmit`: pass.
++- `bunx tsc --project convex/tsconfig.json --noEmit`: pass.
++- `git diff --check`: pass; only working-tree line-ending notices.
++
++Evidence rung: 4 (targeted implementation executed). Full validation and merged-main
++verification remain pending.
++
++## Dev review
++
++DeepSeek V4 Pro, Muse Spark 1.2 Contributor, and GLM 5.3 independently returned PASS
++against the implemented diff. No reviewer reported a High or Medium finding. Small
++coverage notes for lone surrogates, normalized legacy fields, preserved-key payoff,
++and another-occurrence fallback were added before final validation.
++
++## Full validation
++
++- `bunx tsc --noEmit`: pass.
++- `bunx tsc --project convex/tsconfig.json --noEmit`: pass.
++- `bun run check`: pass, 0 errors and 12 pre-existing hints.
++- `bun run check:routes`: pass for 18 contract routes.
++- `bun run build`: pass, 26 pages generated.
++- `bun test`: 395 pass, 0 fail, 1,198 assertions across 36 files.
++- `bun run cf:dry-run`: pass with Wrangler 4.123.0; 133 assets read, no upload.
++- Local CodeRabbit light review scoped to `convex`: 6 files reviewed, no findings.
++- `git diff --check`: pass; only line-ending notices from the Windows checkout.
++
++Evidence rung: 4. PR CI, review threads, merge, and post-merge master verification
++remain pending.
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/research.md b/docs/work/2026-08-30-watcher-resubscribe-safety/research.md
+new file mode 100644
+index 0000000..b249a21
+--- /dev/null
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/research.md
+@@ -0,0 +1,76 @@
++# Watcher resubscribe safety research
++
++Issue: `ffea45c9-2783-48a0-90cf-b84c592eb1ed`
++
++## Product meaning
++
++A Request (`wants`) is the buyer's demand for one canonical catalog occurrence. An
++availability Alert is the payoff: Zwapit watches the exact
++`catalogItemId|city|date|format` occurrence, queues a notification when official
++inventory becomes available, and deep-links the buyer out to BookMyShow or District.
++Zwapit does not book the official inventory or touch that payment.
++
++Resubscription matters because an explicit request to watch again must restore the
++same occurrence, not silently move another request or report success without another
++delivery attempt.
++
++## Verified current behavior
++
++- `convex/watcher.ts:343-348` sanitizes the exact collapse key and appends a 32-bit
++  rolling hash. The loop iterates Unicode code points but hashes only
++  `charCodeAt(0)`, so different astral characters with the same high surrogate, such
++  as `😀` and `😁`, collide. The sanitizer also maps both surrogate pairs to the
++  same underscores. This reproduces the still-current PR #48 review finding.
++- `convex/watcher.ts:349-361` finds attached wants or rows using only the current
++  generated key. A detached pre-hash row has neither `monitorTargetId` nor the new
++  key, so it is missed and a replacement row is inserted.
++- `convex/watcher.ts:685-732` deduplicates notifications on
++  user/target/event/type/channel. When a known-live target is restored, a prior
++  `sent` or terminal `failed` row causes enqueue to do nothing.
++- `convex/__tests__/watcher.test.ts:1733-1783` varies both catalog item and city.
++  The catalog item difference prevents it from isolating a sanitized-key collision.
++- A repository-wide search found no consumer that parses or pattern-matches the
++  generated `want_alert_...` structure. Tracked consumers treat `wantKey` as an
++  opaque string. `convex/seed.ts` is a second producer, however, and currently
++  emits a third sanitize-only format without persisting `collapseKey`.
++- `convex/_generated/ai/guidelines.md` is absent, so this work proceeds under the
++  repository Convex guidance only.
++
++Evidence rung: rung 4 for all three bad paths. The RED run reproduced the identical
++astral key, replacement insertion for both detached legacy shapes, unchanged terminal
++outbox rows in closed and still-live cases, and duplicate legacy seed rows.
++
++## Constraints
++
++- Keep the collapse key byte-exact and limited to catalog item, city, date, format.
++- Preserve every existing public `wantKey`; compatibility is lookup-only.
++- Keep `createAlert` as the authenticated client-facing mutation exception.
++- Audit want, monitor, and notification transitions.
++- Preserve normal event fan-out idempotency.
++- Make no schema, generated API, dependency, routing, native, or frontend change.
++- Do not silently merge or delete already-duplicated wants. The repository is
++  pre-user, so this slice prevents new corruption and preserves every existing
++  key; verified duplicate live data would require a separate migration.
++
++## Candidate approach
++
++1. Generate new public keys from a lossless, format-versioned encoding of the exact
++   buyer/collapse-key tuple, rather than a sanitized finite hash. Share the helper
++   with the demo seed and preserve the seed's old-key lookup for rerun compatibility.
++2. If attached/current-key lookup misses, query `wants.by_buyer` and match the exact
++   persisted `collapseKey`, or reconstruct it from legacy watch fields.
++3. On explicit reattachment only, requeue each existing terminal `sent`/`failed`
++   notification to `pending`, reset delivery-attempt fields, and append a
++   buyer-attributed `notification_requeued` audit row. Leave `pending` and
++   `sending` rows alone. Both closed-to-live and already-live reattachments flow
++   through one post-attach enqueue decision.
++
++## Alternatives rejected initially
++
++- A larger hash: collision-resistant is not collision-free and repeats the root
++  design error.
++- Rewriting old keys: breaks public references and requires migration/backfill.
++- Creating another notification row: preserves the old row but complicates dedupe
++  and can leave two active deliveries after repeated reattachment. The append-only
++  audit log already preserves state-transition history while the outbox row holds
++  current delivery state.
+diff --git a/docs/work/2026-08-30-watcher-resubscribe-safety/tasks.md b/docs/work/2026-08-30-watcher-resubscribe-safety/tasks.md
+new file mode 100644
+index 0000000..f89c97c
+--- /dev/null
++++ b/docs/work/2026-08-30-watcher-resubscribe-safety/tasks.md
+@@ -0,0 +1,25 @@
++# Watcher resubscribe safety tasks
++
++## Plan
++
++- [x] Cross-review the design with DeepSeek V4 Pro, Muse Spark 1.2 Contributor, and
++  GLM 5.3; synthesize disagreements with GPT-5.6 Sol.
++- [x] Revise and repeat review until the integrated plan scores at least 9/10.
++
++## TDD
++
++- [x] RED: add same-tuple astral-Unicode collision regression.
++- [x] RED: add current-hash and pre-hash detached legacy-key exact rearm regressions.
++- [x] RED: add sent/failed per-channel requeue plus pending/sending and ordinary-fan-out idempotency regressions for both closed-to-live and still-live reattachment.
++- [x] RED: add fresh and sanitize-only/current-hash legacy-rerun seed key regressions.
++- [x] GREEN: implement shared lossless public-key generation and exact legacy lookup.
++- [x] GREEN: implement explicit, audited terminal notification requeue.
++- [x] REFACTOR: unify both live-reattach branches behind one effective-status enqueue and remove obsolete collision setup.
++
++## Validate and ship
++
++- [x] Run targeted watcher tests and both TypeScript checks.
++- [x] Run Astro check, route check, build, full `bun test`, and Cloudflare dry run.
++- [x] Run local CodeRabbit review and resolve valid findings.
++- [ ] Push, open PR, inspect every CI/review surface, resolve all threads, and merge.
++- [ ] Verify master CI/deploy and close the Forge issue with evidence.
+-- 
+2.51.0.windows.1
+
