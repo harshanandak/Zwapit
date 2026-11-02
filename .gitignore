@@ -57,3 +57,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # pi-harness taskflow runtime (agent-companion lanes)
 .pi/
+
+# Forge: shared config is committed; project state and generated skills are local.
+.forge/state.sqlite*
+.agents/skills/
+
+# Lefthook's generated wrappers follow the configured core.hooksPath.
+.lefthook/hooks/
